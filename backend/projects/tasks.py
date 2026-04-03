@@ -88,9 +88,15 @@ def bootstrap_project(self, proposal_id: str):
 
         proposal_data = json.loads(cleaned)
 
+        # Validate proposal against schema
         proposal.proposal = proposal_data
+        validation_errors = proposal.validate_proposal()
+        if validation_errors:
+            raise ValueError(f"Invalid proposal from Claude: {'; '.join(validation_errors)}")
+
+        proposal.token_usage = _usage
         proposal.status = BootstrapProposal.Status.PROPOSED
-        proposal.save(update_fields=["proposal", "status", "updated_at"])
+        proposal.save(update_fields=["proposal", "token_usage", "status", "updated_at"])
 
         logger.info("Bootstrap proposal generated for project %s", project.name)
 
