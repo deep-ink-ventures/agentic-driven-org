@@ -47,12 +47,31 @@ def call_claude(
         if block.type == "text":
             response_text += block.text
 
+    input_tokens = message.usage.input_tokens
+    output_tokens = message.usage.output_tokens
+    cost = _estimate_cost(model, input_tokens, output_tokens)
+
     usage = {
         "model": model,
-        "input_tokens": message.usage.input_tokens,
-        "output_tokens": message.usage.output_tokens,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": cost,
     }
 
-    logger.info("Claude response: model=%s input_tokens=%d, output_tokens=%d", model, usage["input_tokens"], usage["output_tokens"])
+    logger.info("Claude response: model=%s input=%d output=%d cost=$%.4f", model, input_tokens, output_tokens, cost)
 
     return response_text, usage
+
+
+# Per-million-token pricing (USD). Update when pricing changes.
+_PRICING = {
+    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
+    "claude-opus-4-6": {"input": 15.0, "output": 75.0},
+    "claude-haiku-4-5": {"input": 0.80, "output": 4.0},
+}
+
+
+def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Estimate cost in USD based on model and token counts."""
+    prices = _PRICING.get(model, _PRICING["claude-sonnet-4-6"])
+    return (input_tokens * prices["input"] + output_tokens * prices["output"]) / 1_000_000
