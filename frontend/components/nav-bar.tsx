@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 import { LogOut, User as UserIcon, ChevronDown } from "lucide-react";
+import { BrandLogo } from "@/components/brand";
 
 export function NavBar() {
   const { user, logout } = useAuth();
@@ -28,9 +29,7 @@ export function NavBar() {
   return (
     <nav className="h-14 border-b border-border/50 bg-bg-primary/80 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-50">
       <Link href="/dashboard" className="flex items-center gap-2 group">
-        <span className="text-2xl font-bold text-accent-gold font-serif tracking-tight">
-          AgentDriven
-        </span>
+        <BrandLogo className="text-2xl" />
       </Link>
 
       <div className="relative" ref={menuRef}>

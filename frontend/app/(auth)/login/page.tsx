@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft } from "lucide-react";
+import { BrandHeading } from "@/components/brand";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -57,25 +57,18 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-bg-primary px-4">
-      <div className="absolute top-6 left-6">
-        <Link href="/" className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary text-sm transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
-      </div>
-
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-semibold text-text-heading">AgentDriven</h1>
+        <BrandHeading className="text-4xl" />
         <p className="text-text-secondary mt-2">Sign in to your account</p>
       </div>
 
       {authError === "allowlist" && (
         <div className="w-full max-w-md mb-4 rounded-lg border border-accent-gold/30 bg-accent-gold/5 p-4 text-center">
           <p className="text-sm text-text-primary mb-1">
-            <span className="font-medium">{blockedEmail}</span> is not on the early access list.
+            <span className="font-medium">{blockedEmail}</span> — you must be invited in order to sign up.
           </p>
           <p className="text-xs text-text-secondary">
-            AgentDriven is currently in private beta. Contact us for access.
+            You must be invited in order to sign up.
           </p>
         </div>
       )}
