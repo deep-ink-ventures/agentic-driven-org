@@ -93,6 +93,16 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  uploadFile: (projectId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("source_type", "file");
+    return request<import("./types").Source>(`/api/projects/${projectId}/sources/`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
   triggerBootstrap: (projectId: string) =>
     request<import("./types").BootstrapProposal>(`/api/projects/${projectId}/bootstrap/`, {
       method: "POST",

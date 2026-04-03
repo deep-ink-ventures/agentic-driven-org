@@ -100,6 +100,11 @@ export function CreateProjectWizard({
   const [projectGoal, setProjectGoal] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
 
+  // Step 2
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Step 3
   const [urls, setUrls] = useState<string[]>([]);
   const [urlInput, setUrlInput] = useState("");
@@ -137,6 +142,41 @@ export function CreateProjectWizard({
       setError(e instanceof Error ? e.message : "Failed to create project");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleFileDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const dropped = Array.from(e.dataTransfer.files);
+    setFiles((prev) => [...prev, ...dropped]);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) {
+      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+    }
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleUploadFiles() {
+    if (!projectId || files.length === 0) {
+      setStep(3);
+      return;
+    }
+    setUploadingFiles(true);
+    setError("");
+    try {
+      for (const file of files) {
+        await api.uploadFile(projectId, file);
+      }
+      setStep(3);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to upload files");
+    } finally {
+      setUploadingFiles(false);
     }
   }
 
@@ -326,19 +366,51 @@ export function CreateProjectWizard({
               </div>
             )}
 
-            {/* Step 2: Files (Coming Soon) */}
+            {/* Step 2: Files */}
             {step === 2 && (
               <div className="flex flex-col gap-5 flex-1">
-                <div className="flex-1 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-8 text-center">
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border hover:border-accent-gold/50 p-8 text-center cursor-pointer transition-colors min-h-[160px]"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.txt,.md"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
                   <Upload className="h-10 w-10 text-text-secondary/50 mb-3" />
                   <p className="text-text-primary font-medium mb-1">
-                    File upload coming soon
+                    Drop files here or click to browse
                   </p>
-                  <p className="text-text-secondary text-sm max-w-sm">
-                    File uploads are not yet supported via the wizard. You can
-                    add files through the admin panel after project creation.
+                  <p className="text-text-secondary text-xs">
+                    PDF, DOCX, TXT, Markdown
                   </p>
                 </div>
+
+                {files.length > 0 && (
+                  <div className="space-y-2">
+                    {files.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className="flex items-center justify-between px-3 py-2 rounded-lg bg-bg-input border border-border">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="h-4 w-4 text-text-secondary shrink-0" />
+                          <span className="text-sm text-text-primary truncate">{file.name}</span>
+                          <span className="text-xs text-text-secondary shrink-0">
+                            {(file.size / 1024).toFixed(0)}KB
+                          </span>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); removeFile(i); }} className="text-text-secondary hover:text-flag-critical transition-colors p-1">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="mt-auto flex justify-between">
                   <Button
                     variant="outline"
@@ -349,11 +421,15 @@ export function CreateProjectWizard({
                     Back
                   </Button>
                   <Button
-                    onClick={() => setStep(3)}
+                    onClick={handleUploadFiles}
+                    disabled={uploadingFiles}
                     className="bg-accent-gold text-bg-primary hover:bg-accent-gold-hover"
                   >
-                    Next
-                    <ArrowRight className="h-4 w-4 ml-1" />
+                    {uploadingFiles ? (
+                      <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Uploading...</>
+                    ) : (
+                      <>Next<ArrowRight className="h-4 w-4 ml-1" /></>
+                    )}
                   </Button>
                 </div>
               </div>

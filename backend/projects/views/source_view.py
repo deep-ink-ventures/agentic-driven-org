@@ -1,15 +1,18 @@
 from rest_framework.generics import ListCreateAPIView
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 
 from projects.models import Source, Project
 from projects.serializers import SourceSerializer
-from projects.extraction import extract_text
+from projects.extraction import extract_text, compute_content_hash
+from projects.storage import upload_file
 
 
 class ProjectSourceListView(ListCreateAPIView):
-    """List and create sources for a project. Auto-extracts text on creation."""
+    """List and create sources for a project. Accepts JSON or multipart file uploads."""
     serializer_class = SourceSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser]
 
     def get_queryset(self):
         return Source.objects.filter(
@@ -19,7 +22,21 @@ class ProjectSourceListView(ListCreateAPIView):
 
     def perform_create(self, serializer):
         project = Project.objects.get(id=self.kwargs["project_id"], owner=self.request.user)
-        source = serializer.save(project=project, user=self.request.user)
+
+        # Handle file upload via multipart
+        uploaded_file = self.request.FILES.get("file")
+        extra = {}
+        if uploaded_file:
+            content = uploaded_file.read()
+            extra["source_type"] = "file"
+            extra["original_filename"] = uploaded_file.name
+            extra["file_size"] = len(content)
+            extra["content_type"] = uploaded_file.content_type or ""
+            extra["file_format"] = uploaded_file.name.rsplit(".", 1)[-1].lower() if "." in uploaded_file.name else ""
+            extra["content_hash"] = compute_content_hash(content)
+            extra["file_key"] = upload_file(content, uploaded_file.name, str(project.id))
+
+        source = serializer.save(project=project, user=self.request.user, **extra)
 
         # Auto-extract text
         if source.source_type == "text" and source.raw_content:
