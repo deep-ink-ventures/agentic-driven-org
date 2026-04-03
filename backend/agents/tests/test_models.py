@@ -24,13 +24,13 @@ def project(user):
 
 @pytest.fixture
 def department(project):
-    return Department.objects.create(department_type="social_media", project=project)
+    return Department.objects.create(department_type="marketing", project=project)
 
 
 @pytest.fixture
 def department2(user):
     project2 = Project.objects.create(name="Other Project", goal="Other goal", owner=user)
-    return Department.objects.create(department_type="social_media", project=project2)
+    return Department.objects.create(department_type="marketing", project=project2)
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def agent(department):
         is_leader=False,
         instructions="Be nice",
         config={"api_key": "xxx"},
-        auto_actions={"engage-tweets": True, "post-content": False},
+        auto_actions={"place-content": True, "post-content": False},
     )
 
 
@@ -67,7 +67,7 @@ class TestAgentModel:
         assert agent.agent_type == "twitter"
         assert agent.instructions == "Be nice"
         assert agent.config == {"api_key": "xxx"}
-        assert agent.auto_actions == {"engage-tweets": True, "post-content": False}
+        assert agent.auto_actions == {"place-content": True, "post-content": False}
         assert agent.is_active is True
         assert agent.is_leader is False
         assert agent.created_at is not None
@@ -91,7 +91,7 @@ class TestAgentModel:
         assert second_leader.pk is not None
 
     def test_is_action_enabled_true(self, agent):
-        assert agent.is_action_enabled("engage-tweets") is True
+        assert agent.is_action_enabled("place-content") is True
 
     def test_is_action_enabled_false(self, agent):
         assert agent.is_action_enabled("post-content") is False
@@ -100,7 +100,7 @@ class TestAgentModel:
         assert agent.is_action_enabled("nonexistent") is False
 
     def test_get_blueprint_returns_correct_instance(self, agent):
-        from agents.blueprints.social_media.workforce.twitter.agent import TwitterBlueprint
+        from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint
         bp = agent.get_blueprint()
         assert isinstance(bp, TwitterBlueprint)
 

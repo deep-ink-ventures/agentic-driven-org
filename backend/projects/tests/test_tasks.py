@@ -43,7 +43,7 @@ VALID_RESPONSE = json.dumps(
         "summary": "A great project setup.",
         "departments": [
             {
-                "department_type": "social_media",
+                "department_type": "marketing",
                 "documents": [
                     {"title": "Brand Guide", "content": "# Brand", "tags": ["branding"]}
                 ],

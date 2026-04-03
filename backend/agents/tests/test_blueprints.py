@@ -32,7 +32,7 @@ def project(user):
 
 @pytest.fixture
 def department(project):
-    return Department.objects.create(department_type="social_media", project=project)
+    return Department.objects.create(department_type="marketing", project=project)
 
 
 @pytest.fixture
@@ -106,7 +106,7 @@ class TestBaseBlueprint:
         bp = get_blueprint("twitter")
         cmds = bp.get_commands()
         names = {c["name"] for c in cmds}
-        assert "engage-tweets" in names
+        assert "place-content" in names
         assert "post-content" in names
         assert "search-trends" in names
 
@@ -114,7 +114,7 @@ class TestBaseBlueprint:
         bp = get_blueprint("twitter")
         hourly = bp.get_scheduled_commands("hourly")
         names = {c["name"] for c in hourly}
-        assert "engage-tweets" in names
+        assert "place-content" in names
         assert "post-content" not in names  # daily
 
     def test_get_scheduled_commands_daily(self):
@@ -125,7 +125,7 @@ class TestBaseBlueprint:
 
     def test_run_command_dispatches(self, twitter_agent):
         bp = get_blueprint("twitter")
-        result = bp.run_command("engage-tweets", twitter_agent)
+        result = bp.run_command("place-content", twitter_agent)
         assert "exec_summary" in result
 
     def test_run_command_unknown_raises(self, twitter_agent):
@@ -139,16 +139,16 @@ class TestBaseBlueprint:
 
 class TestBlueprintRegistry:
     def test_get_blueprint_twitter(self):
-        from agents.blueprints.social_media.workforce.twitter.agent import TwitterBlueprint
-        assert isinstance(get_blueprint("twitter", "social_media"), TwitterBlueprint)
+        from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint
+        assert isinstance(get_blueprint("twitter", "marketing"), TwitterBlueprint)
 
     def test_get_blueprint_reddit(self):
-        from agents.blueprints.social_media.workforce.reddit.agent import RedditBlueprint
-        assert isinstance(get_blueprint("reddit", "social_media"), RedditBlueprint)
+        from agents.blueprints.marketing.workforce.reddit.agent import RedditBlueprint
+        assert isinstance(get_blueprint("reddit", "marketing"), RedditBlueprint)
 
     def test_get_blueprint_leader(self):
-        from agents.blueprints.social_media.leader.agent import DepartmentLeaderBlueprint
-        assert isinstance(get_blueprint("leader", "social_media"), DepartmentLeaderBlueprint)
+        from agents.blueprints.marketing.leader.agent import MarketingLeaderBlueprint
+        assert isinstance(get_blueprint("leader", "marketing"), MarketingLeaderBlueprint)
 
     def test_get_blueprint_leader_requires_department(self):
         with pytest.raises(ValueError, match="department_type required"):
@@ -160,13 +160,16 @@ class TestBlueprintRegistry:
 
     def test_agent_type_choices_contains_expected(self):
         slugs = {slug for slug, _ in AGENT_TYPE_CHOICES}
-        assert slugs >= {"leader", "twitter", "reddit"}
+        assert slugs >= {"leader", "twitter", "reddit", "web_researcher", "luma_researcher", "email_marketing"}
 
     def test_workforce_type_choices_excludes_leader(self):
         slugs = {slug for slug, _ in WORKFORCE_TYPE_CHOICES}
         assert "leader" not in slugs
         assert "twitter" in slugs
         assert "reddit" in slugs
+        assert "web_researcher" in slugs
+        assert "luma_researcher" in slugs
+        assert "email_marketing" in slugs
 
 
 # ── Abstract contract checks ────────────────────────────────────────────────
@@ -216,7 +219,7 @@ class TestBlueprintPrompts:
         msg = bp.build_context_message(twitter_agent)
         assert "Acme Corp" in msg
         assert "World domination" in msg
-        assert "Social Media" in msg
+        assert "Marketing" in msg
 
     def test_get_context_gathers_correct_data(
         self, twitter_agent, reddit_agent, leader_agent, doc
@@ -240,7 +243,7 @@ class TestBlueprintPrompts:
 
         assert ctx["project_name"] == "Acme Corp"
         assert ctx["project_goal"] == "World domination"
-        assert ctx["department_name"] == "Social Media"
+        assert ctx["department_name"] == "Marketing"
         assert "Brand Guidelines" in ctx["department_documents"]
         assert "Reddit Poster" in ctx["sibling_agents"]
         assert "Posted on r/crypto" in ctx["sibling_agents"]

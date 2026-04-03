@@ -24,7 +24,7 @@ def project(user):
 
 @pytest.fixture
 def department(project):
-    return Department.objects.create(department_type="social_media", project=project)
+    return Department.objects.create(department_type="marketing", project=project)
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def twitter_agent(department):
         name="Twitter Bot",
         agent_type="twitter",
         department=department,
-        auto_actions={"engage-tweets": True, "post-content": False},
+        auto_actions={"place-content": True, "post-content": False},
     )
 
 
@@ -64,7 +64,7 @@ def inactive_leader(department):
     from accounts.models import User
     user2 = User.objects.create_user(email="other@example.com", password="pass")
     project2 = Project.objects.create(name="Other", goal="Other", owner=user2)
-    dept2 = Department.objects.create(department_type="social_media", project=project2)
+    dept2 = Department.objects.create(department_type="marketing", project=project2)
     return Agent.objects.create(
         name="Inactive Leader",
         agent_type="leader",
@@ -136,7 +136,7 @@ class TestRunScheduledActions:
 
 @pytest.mark.django_db
 class TestExecuteAgentTask:
-    @patch("agents.blueprints.social_media.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done tweeting")
+    @patch("agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done tweeting")
     def test_transitions_queued_to_done(self, mock_bp_exec, twitter_agent):
         from agents.tasks import execute_agent_task
 
@@ -152,7 +152,7 @@ class TestExecuteAgentTask:
         assert task.report == "Done tweeting"
         assert task.completed_at is not None
 
-    @patch("agents.blueprints.social_media.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done planned")
+    @patch("agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done planned")
     def test_handles_planned_status(self, mock_bp_exec, twitter_agent):
         from agents.tasks import execute_agent_task
 
@@ -181,7 +181,7 @@ class TestExecuteAgentTask:
         assert task.status == AgentTask.Status.PROCESSING  # unchanged
 
     @patch(
-        "agents.blueprints.social_media.workforce.twitter.agent.TwitterBlueprint.execute_task",
+        "agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task",
         side_effect=RuntimeError("API down"),
     )
     def test_failure_sets_failed_status(self, mock_bp_exec, twitter_agent):

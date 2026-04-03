@@ -20,9 +20,9 @@ class TestBuildBootstrapUserMessage:
     def _make_departments(self):
         return [
             {
-                "slug": "social_media",
-                "name": "Social Media",
-                "description": "Social media management",
+                "slug": "marketing",
+                "name": "Marketing",
+                "description": "Marketing management",
                 "workforce": [
                     {"slug": "twitter", "name": "Twitter Agent", "description": "Posts tweets"},
                     {"slug": "reddit", "name": "Reddit Agent", "description": "Posts on Reddit"},
@@ -50,7 +50,7 @@ class TestBuildBootstrapUserMessage:
     def test_includes_available_departments(self):
         msg = build_bootstrap_user_message("P", "G", self._make_sources(), self._make_departments())
         assert "## Available Departments" in msg
-        assert "social_media" in msg
+        assert "marketing" in msg
         assert "**twitter**" in msg
         assert "Posts tweets" in msg
         assert "**reddit**" in msg
