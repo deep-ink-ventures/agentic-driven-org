@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,7 +11,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# ── Command decorator ────────────────────────────────────────────────────────
+
+
+_command_registry: dict[str, dict] = {}
+
+
+def command(name: str, description: str):
+    """Decorator to register a method as a blueprint command."""
+    def decorator(func):
+        func._command_meta = {"name": name, "description": description}
+        return func
+    return decorator
+
+
+# ── Base Blueprint ───────────────────────────────────────────────────────────
+
+
 class BaseBlueprint(ABC):
+    """Abstract base for all blueprints (leader and workforce)."""
+
     name: str = ""
     slug: str = ""
     description: str = ""
@@ -22,33 +42,39 @@ class BaseBlueprint(ABC):
 
     @property
     @abstractmethod
-    def hourly_prompt(self) -> str:
-        """What to do on the hourly beat."""
-
-    @property
-    @abstractmethod
-    def task_generation_prompt(self) -> str:
-        """How to propose new tasks for the approval queue."""
-
-    @property
-    @abstractmethod
     def skills_description(self) -> str:
         """Formatted skills text injected into system prompt."""
 
-    def get_context(self, agent: Agent) -> dict:
+    def get_commands(self) -> list[dict]:
+        """Return list of registered commands on this blueprint."""
+        commands = []
+        for attr_name in dir(self):
+            attr = getattr(self, attr_name, None)
+            if callable(attr) and hasattr(attr, "_command_meta"):
+                commands.append(attr._command_meta)
+        return commands
+
+    def run_command(self, command_name: str, agent: "Agent", **kwargs):
+        """Run a named command on this blueprint."""
+        for attr_name in dir(self):
+            attr = getattr(self, attr_name, None)
+            if callable(attr) and hasattr(attr, "_command_meta"):
+                if attr._command_meta["name"] == command_name:
+                    return attr(agent, **kwargs)
+        raise ValueError(f"Unknown command: {command_name}")
+
+    def get_context(self, agent: "Agent") -> dict:
         """Gather context with prefetched queries to avoid N+1."""
         from agents.models import AgentTask
 
         department = agent.department
         project = department.project
 
-        # Department documents — single query
         docs = list(department.documents.values_list("title", "content"))
         docs_text = ""
         for title, content in docs:
             docs_text += f"\n\n--- {title} ---\n{content[:3000]}"
 
-        # Sibling agents + their recent tasks — 2 queries total
         sibling_ids = list(
             department.agents.exclude(id=agent.id)
             .filter(is_active=True)
@@ -56,16 +82,12 @@ class BaseBlueprint(ABC):
         )
         sibling_text = ""
         if sibling_ids:
-            # Batch-fetch recent tasks for all siblings in one query
-            from django.db.models import Q
             sib_id_list = [s[0] for s in sibling_ids]
             all_sib_tasks = list(
                 AgentTask.objects.filter(agent_id__in=sib_id_list)
                 .order_by("agent_id", "-created_at")
                 .values_list("agent_id", "exec_summary", "status")
             )
-            # Group by agent_id, take first 5 per agent
-            from collections import defaultdict
             tasks_by_agent = defaultdict(list)
             for aid, es, st in all_sib_tasks:
                 if len(tasks_by_agent[aid]) < 5:
@@ -77,7 +99,6 @@ class BaseBlueprint(ABC):
                     task_lines = "\n".join(f"  - [{s}] {e[:100]}" for e, s in recent)
                     sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:\n{task_lines}"
 
-        # Own recent tasks — single query
         own_recent = list(
             agent.tasks.order_by("-created_at")[:10]
             .values_list("exec_summary", "status", "report")
@@ -98,14 +119,14 @@ class BaseBlueprint(ABC):
             "agent_instructions": agent.instructions,
         }
 
-    def build_system_prompt(self, agent: Agent) -> str:
+    def build_system_prompt(self, agent: "Agent") -> str:
         parts = [self.system_prompt]
         parts.append(f"\n\n## Your Skills\n{self.skills_description}")
         if agent.instructions:
             parts.append(f"\n\n## Additional Instructions\n{agent.instructions}")
         return "".join(parts)
 
-    def build_context_message(self, agent: Agent) -> str:
+    def build_context_message(self, agent: "Agent") -> str:
         ctx = self.get_context(agent)
         return f"""# Context
 
@@ -123,10 +144,33 @@ class BaseBlueprint(ABC):
 ### Your Recent Tasks
 {ctx['own_recent_tasks'] or 'No tasks yet.'}"""
 
+
+# ── Workforce Blueprint ──────────────────────────────────────────────────────
+
+
+class WorkforceBlueprint(BaseBlueprint):
+    """Base for workforce agents (twitter, reddit, etc.). Execute tasks only."""
+
+    @property
     @abstractmethod
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
+    def hourly_prompt(self) -> str:
+        """What to do on the hourly beat."""
+
+    @abstractmethod
+    def execute_task(self, agent: "Agent", task: "AgentTask") -> str:
+        """Execute a task. Returns the report text."""
+
+
+# ── Leader Blueprint ─────────────────────────────────────────────────────────
+
+
+class LeaderBlueprint(BaseBlueprint):
+    """Base for department leader agents. Proposes and delegates tasks."""
+
+    @abstractmethod
+    def execute_task(self, agent: "Agent", task: "AgentTask") -> str:
         """Execute a task. Returns the report text."""
 
     @abstractmethod
-    def generate_task_proposal(self, agent: Agent) -> dict:
-        """Propose the next highest-value task. Returns {exec_summary, step_plan}."""
+    def generate_task_proposal(self, agent: "Agent") -> dict:
+        """Propose the next highest-value task. Returns {exec_summary, step_plan, target_agent_type (optional)}."""
