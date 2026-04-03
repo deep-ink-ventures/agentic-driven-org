@@ -7,55 +7,26 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
-def refill_approval_queue():
-    """
-    Every hour: for each active agent, if fewer than 5 tasks awaiting approval,
-    ask Claude to propose the next highest-value task.
-    Will move to transactional API trigger once the frontend is built.
-    """
-    from agents.models import Agent, AgentTask
-
-    agents = Agent.objects.filter(is_active=True).select_related("department__project")
-
-    for agent in agents:
-        awaiting_count = AgentTask.objects.filter(
-            agent=agent,
-            status=AgentTask.Status.AWAITING_APPROVAL,
-        ).count()
-
-        if awaiting_count >= 5:
-            continue
-
-        try:
-            blueprint = agent.get_blueprint()
-            proposal = blueprint.generate_task_proposal(agent)
-
-            AgentTask.objects.create(
-                agent=agent,
-                status=AgentTask.Status.AWAITING_APPROVAL,
-                auto_execute=False,
-                exec_summary=proposal.get("exec_summary", "Proposed task"),
-                step_plan=proposal.get("step_plan", ""),
-            )
-            logger.info("Proposed task for %s: %s", agent.name, proposal.get("exec_summary", "")[:80])
-
-        except Exception as e:
-            logger.exception("Failed to generate task proposal for %s: %s", agent.name, e)
-
-
-@shared_task
 def execute_hourly_tasks():
     """
-    Every hour: for each active agent with auto_exec_hourly=True,
+    Every hour: for each active workforce agent with auto_exec_hourly=True,
     create and execute a task from the hourly prompt.
     """
     from agents.models import Agent, AgentTask
+    from agents.blueprints.base import WorkforceBlueprint
 
-    agents = Agent.objects.filter(is_active=True, auto_exec_hourly=True).select_related("department__project")
+    agents = Agent.objects.filter(
+        is_active=True,
+        auto_exec_hourly=True,
+        is_leader=False,
+    ).select_related("department__project")
 
     for agent in agents:
         try:
             blueprint = agent.get_blueprint()
+            if not isinstance(blueprint, WorkforceBlueprint):
+                continue
+
             task = AgentTask.objects.create(
                 agent=agent,
                 status=AgentTask.Status.QUEUED,
@@ -75,13 +46,14 @@ def execute_agent_task(self, task_id: str):
     """
     Execute a single agent task. Called when tasks are approved or auto-dispatched.
     Uses atomic guard to prevent double execution.
+    Handles both immediate (QUEUED) and scheduled (PLANNED) tasks.
     """
     from agents.models import AgentTask
 
-    # Atomic guard: only one worker can transition queued -> processing
+    # Atomic guard: transition queued/planned -> processing
     updated = AgentTask.objects.filter(
         id=task_id,
-        status=AgentTask.Status.QUEUED,
+        status__in=[AgentTask.Status.QUEUED, AgentTask.Status.PLANNED],
     ).update(
         status=AgentTask.Status.PROCESSING,
         started_at=timezone.now(),
@@ -89,7 +61,7 @@ def execute_agent_task(self, task_id: str):
 
     if updated == 0:
         current = AgentTask.objects.filter(id=task_id).values_list("status", flat=True).first()
-        logger.warning("Task %s not queued (status=%s) — skipping", task_id, current)
+        logger.warning("Task %s not queued/planned (status=%s) — skipping", task_id, current)
         return
 
     task = AgentTask.objects.select_related(
@@ -113,3 +85,65 @@ def execute_agent_task(self, task_id: str):
         task.error_message = str(e)[:500]
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+
+
+@shared_task
+def create_next_leader_task(leader_agent_id: str):
+    """
+    Self-perpetuating chain: when a leader task is approved, this creates
+    the next priority task proposal. Called from AgentTask.approve().
+    """
+    from agents.models import Agent, AgentTask
+    from agents.blueprints.base import LeaderBlueprint
+
+    try:
+        agent = Agent.objects.select_related("department__project").get(
+            id=leader_agent_id,
+            is_leader=True,
+            is_active=True,
+        )
+    except Agent.DoesNotExist:
+        logger.warning("Leader agent %s not found or inactive", leader_agent_id)
+        return
+
+    blueprint = agent.get_blueprint()
+    if not isinstance(blueprint, LeaderBlueprint):
+        logger.warning("Agent %s is not a leader blueprint", agent.name)
+        return
+
+    try:
+        proposal = blueprint.generate_task_proposal(agent)
+
+        # Create the task on the target workforce agent if specified
+        target_type = proposal.get("target_agent_type")
+        if target_type:
+            target_agent = Agent.objects.filter(
+                department=agent.department,
+                agent_type=target_type,
+                is_active=True,
+                is_leader=False,
+            ).first()
+            if target_agent:
+                AgentTask.objects.create(
+                    agent=target_agent,
+                    created_by_agent=agent,
+                    status=AgentTask.Status.AWAITING_APPROVAL,
+                    auto_execute=False,
+                    exec_summary=proposal.get("exec_summary", "Priority task"),
+                    step_plan=proposal.get("step_plan", ""),
+                )
+                logger.info("Leader %s proposed task for %s: %s", agent.name, target_agent.name, proposal.get("exec_summary", "")[:80])
+                return
+
+        # Fallback: create as a leader task if no target specified
+        AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.AWAITING_APPROVAL,
+            auto_execute=False,
+            exec_summary=proposal.get("exec_summary", "Leader task"),
+            step_plan=proposal.get("step_plan", ""),
+        )
+        logger.info("Leader %s proposed own task: %s", agent.name, proposal.get("exec_summary", "")[:80])
+
+    except Exception as e:
+        logger.exception("Failed to create next leader task for %s: %s", agent.name, e)
