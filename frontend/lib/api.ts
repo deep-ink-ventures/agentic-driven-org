@@ -86,4 +86,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  addSource: (projectId: string, data: { source_type: string; raw_content?: string; url?: string }) =>
+    request<import("./types").Source>(`/api/projects/${projectId}/sources/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  triggerBootstrap: (projectId: string) =>
+    request<import("./types").BootstrapProposal>(`/api/projects/${projectId}/bootstrap/`, {
+      method: "POST",
+    }),
+
+  getBootstrapLatest: (projectId: string) =>
+    request<import("./types").BootstrapProposal>(`/api/projects/${projectId}/bootstrap/latest/`),
+
+  approveBootstrap: (projectId: string, proposalId: string, proposal?: import("./types").BootstrapProposalData) =>
+    request<import("./types").BootstrapProposal>(`/api/projects/${projectId}/bootstrap/${proposalId}/approve/`, {
+      method: "POST",
+      body: JSON.stringify(proposal ? { proposal } : {}),
+    }),
 };
