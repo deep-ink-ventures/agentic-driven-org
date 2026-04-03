@@ -10,8 +10,11 @@ export interface Project {
   id: string;
   name: string;
   goal: string;
+  status: "setup" | "active";
   department_count: number;
   agent_count: number;
+  source_count: number;
+  bootstrap_status: string | null;
   created_at: string;
   updated_at: string;
 }

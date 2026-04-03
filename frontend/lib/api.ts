@@ -103,6 +103,9 @@ export const api = {
     });
   },
 
+  getWsTicket: () =>
+    request<{ ticket: string }>("/api/auth/ws-ticket/", { method: "POST" }),
+
   triggerBootstrap: (projectId: string) =>
     request<import("./types").BootstrapProposal>(`/api/projects/${projectId}/bootstrap/`, {
       method: "POST",

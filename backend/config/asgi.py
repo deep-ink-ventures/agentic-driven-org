@@ -8,11 +8,13 @@ django_asgi_app = get_asgi_application()
 
 from config.ws_auth import TicketAuthMiddleware
 
+from projects.routing import websocket_urlpatterns as projects_ws
+
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": TicketAuthMiddleware(
-            AuthMiddlewareStack(URLRouter([]))
+            AuthMiddlewareStack(URLRouter(projects_ws))
         ),
     }
 )

@@ -24,6 +24,7 @@ def bootstrap_project(self, proposal_id: str):
 
     proposal.status = BootstrapProposal.Status.PROCESSING
     proposal.save(update_fields=["status", "updated_at"])
+    _broadcast_bootstrap(project.id, proposal.id, "processing")
 
     project = proposal.project
 
@@ -99,9 +100,31 @@ def bootstrap_project(self, proposal_id: str):
         proposal.save(update_fields=["proposal", "token_usage", "status", "updated_at"])
 
         logger.info("Bootstrap proposal generated for project %s", project.name)
+        _broadcast_bootstrap(project.id, proposal.id, "proposed")
 
     except Exception as e:
         logger.exception("Bootstrap failed for project %s: %s", project.name, e)
         proposal.status = BootstrapProposal.Status.FAILED
         proposal.error_message = str(e)[:1000]
         proposal.save(update_fields=["status", "error_message", "updated_at"])
+        _broadcast_bootstrap(project.id, proposal.id, "failed", str(e)[:200])
+
+
+def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_message=""):
+    """Send bootstrap status update via WebSocket."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"bootstrap_{project_id}",
+            {
+                "type": "bootstrap.status",
+                "status": bootstrap_status,
+                "proposal_id": str(proposal_id),
+                "error_message": error_message,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast bootstrap status")

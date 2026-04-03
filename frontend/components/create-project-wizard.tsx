@@ -120,23 +120,23 @@ export function CreateProjectWizard({
 
   // Step 3-4
   const [proposal, setProposal] = useState<BootstrapProposal | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
+  const closeWs = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
     }
   }, []);
 
   useEffect(() => {
-    return () => stopPolling();
-  }, [stopPolling]);
+    return () => closeWs();
+  }, [closeWs]);
 
-  // If resuming at step 3 (processing), start polling immediately
+  // If resuming at step 3 (processing), connect WebSocket
   useEffect(() => {
     if (existingProject && step === 3 && projectId) {
-      startPolling();
+      connectBootstrapWs(projectId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -251,23 +251,36 @@ export function CreateProjectWizard({
 
   // ----- Step 3 handlers (Bootstrap) -----
 
-  function startPolling() {
-    if (!projectId) return;
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const latest = await api.getBootstrapLatest(projectId);
-        setProposal(latest);
-        if (latest.status === "proposed" || latest.status === "failed") {
-          stopPolling();
-          if (latest.status === "proposed") {
-            setStep(4);
+  async function connectBootstrapWs(pid: string) {
+    closeWs();
+    try {
+      const { connectWs } = await import("@/lib/ws");
+      const ws = await connectWs(
+        `/ws/bootstrap/${pid}/`,
+        async (data) => {
+          const status = data.status as string;
+          if (status === "proposed" || status === "failed") {
+            // Fetch full proposal data
+            const latest = await api.getBootstrapLatest(pid);
+            setProposal(latest);
+            closeWs();
+            if (status === "proposed") {
+              setStep(4);
+            }
           }
-        }
-      } catch {
-        // keep polling
-      }
-    }, 3000);
+        },
+      );
+      wsRef.current = ws;
+    } catch {
+      // Fallback: if WS fails, fetch once after a delay
+      setTimeout(async () => {
+        try {
+          const latest = await api.getBootstrapLatest(pid);
+          setProposal(latest);
+          if (latest.status === "proposed") setStep(4);
+        } catch { /* ignore */ }
+      }, 5000);
+    }
   }
 
   async function startBootstrap() {
@@ -277,7 +290,7 @@ export function CreateProjectWizard({
     try {
       const result = await api.triggerBootstrap(projectId);
       setProposal(result);
-      startPolling();
+      connectBootstrapWs(projectId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start bootstrap");
     }

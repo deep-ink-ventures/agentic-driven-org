@@ -74,6 +74,9 @@ class BootstrapApproveView(APIView):
             self._apply_proposal(proposal)
             proposal.status = BootstrapProposal.Status.APPROVED
             proposal.save(update_fields=["status", "proposal", "updated_at"])
+            # Mark project as active
+            project.status = Project.Status.ACTIVE
+            project.save(update_fields=["status", "updated_at"])
             return Response(BootstrapProposalSerializer(proposal).data)
         except Exception as e:
             logger.exception("Failed to apply bootstrap: %s", e)
