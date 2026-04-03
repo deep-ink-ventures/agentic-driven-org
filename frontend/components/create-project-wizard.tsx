@@ -31,7 +31,7 @@ interface CreateProjectWizardProps {
   existingProject?: Project;
 }
 
-const STEP_LABELS = ["Project", "Sources", "Analyze", "Review"];
+const STEP_LABELS = ["Project", "Sources", "Misc", "Analyze", "Review"];
 
 function StepIndicator({ current }: { current: number }) {
   return (
@@ -90,8 +90,8 @@ export function CreateProjectWizard({
   // Determine initial step based on existingProject
   function getInitialStep(): number {
     if (!existingProject) return 1;
-    if (existingProject.bootstrap_status === "proposed") return 4;
-    if (existingProject.bootstrap_status === "processing") return 3;
+    if (existingProject.bootstrap_status === "proposed") return 5;
+    if (existingProject.bootstrap_status === "processing") return 4;
     return 2;
   }
 
@@ -110,15 +110,20 @@ export function CreateProjectWizard({
     existingProject?.id ?? null,
   );
 
-  // Step 2 — Sources (merged)
+  // Step 2 — Sources (files + URLs)
   const [files, setFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [urls, setUrls] = useState<string[]>([]);
   const [urlInput, setUrlInput] = useState("");
+
+  // Step 3 — Misc (additional text)
   const [rawText, setRawText] = useState("");
 
-  // Step 3-4
+  // Existing sources (for reopen)
+  const [existingSources] = useState(existingProject?.sources ?? []);
+
+  // Step 4-5
   const [proposal, setProposal] = useState<BootstrapProposal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -133,17 +138,17 @@ export function CreateProjectWizard({
     return () => closeWs();
   }, [closeWs]);
 
-  // If resuming at step 3 (processing), connect WebSocket
+  // If resuming at step 4 (processing), connect WebSocket
   useEffect(() => {
-    if (existingProject && step === 3 && projectId) {
+    if (existingProject && step === 4 && projectId) {
       connectBootstrapWs(projectId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If resuming at step 4 (proposed), fetch the latest proposal
+  // If resuming at step 5 (proposed), fetch the latest proposal
   useEffect(() => {
-    if (existingProject && step === 4 && projectId && !proposal) {
+    if (existingProject && step === 5 && projectId && !proposal) {
       api
         .getBootstrapLatest(projectId)
         .then(setProposal)
@@ -172,7 +177,7 @@ export function CreateProjectWizard({
     }
   }
 
-  // ----- Step 2 handlers (Sources) -----
+  // ----- Step 2 handlers (Sources — files + URLs only) -----
 
   function handleFileDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -213,12 +218,10 @@ export function CreateProjectWizard({
 
     const hasFiles = files.length > 0;
     const hasUrls = urls.length > 0;
-    const hasText = rawText.trim().length > 0;
 
-    if (!hasFiles && !hasUrls && !hasText) {
-      // Nothing to upload — go straight to bootstrap
+    if (!hasFiles && !hasUrls) {
+      // Nothing to upload — go straight to Misc step
       setStep(3);
-      startBootstrap();
       return;
     }
 
@@ -233,15 +236,7 @@ export function CreateProjectWizard({
       for (const url of urls) {
         await api.addSource(projectId, { source_type: "url", url });
       }
-      // Upload text
-      if (hasText) {
-        await api.addSource(projectId, {
-          source_type: "text",
-          raw_content: rawText.trim(),
-        });
-      }
       setStep(3);
-      startBootstrap();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to upload sources");
     } finally {
@@ -249,7 +244,28 @@ export function CreateProjectWizard({
     }
   }
 
-  // ----- Step 3 handlers (Bootstrap) -----
+  // ----- Step 3 handler (Misc — additional text) -----
+
+  async function handleMiscNext() {
+    if (!projectId) return;
+    // Upload text if provided
+    if (rawText.trim()) {
+      setLoading(true);
+      setError("");
+      try {
+        await api.addSource(projectId, { source_type: "text", raw_content: rawText.trim() });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to add text");
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+    setStep(4);
+    startBootstrap();
+  }
+
+  // ----- Step 4 handlers (Bootstrap) -----
 
   async function connectBootstrapWs(pid: string) {
     closeWs();
@@ -265,7 +281,7 @@ export function CreateProjectWizard({
             setProposal(latest);
             closeWs();
             if (status === "proposed") {
-              setStep(4);
+              setStep(5);
             }
           }
         },
@@ -277,7 +293,7 @@ export function CreateProjectWizard({
         try {
           const latest = await api.getBootstrapLatest(pid);
           setProposal(latest);
-          if (latest.status === "proposed") setStep(4);
+          if (latest.status === "proposed") setStep(5);
         } catch { /* ignore */ }
       }, 5000);
     }
@@ -296,7 +312,7 @@ export function CreateProjectWizard({
     }
   }
 
-  // ----- Step 4 handlers (Review) -----
+  // ----- Step 5 handlers (Review) -----
 
   async function handleApprove() {
     if (!projectId || !proposal) return;
@@ -364,7 +380,7 @@ export function CreateProjectWizard({
               </>
             ) : (
               <>
-                {files.length === 0 && urls.length === 0 && !rawText.trim()
+                {files.length === 0 && urls.length === 0
                   ? "Skip"
                   : "Next"}
                 <ArrowRight className="h-4 w-4 ml-1" />
@@ -375,13 +391,43 @@ export function CreateProjectWizard({
       );
     }
 
-    // Step 3: no navigation (spinner)
+    // Step 3: Back + Next (Misc — additional text)
     if (step === 3) {
+      return (
+        <div className="flex justify-between">
+          <Button
+            variant="outline"
+            onClick={() => setStep(2)}
+            className="border-border text-text-secondary hover:text-text-primary"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+          <Button
+            onClick={handleMiscNext}
+            disabled={loading}
+            className="bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                {!rawText.trim() ? "Skip" : "Next"}
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </>
+            )}
+          </Button>
+        </div>
+      );
+    }
+
+    // Step 4: no navigation (spinner)
+    if (step === 4) {
       return null;
     }
 
-    // Step 4: Back to sources + Approve
-    if (step === 4) {
+    // Step 5: Back to sources + Approve
+    if (step === 5) {
       return (
         <div className="flex justify-between">
           <Button
@@ -415,7 +461,7 @@ export function CreateProjectWizard({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-bg-primary border border-border rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div className="bg-bg-primary border border-border rounded-2xl shadow-2xl w-full max-w-3xl h-[min(680px,90vh)] flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
           <StepIndicator current={step} />
@@ -473,9 +519,29 @@ export function CreateProjectWizard({
             </div>
           )}
 
-          {/* Step 2: Sources (Files + URLs + Text) */}
+          {/* Step 2: Sources (Files + URLs) */}
           {step === 2 && (
             <div className="flex flex-col gap-6">
+              {/* Existing sources (read-only) */}
+              {existingSources.length > 0 && (
+                <div className="flex flex-col gap-2 mb-2">
+                  <h3 className="text-xs font-medium text-text-secondary">Previously added</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {existingSources.map((s) => (
+                      <div key={s.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent-gold/10 border border-accent-gold/20 text-xs">
+                        {s.source_type === "file" ? <FileText className="h-3 w-3 text-accent-gold" /> :
+                         s.source_type === "url" ? <Globe className="h-3 w-3 text-accent-gold" /> :
+                         <FileCheck className="h-3 w-3 text-accent-gold" />}
+                        <span className="text-text-primary truncate max-w-[200px]">
+                          {s.original_filename || s.url || "Text input"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <Separator className="bg-border" />
+                </div>
+              )}
+
               {/* Files section */}
               <div className="flex flex-col gap-3">
                 <h3 className="text-sm font-medium text-text-heading">
@@ -504,29 +570,13 @@ export function CreateProjectWizard({
                   </p>
                 </div>
                 {files.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {files.map((file, i) => (
-                      <div
-                        key={`${file.name}-${i}`}
-                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-bg-input border border-border"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-4 w-4 text-text-secondary shrink-0" />
-                          <span className="text-sm text-text-primary truncate">
-                            {file.name}
-                          </span>
-                          <span className="text-xs text-text-secondary shrink-0">
-                            {(file.size / 1024).toFixed(0)}KB
-                          </span>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeFile(i);
-                          }}
-                          className="text-text-secondary hover:text-flag-critical transition-colors p-1"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
+                      <div key={`${file.name}-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-bg-input border border-border text-xs">
+                        <FileText className="h-3 w-3 text-text-secondary" />
+                        <span className="text-text-primary truncate max-w-[150px]">{file.name}</span>
+                        <button onClick={(e) => { e.stopPropagation(); removeFile(i); }} className="text-text-secondary hover:text-flag-critical transition-colors">
+                          <X className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
@@ -578,17 +628,18 @@ export function CreateProjectWizard({
                   </div>
                 )}
               </div>
+            </div>
+          )}
 
-              <Separator className="bg-border" />
-
-              {/* Additional text section */}
-              <div className="flex flex-col gap-3">
-                <h3 className="text-sm font-medium text-text-heading">
-                  Additional Text
-                </h3>
+          {/* Step 3: Misc — Additional Text */}
+          {step === 3 && (
+            <div className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-text-heading mb-1">Additional context</h3>
+                <p className="text-text-secondary text-xs mb-3">Optional — paste any extra text that helps describe your project.</p>
                 <textarea
-                  rows={4}
-                  placeholder="Paste any relevant text — company info, product descriptions, process documentation..."
+                  rows={8}
+                  placeholder="Company info, product descriptions, notes..."
                   value={rawText}
                   onChange={(e) => setRawText(e.target.value)}
                   className="w-full rounded-lg border border-border bg-bg-input px-2.5 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none"
@@ -597,8 +648,8 @@ export function CreateProjectWizard({
             </div>
           )}
 
-          {/* Step 3: Bootstrap Processing */}
-          {step === 3 && (
+          {/* Step 4: Bootstrap Processing */}
+          {step === 4 && (
             <div className="flex flex-col items-center justify-center gap-4 py-12">
               {proposal?.status === "failed" ? (
                 <>
@@ -632,8 +683,8 @@ export function CreateProjectWizard({
             </div>
           )}
 
-          {/* Step 4: Review & Approve */}
-          {step === 4 && proposal?.proposal && (
+          {/* Step 5: Review & Approve */}
+          {step === 5 && proposal?.proposal && (
             <div className="flex flex-col gap-5">
               {/* Summary */}
               <div>

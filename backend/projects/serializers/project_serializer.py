@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from projects.models import Project
+from projects.serializers.source_serializer import SourceSerializer
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -7,12 +8,14 @@ class ProjectSerializer(serializers.ModelSerializer):
     agent_count = serializers.SerializerMethodField()
     source_count = serializers.SerializerMethodField()
     bootstrap_status = serializers.SerializerMethodField()
+    sources = SourceSerializer(many=True, read_only=True)
 
     class Meta:
         model = Project
         fields = [
             "id", "name", "goal", "status",
             "department_count", "agent_count", "source_count", "bootstrap_status",
+            "sources",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "status", "created_at", "updated_at"]

@@ -15,6 +15,7 @@ export interface Project {
   agent_count: number;
   source_count: number;
   bootstrap_status: string | null;
+  sources: Source[];
   created_at: string;
   updated_at: string;
 }
