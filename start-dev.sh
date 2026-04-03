@@ -4,6 +4,13 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
+# Load .env so all child processes (Celery workers) inherit the vars
+if [ -f backend/.env ]; then
+  set -a
+  source backend/.env
+  set +a
+fi
+
 G='\033[0;32m'
 Y='\033[0;33m'
 R='\033[0;31m'
