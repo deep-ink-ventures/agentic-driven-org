@@ -44,8 +44,15 @@ cd backend
 BEAT_PID=$!
 cd ..
 
+echo -e "${Y}Starting Next.js frontend (port 3000)...${NC}"
+cd frontend
+npm run dev &
+NEXT_PID=$!
+cd ..
+
 echo ""
 echo -e "${G}All services running:${NC}"
+echo -e "  Frontend:  http://localhost:3000"
 echo -e "  Backend:   http://localhost:8000"
 echo -e "  Admin:     http://localhost:8000/admin/"
 echo -e "  Postgres:  localhost:5434"
@@ -56,7 +63,7 @@ echo -e "${Y}Press Ctrl+C to stop all services${NC}"
 cleanup() {
   echo ""
   echo -e "${R}Stopping all services...${NC}"
-  kill $DJANGO_PID $CELERY_PID $BEAT_PID 2>/dev/null
+  kill $DJANGO_PID $CELERY_PID $BEAT_PID $NEXT_PID 2>/dev/null
   docker compose -f docker-compose.dev.yml stop
   echo -e "${G}Done.${NC}"
   exit 0
