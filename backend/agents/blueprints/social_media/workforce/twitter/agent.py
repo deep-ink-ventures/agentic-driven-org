@@ -66,14 +66,7 @@ Always align your content with the project's branding guidelines and voice."""
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude
 
-        context_msg = self.build_context_message(agent)
-        task_msg = f"""{context_msg}
-
-# Task to Execute
-**Summary:** {task.exec_summary}
-**Plan:** {task.step_plan}
-
-Execute this task now. Respond with your actions JSON and report."""
+        task_msg = self.build_task_message(agent, task, suffix="Respond with your actions JSON and report.")
 
         response = call_claude(
             system_prompt=self.build_system_prompt(agent),

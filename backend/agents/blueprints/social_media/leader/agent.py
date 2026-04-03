@@ -45,23 +45,16 @@ Always consider the project goal, department documents (branding guidelines, etc
         from agents.ai.claude_client import call_claude
         from agents.models import Agent as AgentModel, AgentTask as TaskModel
 
-        context_msg = self.build_context_message(agent)
         workforce = list(
             agent.department.agents.filter(is_active=True, is_leader=False)
             .values_list("name", "agent_type")
         )
         workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
 
-        task_msg = f"""{context_msg}
-
-# Workforce Agents
+        delegation_suffix = f"""# Workforce Agents
 {workforce_desc}
 
-# Task to Execute
-**Summary:** {task.exec_summary}
-**Plan:** {task.step_plan}
-
-Execute this task. If it involves delegating work to workforce agents, include delegated_tasks in your response.
+If this task involves delegating work to workforce agents, include delegated_tasks in your response.
 
 Respond with JSON:
 {{
@@ -74,6 +67,8 @@ Respond with JSON:
     ],
     "report": "Summary of what was decided and why"
 }}"""
+
+        task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
 
         response = call_claude(
             system_prompt=self.build_system_prompt(agent),

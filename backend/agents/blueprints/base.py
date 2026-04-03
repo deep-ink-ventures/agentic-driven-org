@@ -134,26 +134,53 @@ class BaseBlueprint(ABC):
         parts = [self.system_prompt]
         parts.append(f"\n\n## Your Skills\n{self.skills_description}")
         if agent.instructions:
-            parts.append(f"\n\n## Additional Instructions\n{agent.instructions}")
+            # Wrap user-controlled content in XML tags so Claude treats it as data, not instructions
+            parts.append(f"\n\n## Additional Instructions\n<user_instructions>\n{agent.instructions}\n</user_instructions>")
         return "".join(parts)
 
     def build_context_message(self, agent: "Agent") -> str:
         ctx = self.get_context(agent)
+        # All user-controlled content wrapped in XML tags to mitigate prompt injection.
+        # Claude is trained to treat content inside XML tags as data rather than instructions.
         return f"""# Context
 
 ## Project: {ctx['project_name']}
-**Goal:** {ctx['project_goal']}
+<project_goal>
+{ctx['project_goal']}
+</project_goal>
 
 ## Department: {ctx['department_name']}
 
 ### Department Documents
+<documents>
 {ctx['department_documents'] or 'No documents yet.'}
+</documents>
 
 ### Other Agents in Department
+<sibling_activity>
 {ctx['sibling_agents'] or 'No other agents.'}
+</sibling_activity>
 
 ### Your Recent Tasks
-{ctx['own_recent_tasks'] or 'No tasks yet.'}"""
+<own_activity>
+{ctx['own_recent_tasks'] or 'No tasks yet.'}
+</own_activity>"""
+
+    def build_task_message(self, agent: "Agent", task: "AgentTask", suffix: str = "") -> str:
+        """Build a task execution message with user-controlled content wrapped in XML tags."""
+        context_msg = self.build_context_message(agent)
+        extra = f"\n\n{suffix}" if suffix else ""
+        return f"""{context_msg}
+
+# Task to Execute
+<task_summary>
+{task.exec_summary}
+</task_summary>
+<task_plan>
+{task.step_plan}
+</task_plan>
+
+Execute this task now.{extra}"""
 
 
 # ── Workforce Blueprint ──────────────────────────────────────────────────────

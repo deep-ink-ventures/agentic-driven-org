@@ -36,7 +36,7 @@ class TestBuildBootstrapUserMessage:
 
     def test_includes_goal(self):
         msg = build_bootstrap_user_message("P", "Build a product", self._make_sources(), self._make_departments())
-        assert "## Goal" in msg
+        assert "<project_goal>" in msg
         assert "Build a product" in msg
 
     def test_includes_sources(self):
@@ -72,7 +72,7 @@ class TestBuildBootstrapUserMessage:
     def test_all_sections_present(self):
         msg = build_bootstrap_user_message("P", "G", self._make_sources(), self._make_departments())
         assert "# Project:" in msg
-        assert "## Goal" in msg
+        assert "<project_goal>" in msg
         assert "## Available Departments" in msg
         assert "## Source Materials" in msg
         assert "Respond with JSON only." in msg
@@ -80,7 +80,8 @@ class TestBuildBootstrapUserMessage:
     def test_source_metadata_in_header(self):
         sources = self._make_sources(["text"])
         msg = build_bootstrap_user_message("P", "G", sources, self._make_departments())
-        assert "(type: file, id: src-0)" in msg
+        assert 'type="file"' in msg
+        assert 'id="src-0"' in msg
 
 
 class TestBootstrapSystemPrompt:
