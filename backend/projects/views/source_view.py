@@ -17,11 +17,11 @@ class ProjectSourceListView(ListCreateAPIView):
     def get_queryset(self):
         return Source.objects.filter(
             project_id=self.kwargs["project_id"],
-            project__owner=self.request.user,
+            project__members=self.request.user,
         )
 
     def perform_create(self, serializer):
-        project = Project.objects.get(id=self.kwargs["project_id"], owner=self.request.user)
+        project = Project.objects.get(id=self.kwargs["project_id"], members=self.request.user)
 
         # Handle file upload via multipart
         uploaded_file = self.request.FILES.get("file")

@@ -20,7 +20,7 @@ class BootstrapTriggerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, project_id):
-        project = get_object_or_404(Project, id=project_id, owner=request.user)
+        project = get_object_or_404(Project, id=project_id, members=request.user)
 
         if not project.goal:
             return Response({"error": "Project needs a goal before bootstrapping."}, status=status.HTTP_400_BAD_REQUEST)
@@ -44,7 +44,7 @@ class BootstrapLatestView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, project_id):
-        project = get_object_or_404(Project, id=project_id, owner=request.user)
+        project = get_object_or_404(Project, id=project_id, members=request.user)
         proposal = BootstrapProposal.objects.filter(project=project).first()
         if not proposal:
             return Response({"proposal": None})
@@ -56,7 +56,7 @@ class BootstrapApproveView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, project_id, proposal_id):
-        project = get_object_or_404(Project, id=project_id, owner=request.user)
+        project = get_object_or_404(Project, id=project_id, members=request.user)
         proposal = get_object_or_404(BootstrapProposal, id=proposal_id, project=project)
 
         if proposal.status != BootstrapProposal.Status.PROPOSED:

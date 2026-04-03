@@ -10,7 +10,8 @@ class ProjectListView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Project.objects.filter(owner=self.request.user).order_by("-updated_at")
+        return Project.objects.filter(members=self.request.user).order_by("-updated_at")
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        project = serializer.save(owner=self.request.user)
+        project.members.add(self.request.user)

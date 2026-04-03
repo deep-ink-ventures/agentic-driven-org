@@ -11,7 +11,12 @@ class Project(models.Model):
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
+        related_name="owned_projects",
+    )
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
         related_name="projects",
+        help_text="Users who can access this project. Owner is always a member.",
     )
     config = models.ForeignKey(
         "projects.ProjectConfig",
