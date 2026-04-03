@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import LeaderBlueprint
 from agents.blueprints.social_media.leader.skills import format_skills
-from agents.blueprints.social_media.leader import commands
+from agents.blueprints.social_media.leader.commands import create_priority_task, create_campaign
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ class DepartmentLeaderBlueprint(LeaderBlueprint):
     name = "Department Leader"
     slug = "leader"
     description = "Department leader — proposes priority tasks and campaigns, delegates to workforce agents"
+    tags = ["leadership", "strategy", "coordination", "campaign-management"]
 
     @property
     def system_prompt(self) -> str:
@@ -37,9 +38,9 @@ Always consider the project goal, department documents (branding guidelines, etc
     def skills_description(self) -> str:
         return format_skills()
 
-    # Register commands from commands.py
-    create_priority_task = commands.create_priority_task
-    create_campaign = commands.create_campaign
+    # Register commands
+    create_priority_task = create_priority_task
+    create_campaign = create_campaign
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude

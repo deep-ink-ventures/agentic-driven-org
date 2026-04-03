@@ -41,6 +41,7 @@ class BaseBlueprint(ABC):
     name: str = ""
     slug: str = ""
     description: str = ""
+    tags: list[str] = []
 
     @property
     @abstractmethod
