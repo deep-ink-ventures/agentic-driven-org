@@ -28,6 +28,11 @@ class Agent(models.Model):
         blank=True,
         help_text="Per-agent config (browser cookies, API keys, etc.)",
     )
+    internal_state = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Agent-managed state (last_tweet_at, emails_sent_today, etc.). Read/written by blueprints.",
+    )
     auto_exec_hourly = models.BooleanField(
         default=False,
         help_text="Whether this agent auto-executes hourly tasks",
