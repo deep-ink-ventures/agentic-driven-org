@@ -14,7 +14,7 @@ def bootstrap_project(self, proposal_id: str):
     from projects.models import BootstrapProposal, Source
     from projects.prompts import BOOTSTRAP_SYSTEM_PROMPT, build_bootstrap_user_message
     from agents.ai.claude_client import call_claude
-    from agents.blueprints import _REGISTRY
+    from agents.blueprints import DEPARTMENTS
 
     try:
         proposal = BootstrapProposal.objects.select_related("project").get(id=proposal_id)
@@ -49,19 +49,26 @@ def bootstrap_project(self, proposal_id: str):
         if not source_data:
             raise ValueError("No sources with extracted text found")
 
-        # Available blueprint types
-        available_types = [
-            {"slug": slug, "name": bp.name, "description": bp.description}
-            for slug, bp in _REGISTRY.items()
-            if slug != "leader"
-        ]
+        # Available departments with their workforce agents
+        available_departments = []
+        for dept_slug, dept_config in DEPARTMENTS.items():
+            workforce = [
+                {"slug": slug, "name": bp.name, "description": bp.description}
+                for slug, bp in dept_config["workforce"].items()
+            ]
+            available_departments.append({
+                "slug": dept_slug,
+                "name": dept_config["name"],
+                "description": dept_config["description"],
+                "workforce": workforce,
+            })
 
         # Build prompt
         user_message = build_bootstrap_user_message(
             project_name=project.name,
             project_goal=project.goal,
             sources=source_data,
-            available_types=available_types,
+            available_departments=available_departments,
         )
 
         # Call Claude

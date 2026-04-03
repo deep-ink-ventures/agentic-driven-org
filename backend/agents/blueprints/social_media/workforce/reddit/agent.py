@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import WorkforceBlueprint, command
-from agents.blueprints.reddit.skills import format_skills
+from agents.blueprints.social_media.workforce.reddit.skills import format_skills
 
 logger = logging.getLogger(__name__)
 

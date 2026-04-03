@@ -32,7 +32,7 @@ def project(user):
 
 @pytest.fixture
 def department(project):
-    return Department.objects.create(name="Growth", project=project)
+    return Department.objects.create(department_type="social_media", project=project)
 
 
 @pytest.fixture
@@ -139,16 +139,20 @@ class TestBaseBlueprint:
 
 class TestBlueprintRegistry:
     def test_get_blueprint_twitter(self):
-        from agents.blueprints.twitter.agent import TwitterBlueprint
-        assert isinstance(get_blueprint("twitter"), TwitterBlueprint)
+        from agents.blueprints.social_media.workforce.twitter.agent import TwitterBlueprint
+        assert isinstance(get_blueprint("twitter", "social_media"), TwitterBlueprint)
 
     def test_get_blueprint_reddit(self):
-        from agents.blueprints.reddit.agent import RedditBlueprint
-        assert isinstance(get_blueprint("reddit"), RedditBlueprint)
+        from agents.blueprints.social_media.workforce.reddit.agent import RedditBlueprint
+        assert isinstance(get_blueprint("reddit", "social_media"), RedditBlueprint)
 
     def test_get_blueprint_leader(self):
-        from agents.blueprints.leader.agent import DepartmentLeaderBlueprint
-        assert isinstance(get_blueprint("leader"), DepartmentLeaderBlueprint)
+        from agents.blueprints.social_media.leader.agent import DepartmentLeaderBlueprint
+        assert isinstance(get_blueprint("leader", "social_media"), DepartmentLeaderBlueprint)
+
+    def test_get_blueprint_leader_requires_department(self):
+        with pytest.raises(ValueError, match="department_type required"):
+            get_blueprint("leader")
 
     def test_get_blueprint_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown agent type"):
@@ -212,7 +216,7 @@ class TestBlueprintPrompts:
         msg = bp.build_context_message(twitter_agent)
         assert "Acme Corp" in msg
         assert "World domination" in msg
-        assert "Growth" in msg
+        assert "Social Media" in msg
 
     def test_get_context_gathers_correct_data(
         self, twitter_agent, reddit_agent, leader_agent, doc
@@ -236,7 +240,7 @@ class TestBlueprintPrompts:
 
         assert ctx["project_name"] == "Acme Corp"
         assert ctx["project_goal"] == "World domination"
-        assert ctx["department_name"] == "Growth"
+        assert ctx["department_name"] == "Social Media"
         assert "Brand Guidelines" in ctx["department_documents"]
         assert "Reddit Poster" in ctx["sibling_agents"]
         assert "Posted on r/crypto" in ctx["sibling_agents"]

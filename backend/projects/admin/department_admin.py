@@ -12,8 +12,8 @@ class DocumentInline(admin.TabularInline):
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ("name", "project", "created_at")
-    list_filter = ("project",)
-    search_fields = ("name", "project__name")
-    ordering = ("project__name", "name")
+    list_display = ("name", "department_type", "project", "created_at")
+    list_filter = ("department_type", "project")
+    search_fields = ("department_type", "project__name")
+    ordering = ("project__name", "department_type")
     inlines = [DocumentInline]

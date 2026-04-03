@@ -58,7 +58,7 @@ class Agent(models.Model):
 
     def get_blueprint(self):
         from agents.blueprints import get_blueprint
-        return get_blueprint(self.agent_type)
+        return get_blueprint(self.agent_type, self.department.department_type)
 
     def __str__(self):
         leader_tag = " [LEADER]" if self.is_leader else ""

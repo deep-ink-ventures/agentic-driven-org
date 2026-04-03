@@ -6,7 +6,7 @@ from django.utils.html import format_html
 
 from projects.models import BootstrapProposal, Department, Document, Tag
 from agents.models import Agent
-from agents.blueprints import _REGISTRY
+from agents.blueprints import DEPARTMENTS, get_workforce_for_department
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,14 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
             raise ValueError("Invalid proposal — missing departments")
 
         for dept_data in data["departments"]:
+            department_type = dept_data["department_type"]
+            if department_type not in DEPARTMENTS:
+                logger.warning("Skipping unknown department_type '%s'", department_type)
+                continue
+
             department, _ = Department.objects.get_or_create(
                 project=project,
-                name=dept_data["name"],
+                department_type=department_type,
             )
 
             # Create documents
@@ -86,11 +91,12 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
                     instructions=f"Lead the {department.name} department for project: {project.name}. Goal: {project.goal[:200]}",
                 )
 
-            # Create workforce agents (only valid non-leader blueprint types)
+            # Create workforce agents (only valid types for this department)
+            available_workforce = get_workforce_for_department(department_type)
             for agent_data in dept_data.get("agents", []):
                 agent_type = agent_data["agent_type"]
-                if agent_type not in _REGISTRY or agent_type == "leader":
-                    logger.warning("Skipping invalid agent_type '%s' in bootstrap proposal", agent_type)
+                if agent_type not in available_workforce:
+                    logger.warning("Skipping agent_type '%s' — not available in department '%s'", agent_type, department_type)
                     continue
                 Agent.objects.create(
                     name=agent_data["name"],
@@ -98,5 +104,4 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
                     department=department,
                     is_leader=False,
                     instructions=agent_data.get("instructions", ""),
-                    auto_exec_hourly=agent_data.get("auto_exec_hourly", False),
                 )

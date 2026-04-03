@@ -7,7 +7,7 @@ from projects.models import Project, Department, Source, BootstrapProposal
 class DepartmentInline(admin.TabularInline):
     model = Department
     extra = 1
-    fields = ("name",)
+    fields = ("department_type",)
     show_change_link = True
 
 

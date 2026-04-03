@@ -24,12 +24,13 @@ def project(user):
 
 @pytest.fixture
 def department(project):
-    return Department.objects.create(name="Marketing", project=project)
+    return Department.objects.create(department_type="social_media", project=project)
 
 
 @pytest.fixture
-def department2(project):
-    return Department.objects.create(name="Engineering", project=project)
+def department2(user):
+    project2 = Project.objects.create(name="Other Project", goal="Other goal", owner=user)
+    return Department.objects.create(department_type="social_media", project=project2)
 
 
 @pytest.fixture
@@ -99,7 +100,7 @@ class TestAgentModel:
         assert agent.is_action_enabled("nonexistent") is False
 
     def test_get_blueprint_returns_correct_instance(self, agent):
-        from agents.blueprints.twitter.agent import TwitterBlueprint
+        from agents.blueprints.social_media.workforce.twitter.agent import TwitterBlueprint
         bp = agent.get_blueprint()
         assert isinstance(bp, TwitterBlueprint)
 

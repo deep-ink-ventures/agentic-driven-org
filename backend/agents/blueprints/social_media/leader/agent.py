@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import LeaderBlueprint
-from agents.blueprints.leader.skills import format_skills
-from agents.blueprints.leader import commands
+from agents.blueprints.social_media.leader.skills import format_skills
+from agents.blueprints.social_media.leader import commands
 
 logger = logging.getLogger(__name__)
 

@@ -43,7 +43,7 @@ VALID_RESPONSE = json.dumps(
         "summary": "A great project setup.",
         "departments": [
             {
-                "name": "Marketing",
+                "department_type": "social_media",
                 "documents": [
                     {"title": "Brand Guide", "content": "# Brand", "tags": ["branding"]}
                 ],
@@ -52,7 +52,6 @@ VALID_RESPONSE = json.dumps(
                         "name": "Twitter Bot",
                         "agent_type": "twitter",
                         "instructions": "Post tweets about the project.",
-                        "auto_exec_hourly": False,
                     }
                 ],
             }

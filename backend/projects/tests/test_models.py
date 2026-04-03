@@ -42,7 +42,7 @@ def project(user, config):
 
 @pytest.fixture
 def department(project):
-    return Department.objects.create(name="Engineering", project=project)
+    return Department.objects.create(department_type="social_media", project=project)
 
 
 @pytest.fixture
@@ -107,21 +107,22 @@ class TestProject:
 
 class TestDepartment:
     def test_create(self, department, project):
-        assert department.name == "Engineering"
+        assert department.department_type == "social_media"
+        assert department.name == "Social Media"  # property from blueprint registry
         assert department.project == project
 
     def test_str(self, department):
-        assert str(department) == "My Project / Engineering"
+        assert str(department) == "My Project / Social Media"
 
     def test_unique_per_project(self, project):
-        Department.objects.create(name="Sales", project=project)
+        Department.objects.create(department_type="social_media", project=project)
         with pytest.raises(IntegrityError):
-            Department.objects.create(name="Sales", project=project)
+            Department.objects.create(department_type="social_media", project=project)
 
     def test_same_name_different_project(self, user, project):
         p2 = Project.objects.create(name="Other", owner=user)
-        Department.objects.create(name="Engineering", project=project)
-        d2 = Department.objects.create(name="Engineering", project=p2)
+        Department.objects.create(department_type="social_media", project=project)
+        d2 = Department.objects.create(department_type="social_media", project=p2)
         assert d2.pk is not None
 
     def test_cascade_on_project_delete(self, department, project):

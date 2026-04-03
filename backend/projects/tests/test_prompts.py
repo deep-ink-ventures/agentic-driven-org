@@ -17,32 +17,40 @@ class TestBuildBootstrapUserMessage:
             for i, t in enumerate(texts)
         ]
 
-    def _make_types(self):
+    def _make_departments(self):
         return [
-            {"slug": "twitter", "name": "Twitter Agent", "description": "Posts tweets"},
-            {"slug": "reddit", "name": "Reddit Agent", "description": "Posts on Reddit"},
+            {
+                "slug": "social_media",
+                "name": "Social Media",
+                "description": "Social media management",
+                "workforce": [
+                    {"slug": "twitter", "name": "Twitter Agent", "description": "Posts tweets"},
+                    {"slug": "reddit", "name": "Reddit Agent", "description": "Posts on Reddit"},
+                ],
+            },
         ]
 
     def test_includes_project_name(self):
-        msg = build_bootstrap_user_message("My Project", "Some goal", self._make_sources(), self._make_types())
+        msg = build_bootstrap_user_message("My Project", "Some goal", self._make_sources(), self._make_departments())
         assert "# Project: My Project" in msg
 
     def test_includes_goal(self):
-        msg = build_bootstrap_user_message("P", "Build a product", self._make_sources(), self._make_types())
+        msg = build_bootstrap_user_message("P", "Build a product", self._make_sources(), self._make_departments())
         assert "## Goal" in msg
         assert "Build a product" in msg
 
     def test_includes_sources(self):
         sources = self._make_sources(["Content A", "Content B"])
-        msg = build_bootstrap_user_message("P", "G", sources, self._make_types())
+        msg = build_bootstrap_user_message("P", "G", sources, self._make_departments())
         assert "Content A" in msg
         assert "Content B" in msg
         assert "source_0.txt" in msg
         assert "source_1.txt" in msg
 
-    def test_includes_available_types(self):
-        msg = build_bootstrap_user_message("P", "G", self._make_sources(), self._make_types())
-        assert "## Available Agent Types" in msg
+    def test_includes_available_departments(self):
+        msg = build_bootstrap_user_message("P", "G", self._make_sources(), self._make_departments())
+        assert "## Available Departments" in msg
+        assert "social_media" in msg
         assert "**twitter**" in msg
         assert "Posts tweets" in msg
         assert "**reddit**" in msg
@@ -50,30 +58,28 @@ class TestBuildBootstrapUserMessage:
     def test_truncation_at_10k(self):
         long_text = "x" * 15000
         sources = self._make_sources([long_text])
-        msg = build_bootstrap_user_message("P", "G", sources, self._make_types())
+        msg = build_bootstrap_user_message("P", "G", sources, self._make_departments())
         assert "[... truncated ...]" in msg
-        # Original text should not be fully present
         assert "x" * 15000 not in msg
-        # But first 10000 chars should be
         assert "x" * 10000 in msg
 
     def test_short_text_not_truncated(self):
         sources = self._make_sources(["short text"])
-        msg = build_bootstrap_user_message("P", "G", sources, self._make_types())
+        msg = build_bootstrap_user_message("P", "G", sources, self._make_departments())
         assert "[... truncated ...]" not in msg
         assert "short text" in msg
 
     def test_all_sections_present(self):
-        msg = build_bootstrap_user_message("P", "G", self._make_sources(), self._make_types())
+        msg = build_bootstrap_user_message("P", "G", self._make_sources(), self._make_departments())
         assert "# Project:" in msg
         assert "## Goal" in msg
-        assert "## Available Agent Types" in msg
+        assert "## Available Departments" in msg
         assert "## Source Materials" in msg
         assert "Respond with JSON only." in msg
 
     def test_source_metadata_in_header(self):
         sources = self._make_sources(["text"])
-        msg = build_bootstrap_user_message("P", "G", sources, self._make_types())
+        msg = build_bootstrap_user_message("P", "G", sources, self._make_departments())
         assert "(type: file, id: src-0)" in msg
 
 
@@ -87,3 +93,6 @@ class TestBootstrapSystemPrompt:
 
     def test_mentions_departments(self):
         assert "departments" in BOOTSTRAP_SYSTEM_PROMPT
+
+    def test_mentions_department_type(self):
+        assert "department_type" in BOOTSTRAP_SYSTEM_PROMPT
