@@ -192,5 +192,15 @@ TIME_ZONE = "UTC"
 USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Media files (local storage backend for dev)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Storage backend — "local" in dev, "gcs" in production
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local" if DEBUG else "gcs")
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "agentic-company-uploads")
+GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
