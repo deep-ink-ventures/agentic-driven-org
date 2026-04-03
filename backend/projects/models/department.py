@@ -7,7 +7,7 @@ class Department(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     department_type = models.CharField(
         max_length=50,
-        default="social_media",
+        default="marketing",
         help_text="Department type — must match a blueprint folder (e.g. social_media, engineering)",
     )
     project = models.ForeignKey(
