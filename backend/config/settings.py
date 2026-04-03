@@ -149,7 +149,7 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BEAT_SCHEDULE = {
     "refill-approval-queue": {
         "task": "agents.tasks.refill_approval_queue",
-        "schedule": 60,
+        "schedule": 3600,  # hourly; will move to transactional API trigger with frontend
     },
     "execute-hourly-tasks": {
         "task": "agents.tasks.execute_hourly_tasks",

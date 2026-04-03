@@ -36,33 +36,48 @@ class BaseBlueprint(ABC):
         """Formatted skills text injected into system prompt."""
 
     def get_context(self, agent: Agent) -> dict:
+        """Gather context with prefetched queries to avoid N+1."""
+        from agents.models import AgentTask
+
         department = agent.department
         project = department.project
 
+        # Department documents — single query
         docs = list(department.documents.values_list("title", "content"))
         docs_text = ""
         for title, content in docs:
             docs_text += f"\n\n--- {title} ---\n{content[:3000]}"
 
-        siblings = list(
+        # Sibling agents + their recent tasks — 2 queries total
+        sibling_ids = list(
             department.agents.exclude(id=agent.id)
             .filter(is_active=True)
-            .values_list("name", "agent_type")
+            .values_list("id", "name", "agent_type")
         )
         sibling_text = ""
-        for sib_name, sib_type in siblings:
-            from agents.models import AgentTask
-            recent = list(
-                AgentTask.objects.filter(
-                    agent__name=sib_name,
-                    agent__department=department,
-                ).order_by("-created_at")[:5]
-                .values_list("exec_summary", "status")
+        if sibling_ids:
+            # Batch-fetch recent tasks for all siblings in one query
+            from django.db.models import Q
+            sib_id_list = [s[0] for s in sibling_ids]
+            all_sib_tasks = list(
+                AgentTask.objects.filter(agent_id__in=sib_id_list)
+                .order_by("agent_id", "-created_at")
+                .values_list("agent_id", "exec_summary", "status")
             )
-            if recent:
-                task_lines = "\n".join(f"  - [{s}] {e[:100]}" for e, s in recent)
-                sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:\n{task_lines}"
+            # Group by agent_id, take first 5 per agent
+            from collections import defaultdict
+            tasks_by_agent = defaultdict(list)
+            for aid, es, st in all_sib_tasks:
+                if len(tasks_by_agent[aid]) < 5:
+                    tasks_by_agent[aid].append((es, st))
 
+            for sib_id, sib_name, sib_type in sibling_ids:
+                recent = tasks_by_agent.get(sib_id, [])
+                if recent:
+                    task_lines = "\n".join(f"  - [{s}] {e[:100]}" for e, s in recent)
+                    sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:\n{task_lines}"
+
+        # Own recent tasks — single query
         own_recent = list(
             agent.tasks.order_by("-created_at")[:10]
             .values_list("exec_summary", "status", "report")

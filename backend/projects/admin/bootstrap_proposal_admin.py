@@ -6,6 +6,7 @@ from django.utils.html import format_html
 
 from projects.models import BootstrapProposal, Department, Document, Tag
 from agents.models import Agent
+from agents.blueprints import _REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -75,17 +76,21 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
                     tag, _ = Tag.objects.get_or_create(name=tag_name.lower())
                     doc.tags.add(tag)
 
-            # Create agents
+            # Create agents (only valid blueprint types)
             created_agents = {}
             for agent_data in dept_data.get("agents", []):
+                agent_type = agent_data["agent_type"]
+                if agent_type not in _REGISTRY:
+                    logger.warning("Skipping unknown agent_type '%s' in bootstrap proposal", agent_type)
+                    continue
                 agent = Agent.objects.create(
                     name=agent_data["name"],
-                    agent_type=agent_data["agent_type"],
+                    agent_type=agent_type,
                     department=department,
                     instructions=agent_data.get("instructions", ""),
                     auto_exec_hourly=agent_data.get("auto_exec_hourly", False),
                 )
-                created_agents[agent_data["agent_type"]] = agent
+                created_agents[agent_type] = agent
 
             # Wire superior relationships: campaign is superior to twitter/reddit
             campaign = created_agents.get("campaign")

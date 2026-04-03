@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 @shared_task
 def refill_approval_queue():
     """
-    Every minute: for each active agent, if fewer than 5 tasks awaiting approval,
+    Every hour: for each active agent, if fewer than 5 tasks awaiting approval,
     ask Claude to propose the next highest-value task.
+    Will move to transactional API trigger once the frontend is built.
     """
     from agents.models import Agent, AgentTask
 
