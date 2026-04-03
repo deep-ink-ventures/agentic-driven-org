@@ -19,6 +19,7 @@ class WebResearcherBlueprint(WorkforceBlueprint):
     slug = "web_researcher"
     description = "Researches trends, competitors, and content opportunities via web search"
     tags = ["research", "intelligence", "trends"]
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:
@@ -59,10 +60,13 @@ Respond with your findings JSON and report."""
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
 
-        response = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            model=self.get_model(agent),
         )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
 
         try:
             data = json.loads(response)

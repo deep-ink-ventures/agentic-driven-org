@@ -23,6 +23,11 @@ class EmailMarketingBlueprint(WorkforceBlueprint):
     slug = "email_marketing"
     description = "Designs and sends email campaigns via SendGrid with strict approval gates"
     tags = ["email", "campaigns", "outreach", "nurture"]
+    config_schema = {
+        "sendgrid_api_key": {"type": "str", "required": True, "description": "SendGrid API key"},
+        "default_from_email": {"type": "str", "required": True, "description": "Default sender email address"},
+        "mailing_lists": {"type": "dict", "required": True, "description": "Mailing list name -> SendGrid list ID mapping"},
+    }
 
     @property
     def system_prompt(self) -> str:
@@ -88,10 +93,13 @@ When executing tasks, respond with a JSON object:
 
             task_msg = self.build_task_message(agent, task, suffix=suffix)
 
-            response = call_claude(
+            response, usage = call_claude(
                 system_prompt=self.build_system_prompt(agent),
                 user_message=task_msg,
+                model=self.get_model(agent),
             )
+            task.token_usage = usage
+            task.save(update_fields=["token_usage"])
 
             # Ensure the task stays in awaiting_approval
             task.status = "awaiting_approval"
@@ -149,10 +157,13 @@ When executing tasks, respond with a JSON object:
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
 
-        response = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            model=self.get_model(agent),
         )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
 
         try:
             data = json.loads(response)

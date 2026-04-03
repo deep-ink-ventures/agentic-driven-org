@@ -211,12 +211,15 @@ class TestCreateNextLeaderTask:
     ):
         import json
 
-        mock_claude.return_value = json.dumps(
-            {
-                "target_agent_type": "twitter",
-                "exec_summary": "Engage crypto influencers",
-                "step_plan": "1. Find influencers\n2. Engage",
-            }
+        mock_claude.return_value = (
+            json.dumps(
+                {
+                    "target_agent_type": "twitter",
+                    "exec_summary": "Engage crypto influencers",
+                    "step_plan": "1. Find influencers\n2. Engage",
+                }
+            ),
+            {"model": "claude-sonnet-4-6", "input_tokens": 100, "output_tokens": 50},
         )
 
         from agents.tasks import create_next_leader_task

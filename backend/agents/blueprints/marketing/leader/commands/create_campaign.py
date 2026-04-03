@@ -64,9 +64,10 @@ Respond with JSON:
     }}
 }}"""
 
-    response = call_claude(
+    response, _usage = call_claude(
         system_prompt=self.build_system_prompt(agent),
         user_message=msg,
+        model=self.get_model(agent, command_name="create-campaign"),
     )
 
     try:

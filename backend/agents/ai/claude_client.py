@@ -26,18 +26,10 @@ def call_claude(
     user_message: str,
     model: str = "claude-sonnet-4-6",
     max_tokens: int = 4096,
-) -> str:
+) -> tuple[str, dict]:
     """
-    Call Claude API and return the text response.
-
-    Args:
-        system_prompt: The system prompt for Claude
-        user_message: The user message
-        model: Claude model to use
-        max_tokens: Max tokens in response
-
-    Returns:
-        The text content of Claude's response
+    Call Claude API and return (response_text, usage_dict).
+    usage_dict: {model, input_tokens, output_tokens}
     """
     client = _get_client()
 
@@ -55,10 +47,12 @@ def call_claude(
         if block.type == "text":
             response_text += block.text
 
-    logger.info(
-        "Claude response: input_tokens=%d, output_tokens=%d",
-        message.usage.input_tokens,
-        message.usage.output_tokens,
-    )
+    usage = {
+        "model": model,
+        "input_tokens": message.usage.input_tokens,
+        "output_tokens": message.usage.output_tokens,
+    }
 
-    return response_text
+    logger.info("Claude response: model=%s input_tokens=%d, output_tokens=%d", model, usage["input_tokens"], usage["output_tokens"])
+
+    return response_text, usage

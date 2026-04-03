@@ -59,9 +59,10 @@ Respond with JSON:
     "step_plan": "Detailed step-by-step plan with branding/tone guidance"
 }}"""
 
-    response = call_claude(
+    response, _usage = call_claude(
         system_prompt=self.build_system_prompt(agent),
         user_message=msg,
+        model=self.get_model(agent, command_name="create-priority-task"),
     )
 
     try:

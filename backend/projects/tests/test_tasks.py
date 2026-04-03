@@ -38,7 +38,7 @@ def proposal(project):
     return BootstrapProposal.objects.create(project=project)
 
 
-VALID_RESPONSE = json.dumps(
+_VALID_JSON = json.dumps(
     {
         "summary": "A great project setup.",
         "departments": [
@@ -59,6 +59,10 @@ VALID_RESPONSE = json.dumps(
         "ignored_content": [],
     }
 )
+
+_USAGE = {"model": "claude-sonnet-4-6", "input_tokens": 500, "output_tokens": 200}
+
+VALID_RESPONSE = (_VALID_JSON, _USAGE)
 
 
 class TestBootstrapProject:
@@ -89,7 +93,7 @@ class TestBootstrapProject:
         assert proposal.status == "proposed"
         mock_claude.assert_called_once()
 
-    @patch("agents.ai.claude_client.call_claude", return_value="not valid json {{{")
+    @patch("agents.ai.claude_client.call_claude", return_value=("not valid json {{{", _USAGE))
     def test_bad_json_fails(self, mock_claude, proposal, source_with_text):
         from projects.tasks import bootstrap_project
 
@@ -139,7 +143,7 @@ class TestBootstrapProject:
     @patch("agents.ai.claude_client.call_claude")
     def test_markdown_fenced_json(self, mock_claude, proposal, source_with_text):
         """Claude sometimes wraps JSON in markdown fences."""
-        mock_claude.return_value = f"```json\n{VALID_RESPONSE}\n```"
+        mock_claude.return_value = (f"```json\n{_VALID_JSON}\n```", _USAGE)
 
         from projects.tasks import bootstrap_project
 

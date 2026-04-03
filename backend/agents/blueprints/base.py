@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 _command_registry: dict[str, dict] = {}
 
 
-def command(name: str, description: str, schedule: str | None = None):
+def command(name: str, description: str, schedule: str | None = None, model: str | None = None):
     """
     Decorator to register a method as a blueprint command.
 
@@ -25,9 +25,10 @@ def command(name: str, description: str, schedule: str | None = None):
         name: Command name (e.g. "engage-tweets")
         description: Human-readable description
         schedule: "hourly", "daily", or None (on-demand only)
+        model: Override model for this command (e.g. "claude-haiku-4-5")
     """
     def decorator(func):
-        func._command_meta = {"name": name, "description": description, "schedule": schedule}
+        func._command_meta = {"name": name, "description": description, "schedule": schedule, "model": model}
         return func
     return decorator
 
@@ -42,6 +43,8 @@ class BaseBlueprint(ABC):
     slug: str = ""
     description: str = ""
     tags: list[str] = []
+    default_model: str = "claude-sonnet-4-6"
+    config_schema: dict[str, dict] = {}  # {"key": {"type": "str", "required": bool, "description": "..."}}
 
     @property
     @abstractmethod
@@ -74,6 +77,59 @@ class BaseBlueprint(ABC):
                 if attr._command_meta["name"] == command_name:
                     return attr(agent, **kwargs)
         raise ValueError(f"Unknown command: {command_name}")
+
+    def get_model(self, agent: "Agent", command_name: str | None = None) -> str:
+        """Resolve model: command model -> agent.config['model'] -> blueprint default_model."""
+        # 1. Command-specific model
+        if command_name:
+            for cmd in self.get_commands():
+                if cmd["name"] == command_name and cmd.get("model"):
+                    return cmd["model"]
+        # 2. Agent-level override
+        model = agent.config.get("model")
+        if model:
+            return model
+        # 3. Blueprint default
+        return self.default_model
+
+    def validate_config(self, config: dict) -> list[str]:
+        """Validate agent config against this blueprint's schema. Returns list of error strings."""
+        errors = []
+        for key, spec in self.config_schema.items():
+            if spec.get("required") and key not in config:
+                errors.append(f"Missing required config key: {key}")
+            if key in config:
+                expected_type = spec.get("type", "str")
+                value = config[key]
+                if expected_type == "str" and not isinstance(value, str):
+                    errors.append(f"Config key '{key}' must be a string")
+                elif expected_type == "list" and not isinstance(value, list):
+                    errors.append(f"Config key '{key}' must be a list")
+                elif expected_type == "dict" and not isinstance(value, dict):
+                    errors.append(f"Config key '{key}' must be a dict")
+        return errors
+
+    def validate_auto_actions(self, auto_actions: dict) -> list[str]:
+        """Validate that auto_actions keys are valid commands with schedules."""
+        errors = []
+        valid_commands = {c["name"] for c in self.get_commands() if c.get("schedule")}
+        for key, value in auto_actions.items():
+            if key not in valid_commands:
+                errors.append(f"Unknown scheduled command: '{key}'")
+            if not isinstance(value, bool):
+                errors.append(f"auto_actions['{key}'] must be a boolean")
+        return errors
+
+    def get_available_commands_description(self) -> str:
+        """Format available commands for inclusion in context messages."""
+        cmds = self.get_commands()
+        if not cmds:
+            return "No commands available."
+        lines = []
+        for c in cmds:
+            schedule = f" [{c['schedule']}]" if c.get("schedule") else " [on-demand]"
+            lines.append(f"- {c['name']}{schedule}: {c['description']}")
+        return "\n".join(lines)
 
     def get_context(self, agent: "Agent") -> dict:
         """Gather context with prefetched queries to avoid N+1."""
@@ -134,6 +190,7 @@ class BaseBlueprint(ABC):
     def build_system_prompt(self, agent: "Agent") -> str:
         parts = [self.system_prompt]
         parts.append(f"\n\n## Your Skills\n{self.skills_description}")
+        parts.append(f"\n\n## Your Commands\n{self.get_available_commands_description()}")
         if agent.instructions:
             # Wrap user-controlled content in XML tags so Claude treats it as data, not instructions
             parts.append(f"\n\n## Additional Instructions\n<user_instructions>\n{agent.instructions}\n</user_instructions>")

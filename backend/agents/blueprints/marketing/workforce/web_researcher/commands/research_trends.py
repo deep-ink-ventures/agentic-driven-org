@@ -1,7 +1,7 @@
 from agents.blueprints.base import command
 
 
-@command(name="research-trends", description="Search for industry trends and emerging topics", schedule="hourly")
+@command(name="research-trends", description="Search for industry trends and emerging topics", schedule="hourly", model="claude-haiku-4-5")
 def research_trends(self, agent) -> dict:
     return {
         "exec_summary": "Research current industry trends and emerging topics relevant to the project",

@@ -23,12 +23,15 @@ class TestCallClaude:
         mock_client.messages.create.return_value = mock_message
         mock_anthropic.Anthropic.return_value = mock_client
 
-        result = call_claude(
+        result, usage = call_claude(
             system_prompt="You are helpful",
             user_message="Hi",
         )
 
         assert result == "Hello from Claude"
+        assert usage["model"] == "claude-sonnet-4-6"
+        assert usage["input_tokens"] == 100
+        assert usage["output_tokens"] == 50
         mock_client.messages.create.assert_called_once_with(
             model="claude-sonnet-4-6",
             max_tokens=4096,
@@ -62,12 +65,14 @@ class TestCallClaude:
         mock_client.messages.create.return_value = mock_message
         mock_anthropic.Anthropic.return_value = mock_client
 
-        result = call_claude(
+        result, usage = call_claude(
             system_prompt="sys",
             user_message="msg",
         )
 
         assert result == "First part. Second part."
+        assert usage["input_tokens"] == 200
+        assert usage["output_tokens"] == 100
 
     @patch("agents.ai.claude_client._client", None)
     @patch("agents.ai.claude_client.anthropic")

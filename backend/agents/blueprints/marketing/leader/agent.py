@@ -27,6 +27,7 @@ class MarketingLeaderBlueprint(LeaderBlueprint):
     slug = "leader"
     description = "Marketing department leader — orchestrates campaigns, coordinates research and execution across all channels"
     tags = ["leadership", "strategy", "campaigns", "coordination", "marketing"]
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:
@@ -93,10 +94,13 @@ Respond with JSON:
 
         task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
 
-        response = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            model=self.get_model(agent),
         )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
 
         try:
             data = json.loads(response)

@@ -20,6 +20,9 @@ class TwitterBlueprint(WorkforceBlueprint):
     slug = "twitter"
     description = "Strategic brand placement on Twitter — finds trending tweets and adds value-driven content"
     tags = ["social-media", "twitter", "placement", "content-creation"]
+    config_schema = {
+        "twitter_session": {"type": "str", "required": True, "description": "Browser session cookies for Twitter authentication"},
+    }
 
     @property
     def system_prompt(self) -> str:
@@ -71,10 +74,13 @@ When executing tasks, respond with a JSON object:
 
         task_msg = self.build_task_message(agent, task, suffix="Respond with your actions JSON and report.")
 
-        response = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            model=self.get_model(agent),
         )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
 
         try:
             data = json.loads(response)

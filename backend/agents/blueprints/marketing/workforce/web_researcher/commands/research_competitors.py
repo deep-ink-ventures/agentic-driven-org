@@ -1,7 +1,7 @@
 from agents.blueprints.base import command
 
 
-@command(name="research-competitors", description="Research competitor activity and positioning", schedule="daily")
+@command(name="research-competitors", description="Research competitor activity and positioning", schedule="daily", model="claude-haiku-4-5")
 def research_competitors(self, agent) -> dict:
     return {
         "exec_summary": "Research competitor activity, positioning, and recent developments",

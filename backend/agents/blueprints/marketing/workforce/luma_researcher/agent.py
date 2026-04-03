@@ -19,6 +19,9 @@ class LumaResearcherBlueprint(WorkforceBlueprint):
     slug = "luma_researcher"
     description = "Monitors Lu.ma event calendars for networking and speaking opportunities"
     tags = ["research", "events", "networking"]
+    config_schema = {
+        "calendar_urls": {"type": "list", "required": True, "description": "Lu.ma calendar URLs to monitor"},
+    }
 
     @property
     def system_prompt(self) -> str:
@@ -57,10 +60,13 @@ Respond with your events JSON and report."""
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
 
-        response = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            model=self.get_model(agent),
         )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
 
         try:
             data = json.loads(response)

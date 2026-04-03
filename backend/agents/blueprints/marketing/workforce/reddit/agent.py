@@ -20,6 +20,10 @@ class RedditBlueprint(WorkforceBlueprint):
     slug = "reddit"
     description = "Strategic brand placement on Reddit — finds trending posts and adds value-driven content"
     tags = ["social-media", "reddit", "placement", "brand-visibility"]
+    config_schema = {
+        "reddit_username": {"type": "str", "required": True, "description": "Reddit username"},
+        "reddit_session": {"type": "str", "required": True, "description": "Browser session cookies for Reddit authentication"},
+    }
 
     @property
     def system_prompt(self) -> str:
@@ -70,10 +74,13 @@ When executing tasks, respond with a JSON object:
 
         task_msg = self.build_task_message(agent, task, suffix="Respond with your actions JSON and report.")
 
-        response = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            model=self.get_model(agent),
         )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
 
         try:
             data = json.loads(response)

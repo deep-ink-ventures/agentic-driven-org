@@ -72,7 +72,7 @@ def bootstrap_project(self, proposal_id: str):
         )
 
         # Call Claude
-        response = call_claude(
+        response, _usage = call_claude(
             system_prompt=BOOTSTRAP_SYSTEM_PROMPT,
             user_message=user_message,
             max_tokens=8192,
