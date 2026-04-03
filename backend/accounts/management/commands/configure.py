@@ -4,7 +4,7 @@ One-shot setup: migrate + collectstatic + ensure superuser. Idempotent.
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
-SUPERUSER_EMAIL = "admin@agentic.company"
+SUPERUSER_EMAIL = "admin@agentdriven.org"
 SUPERUSER_PASSWORD = "change-me"
 
 
@@ -25,7 +25,13 @@ class Command(BaseCommand):
             self.stdout.write("Skipping superuser.")
             return
 
-        from accounts.models import User
+        from accounts.models import User, AllowList
+
+        # Ensure superuser email is on allowlist
+        _, created = AllowList.objects.get_or_create(email=SUPERUSER_EMAIL.lower())
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Added {SUPERUSER_EMAIL} to allow list."))
+
         if User.objects.filter(email=SUPERUSER_EMAIL).exists():
             self.stdout.write(f"Superuser {SUPERUSER_EMAIL} already exists — skipping.")
             return
