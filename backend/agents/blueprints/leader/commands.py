@@ -15,7 +15,7 @@ from agents.blueprints.base import command
 logger = logging.getLogger(__name__)
 
 
-@command(name="create-priority-task", description="Propose the highest-value next task for a workforce agent")
+@command(name="create-priority-task", description="Propose the highest-value next task for a workforce agent", schedule="hourly")
 def create_priority_task(self, agent: Agent) -> dict:
     from agents.ai.claude_client import call_claude
     from agents.models import AgentTask

@@ -147,9 +147,15 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 1800}
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BEAT_SCHEDULE = {
-    "execute-hourly-tasks": {
-        "task": "agents.tasks.execute_hourly_tasks",
+    "run-hourly-actions": {
+        "task": "agents.tasks.run_scheduled_actions",
         "schedule": 3600,
+        "args": ["hourly"],
+    },
+    "run-daily-actions": {
+        "task": "agents.tasks.run_scheduled_actions",
+        "schedule": 86400,
+        "args": ["daily"],
     },
 }
 

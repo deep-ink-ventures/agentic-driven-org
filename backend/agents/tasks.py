@@ -7,38 +7,43 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
-def execute_hourly_tasks():
+def run_scheduled_actions(schedule: str):
     """
-    Every hour: for each active workforce agent with auto_exec_hourly=True,
-    create and execute a task from the hourly prompt.
+    Run all enabled scheduled commands for the given schedule type.
+    Called by beat: hourly or daily.
+
+    For each active agent, checks which commands with this schedule are enabled
+    in auto_actions, and creates + executes tasks for them.
     """
     from agents.models import Agent, AgentTask
-    from agents.blueprints.base import WorkforceBlueprint
 
-    agents = Agent.objects.filter(
-        is_active=True,
-        auto_exec_hourly=True,
-        is_leader=False,
-    ).select_related("department__project")
+    agents = Agent.objects.filter(is_active=True).select_related("department__project")
 
     for agent in agents:
-        try:
-            blueprint = agent.get_blueprint()
-            if not isinstance(blueprint, WorkforceBlueprint):
+        blueprint = agent.get_blueprint()
+        scheduled_commands = blueprint.get_scheduled_commands(schedule)
+
+        for cmd in scheduled_commands:
+            cmd_name = cmd["name"]
+            if not agent.is_action_enabled(cmd_name):
                 continue
 
-            task = AgentTask.objects.create(
-                agent=agent,
-                status=AgentTask.Status.QUEUED,
-                auto_execute=True,
-                exec_summary=f"Hourly task: {blueprint.hourly_prompt[:100]}",
-                step_plan=blueprint.hourly_prompt,
-            )
-            execute_agent_task.delay(str(task.id))
-            logger.info("Created hourly task for %s: %s", agent.name, task.id)
+            try:
+                # Run the command to get task details
+                result = blueprint.run_command(cmd_name, agent)
 
-        except Exception as e:
-            logger.exception("Failed to create hourly task for %s: %s", agent.name, e)
+                task = AgentTask.objects.create(
+                    agent=agent,
+                    status=AgentTask.Status.QUEUED,
+                    auto_execute=True,
+                    exec_summary=result.get("exec_summary", cmd["description"]),
+                    step_plan=result.get("step_plan", ""),
+                )
+                execute_agent_task.delay(str(task.id))
+                logger.info("Auto-executed %s for %s: %s", cmd_name, agent.name, task.id)
+
+            except Exception as e:
+                logger.exception("Failed to run scheduled command %s for %s: %s", cmd_name, agent.name, e)
 
 
 @shared_task(bind=True, max_retries=0)
@@ -50,7 +55,6 @@ def execute_agent_task(self, task_id: str):
     """
     from agents.models import AgentTask
 
-    # Atomic guard: transition queued/planned -> processing
     updated = AgentTask.objects.filter(
         id=task_id,
         status__in=[AgentTask.Status.QUEUED, AgentTask.Status.PLANNED],
@@ -114,7 +118,6 @@ def create_next_leader_task(leader_agent_id: str):
     try:
         proposal = blueprint.generate_task_proposal(agent)
 
-        # Create the task on the target workforce agent if specified
         target_type = proposal.get("target_agent_type")
         if target_type:
             target_agent = Agent.objects.filter(
@@ -135,7 +138,6 @@ def create_next_leader_task(leader_agent_id: str):
                 logger.info("Leader %s proposed task for %s: %s", agent.name, target_agent.name, proposal.get("exec_summary", "")[:80])
                 return
 
-        # Fallback: create as a leader task if no target specified
         AgentTask.objects.create(
             agent=agent,
             status=AgentTask.Status.AWAITING_APPROVAL,

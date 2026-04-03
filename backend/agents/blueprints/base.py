@@ -17,10 +17,17 @@ logger = logging.getLogger(__name__)
 _command_registry: dict[str, dict] = {}
 
 
-def command(name: str, description: str):
-    """Decorator to register a method as a blueprint command."""
+def command(name: str, description: str, schedule: str | None = None):
+    """
+    Decorator to register a method as a blueprint command.
+
+    Args:
+        name: Command name (e.g. "engage-tweets")
+        description: Human-readable description
+        schedule: "hourly", "daily", or None (on-demand only)
+    """
     def decorator(func):
-        func._command_meta = {"name": name, "description": description}
+        func._command_meta = {"name": name, "description": description, "schedule": schedule}
         return func
     return decorator
 
@@ -53,6 +60,10 @@ class BaseBlueprint(ABC):
             if callable(attr) and hasattr(attr, "_command_meta"):
                 commands.append(attr._command_meta)
         return commands
+
+    def get_scheduled_commands(self, schedule: str) -> list[dict]:
+        """Return commands matching the given schedule type."""
+        return [c for c in self.get_commands() if c.get("schedule") == schedule]
 
     def run_command(self, command_name: str, agent: "Agent", **kwargs):
         """Run a named command on this blueprint."""
@@ -150,11 +161,6 @@ class BaseBlueprint(ABC):
 
 class WorkforceBlueprint(BaseBlueprint):
     """Base for workforce agents (twitter, reddit, etc.). Execute tasks only."""
-
-    @property
-    @abstractmethod
-    def hourly_prompt(self) -> str:
-        """What to do on the hourly beat."""
 
     @abstractmethod
     def execute_task(self, agent: "Agent", task: "AgentTask") -> str:

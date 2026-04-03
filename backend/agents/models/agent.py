@@ -33,9 +33,10 @@ class Agent(models.Model):
         blank=True,
         help_text="Agent-managed state (last_tweet_at, emails_sent_today, etc.). Read/written by blueprints.",
     )
-    auto_exec_hourly = models.BooleanField(
-        default=False,
-        help_text="Whether this agent auto-executes hourly tasks",
+    auto_actions = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Maps command names to auto-execute booleans, e.g. {\"engage-tweets\": true, \"post-content\": false}. Defaults all false.",
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -50,6 +51,10 @@ class Agent(models.Model):
                 name="unique_leader_per_department",
             ),
         ]
+
+    def is_action_enabled(self, command_name: str) -> bool:
+        """Check if a scheduled command is enabled for auto-execution."""
+        return self.auto_actions.get(command_name, False)
 
     def get_blueprint(self):
         from agents.blueprints import get_blueprint
