@@ -1,10 +1,11 @@
 """
-Browser automation for agent actions.
+Browser automation service.
 
-Agents that need browser interaction (twitter, reddit) call these functions
-from their blueprint's execute_task method. The actual browser automation
-implementation (Playwright, Selenium, etc.) is an implementation detail
-that will be configured per deployment.
+A shared service that any part of the system can invoke. Some agent
+blueprints (twitter, reddit) use this to interact with web platforms;
+other consumers may use it independently. The underlying automation
+tool (Playwright, Selenium, etc.) is an implementation detail configured
+per deployment.
 """
 
 import json

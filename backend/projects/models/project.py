@@ -13,6 +13,14 @@ class Project(models.Model):
         on_delete=models.CASCADE,
         related_name="projects",
     )
+    config = models.ForeignKey(
+        "projects.ProjectConfig",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="projects",
+        help_text="Shared config (Google credentials, etc.). One config can serve multiple projects.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
