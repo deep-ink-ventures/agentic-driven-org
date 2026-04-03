@@ -1,6 +1,8 @@
 from django.contrib import admin
 
+from projects.extraction import extract_text, compute_content_hash
 from projects.models import Source
+from projects.storage import upload_file
 
 
 @admin.register(Source)
@@ -18,6 +20,27 @@ class SourceAdmin(admin.ModelAdmin):
         ("Extraction", {"fields": ("extracted_text", "word_count")}),
         ("Timestamps", {"fields": ("created_at",)}),
     )
+
+    def save_model(self, request, obj, form, change):
+        """Auto-extract text and compute metadata when a source is saved."""
+        # Set user if not set
+        if not obj.user_id:
+            obj.user = request.user
+
+        # For text sources, set extracted_text from raw_content
+        if obj.source_type == "text" and obj.raw_content and not obj.extracted_text:
+            obj.extracted_text = obj.raw_content
+            obj.word_count = len(obj.raw_content.split())
+
+        super().save_model(request, obj, form, change)
+
+        # Extract text after save (for file and url sources)
+        if not obj.extracted_text and obj.source_type in ("file", "url"):
+            text = extract_text(obj)
+            if text:
+                obj.extracted_text = text
+                obj.word_count = len(text.split())
+                obj.save(update_fields=["extracted_text", "word_count"])
 
     @admin.display(description="Source")
     def source_label(self, obj):
