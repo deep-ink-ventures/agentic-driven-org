@@ -1,11 +1,20 @@
-"""Blueprint registry — full implementation in Task 6."""
+"""Blueprint registry."""
 
-AGENT_TYPE_CHOICES = [
-    ("twitter", "Twitter Agent"),
-    ("reddit", "Reddit Agent"),
-    ("campaign", "Campaign Agent"),
-]
+from agents.blueprints.twitter import TwitterBlueprint
+from agents.blueprints.reddit import RedditBlueprint
+from agents.blueprints.campaign import CampaignBlueprint
+
+_REGISTRY = {
+    "twitter": TwitterBlueprint(),
+    "reddit": RedditBlueprint(),
+    "campaign": CampaignBlueprint(),
+}
+
+AGENT_TYPE_CHOICES = [(slug, bp.name) for slug, bp in _REGISTRY.items()]
 
 
 def get_blueprint(agent_type: str):
-    raise NotImplementedError(f"Blueprint {agent_type} not yet implemented")
+    bp = _REGISTRY.get(agent_type)
+    if bp is None:
+        raise ValueError(f"Unknown agent type: {agent_type}")
+    return bp
