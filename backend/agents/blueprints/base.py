@@ -106,32 +106,65 @@ class BaseBlueprint(ABC):
         return self.default_model
 
     def validate_config(self, config: dict) -> list[str]:
-        """Validate agent config against this blueprint's schema. Returns list of error strings."""
-        errors = []
+        """Validate agent config against this blueprint's JSON Schema. Returns list of error strings."""
+        from jsonschema import validate, ValidationError as JsonSchemaError
+        schema = self.get_config_json_schema()
+        try:
+            validate(instance=config, schema=schema)
+            return []
+        except JsonSchemaError as e:
+            return [e.message]
+
+    def get_config_json_schema(self) -> dict:
+        """
+        Build a JSON Schema from config_schema declarations.
+        Blueprints declare config_schema as a simple dict; this converts it
+        to a proper JSON Schema for validation and frontend form generation.
+        """
+        properties = {}
+        required = []
         for key, spec in self.config_schema.items():
-            if spec.get("required") and key not in config:
-                errors.append(f"Missing required config key: {key}")
-            if key in config:
-                expected_type = spec.get("type", "str")
-                value = config[key]
-                if expected_type == "str" and not isinstance(value, str):
-                    errors.append(f"Config key '{key}' must be a string")
-                elif expected_type == "list" and not isinstance(value, list):
-                    errors.append(f"Config key '{key}' must be a list")
-                elif expected_type == "dict" and not isinstance(value, dict):
-                    errors.append(f"Config key '{key}' must be a dict")
-        return errors
+            prop: dict = {"description": spec.get("description", "")}
+            t = spec.get("type", "str")
+            if t == "str":
+                prop["type"] = "string"
+            elif t == "list":
+                prop["type"] = "array"
+            elif t == "dict":
+                prop["type"] = "object"
+            properties[key] = prop
+            if spec.get("required"):
+                required.append(key)
+        # Allow "model" as an optional override on any agent
+        properties["model"] = {"type": "string", "description": "Claude model override for this agent"}
+        schema: dict = {
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": False,
+        }
+        if required:
+            schema["required"] = required
+        return schema
 
     def validate_auto_actions(self, auto_actions: dict) -> list[str]:
-        """Validate that auto_actions keys are valid commands with schedules."""
-        errors = []
+        """Validate auto_actions as {command_name: bool} with only valid scheduled commands as keys."""
+        from jsonschema import validate, ValidationError as JsonSchemaError
+        schema = self.get_auto_actions_json_schema()
+        try:
+            validate(instance=auto_actions, schema=schema)
+            return []
+        except JsonSchemaError as e:
+            return [e.message]
+
+    def get_auto_actions_json_schema(self) -> dict:
+        """Build a JSON Schema for auto_actions based on this blueprint's scheduled commands."""
         valid_commands = {c["name"] for c in self.get_commands() if c.get("schedule")}
-        for key, value in auto_actions.items():
-            if key not in valid_commands:
-                errors.append(f"Unknown scheduled command: '{key}'")
-            if not isinstance(value, bool):
-                errors.append(f"auto_actions['{key}'] must be a boolean")
-        return errors
+        properties = {name: {"type": "boolean"} for name in valid_commands}
+        return {
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": False,
+        }
 
     def get_available_commands_description(self) -> str:
         """Format available commands for inclusion in context messages."""

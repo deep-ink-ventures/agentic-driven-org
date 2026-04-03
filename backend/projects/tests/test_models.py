@@ -31,7 +31,7 @@ def user2(db):
 def config(db):
     return ProjectConfig.objects.create(
         name="Test Config",
-        google_email="test@example.com",
+        config={"google_email": "test@example.com"},
     )
 
 
@@ -64,10 +64,30 @@ class TestProjectConfig:
         assert str(config) == "Test Config"
 
     def test_update(self, config):
-        config.google_credentials = {"token": "abc"}
+        config.config["google_credentials"] = {"access_token": "abc"}
         config.save()
         config.refresh_from_db()
-        assert config.google_credentials == {"token": "abc"}
+        assert config.google_credentials == {"access_token": "abc"}
+
+    def test_validate_config_valid(self, config):
+        assert config.validate_config() == []
+
+    def test_validate_config_unknown_key(self):
+        c = ProjectConfig(name="Bad", config={"unknown_key": "value"})
+        errors = c.validate_config()
+        assert len(errors) == 1
+        assert "unknown_key" in errors[0]
+
+    def test_validate_config_wrong_type(self):
+        c = ProjectConfig(name="Bad", config={"google_email": 123})
+        errors = c.validate_config()
+        assert len(errors) == 1
+
+    def test_get_schema(self):
+        schema = ProjectConfig.get_schema()
+        assert "type" in schema
+        assert "properties" in schema
+        assert "google_email" in schema["properties"]
 
 
 # ── Project ────────────────────────────────────────────────────────────────────
