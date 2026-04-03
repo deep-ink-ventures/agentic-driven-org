@@ -53,6 +53,7 @@ def bootstrap_project(self, proposal_id: str):
         available_types = [
             {"slug": slug, "name": bp.name, "description": bp.description}
             for slug, bp in _REGISTRY.items()
+            if slug != "leader"
         ]
 
         # Build prompt

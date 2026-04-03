@@ -53,7 +53,7 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
         self.message_user(request, f"{count} proposal(s) rejected.")
 
     def _apply_proposal(self, proposal):
-        """Create departments, agents, and documents from the proposal JSON."""
+        """Create departments, leader + workforce agents, and documents from the proposal JSON."""
         project = proposal.project
         data = proposal.proposal
         if not data or "departments" not in data:
@@ -76,27 +76,27 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
                     tag, _ = Tag.objects.get_or_create(name=tag_name.lower())
                     doc.tags.add(tag)
 
-            # Create agents (only valid blueprint types)
-            created_agents = {}
+            # Auto-create leader agent if department doesn't have one
+            if not department.agents.filter(is_leader=True).exists():
+                Agent.objects.create(
+                    name=f"{department.name} Leader",
+                    agent_type="leader",
+                    department=department,
+                    is_leader=True,
+                    instructions=f"Lead the {department.name} department for project: {project.name}. Goal: {project.goal[:200]}",
+                )
+
+            # Create workforce agents (only valid non-leader blueprint types)
             for agent_data in dept_data.get("agents", []):
                 agent_type = agent_data["agent_type"]
-                if agent_type not in _REGISTRY:
-                    logger.warning("Skipping unknown agent_type '%s' in bootstrap proposal", agent_type)
+                if agent_type not in _REGISTRY or agent_type == "leader":
+                    logger.warning("Skipping invalid agent_type '%s' in bootstrap proposal", agent_type)
                     continue
-                agent = Agent.objects.create(
+                Agent.objects.create(
                     name=agent_data["name"],
                     agent_type=agent_type,
                     department=department,
+                    is_leader=False,
                     instructions=agent_data.get("instructions", ""),
                     auto_exec_hourly=agent_data.get("auto_exec_hourly", False),
                 )
-                created_agents[agent_type] = agent
-
-            # Wire superior relationships: campaign is superior to twitter/reddit
-            campaign = created_agents.get("campaign")
-            if campaign:
-                for agent_type in ("twitter", "reddit"):
-                    sub = created_agents.get(agent_type)
-                    if sub:
-                        sub.superior = campaign
-                        sub.save(update_fields=["superior"])
