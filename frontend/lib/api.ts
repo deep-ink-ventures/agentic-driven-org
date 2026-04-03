@@ -77,4 +77,13 @@ export const api = {
 
   logout: () =>
     request<void>("/api/auth/logout/", { method: "POST" }),
+
+  listProjects: () =>
+    request<import("./types").Project[]>("/api/projects/"),
+
+  createProject: (data: { name: string; goal?: string }) =>
+    request<import("./types").Project>("/api/projects/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
