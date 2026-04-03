@@ -87,6 +87,7 @@ class TestCommandDecorator:
             "name": "test-cmd",
             "description": "A test command",
             "schedule": "hourly",
+            "model": None,
         }
 
     def test_no_schedule(self):
