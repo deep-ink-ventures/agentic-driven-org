@@ -56,6 +56,19 @@ class BaseBlueprint(ABC):
     def skills_description(self) -> str:
         """Formatted skills text injected into system prompt."""
 
+    def get_bootstrap_command(self, agent: "Agent") -> dict | None:
+        """
+        Return a bootstrap task dict for this agent, or None to skip.
+
+        Called when an agent is first created or needs initialization.
+        Override in blueprint subclasses to set up required state,
+        create initial tasks, or verify config.
+
+        Returns:
+            dict with {exec_summary, step_plan} if bootstrap is needed, None otherwise.
+        """
+        return None
+
     def get_commands(self) -> list[dict]:
         """Return list of registered commands on this blueprint."""
         commands = []
