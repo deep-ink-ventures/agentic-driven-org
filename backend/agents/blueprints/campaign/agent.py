@@ -95,7 +95,7 @@ Execute this task now. If you need to delegate to subordinate agents, include de
 
             if delegated:
                 from agents.models import Agent as AgentModel, AgentTask as TaskModel
-                subordinates = AgentModel.objects.filter(superior=agent, is_active=True)
+                subordinates = AgentModel.objects.filter(department=agent.department, is_leader=False, is_active=True)
                 sub_by_type = {s.agent_type: s for s in subordinates}
 
                 for dt in delegated:

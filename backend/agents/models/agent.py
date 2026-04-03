@@ -15,13 +15,9 @@ class Agent(models.Model):
         on_delete=models.CASCADE,
         related_name="agents",
     )
-    superior = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="subordinates",
-        help_text="Superior agent that can delegate tasks to this agent",
+    is_leader = models.BooleanField(
+        default=False,
+        help_text="Leader agent for the department. Creates and delegates tasks to workforce agents.",
     )
     instructions = models.TextField(
         blank=True,
@@ -41,11 +37,19 @@ class Agent(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["department", "name"]
+        ordering = ["department", "-is_leader", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["department"],
+                condition=models.Q(is_leader=True),
+                name="unique_leader_per_department",
+            ),
+        ]
 
     def get_blueprint(self):
         from agents.blueprints import get_blueprint
         return get_blueprint(self.agent_type)
 
     def __str__(self):
-        return f"{self.name} ({self.agent_type})"
+        leader_tag = " [LEADER]" if self.is_leader else ""
+        return f"{self.name} ({self.agent_type}){leader_tag}"
