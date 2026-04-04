@@ -484,7 +484,7 @@ export function CreateProjectWizard({
 
           {/* Step 1: Project Name + Goal */}
           {step === 1 && (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-5 h-full">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="project-name" className="text-text-primary">
                   Project name
@@ -500,7 +500,7 @@ export function CreateProjectWizard({
                   className="bg-bg-input border-border text-text-primary placeholder:text-text-secondary/50"
                 />
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 flex-1 min-h-0">
                 <Label htmlFor="project-goal" className="text-text-primary">
                   Goal{" "}
                   <span className="text-text-secondary font-normal">
@@ -509,11 +509,10 @@ export function CreateProjectWizard({
                 </Label>
                 <textarea
                   id="project-goal"
-                  rows={3}
                   placeholder="Describe what you want this project to achieve..."
                   value={projectGoal}
                   onChange={(e) => setProjectGoal(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-bg-input px-2.5 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none"
+                  className="w-full flex-1 rounded-lg border border-border bg-bg-input px-2.5 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none"
                 />
               </div>
             </div>
