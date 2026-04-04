@@ -16,6 +16,11 @@ class Department(models.Model):
         related_name="departments",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Department-level config — cascades to agents",
+    )
 
     class Meta:
         unique_together = [("project", "department_type")]
