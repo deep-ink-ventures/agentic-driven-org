@@ -42,6 +42,19 @@ class TaskApproveView(APIView):
         if task.status != AgentTask.Status.AWAITING_APPROVAL:
             return Response({"error": f"Task is {task.status}, not awaiting_approval"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Allow editing step_plan and exec_summary before approval
+        edited_step_plan = request.data.get("step_plan")
+        edited_summary = request.data.get("exec_summary")
+        update_fields = []
+        if edited_step_plan is not None:
+            task.step_plan = edited_step_plan
+            update_fields.append("step_plan")
+        if edited_summary is not None:
+            task.exec_summary = edited_summary
+            update_fields.append("exec_summary")
+        if update_fields:
+            task.save(update_fields=update_fields + ["updated_at"])
+
         task.approve()
         task.refresh_from_db()
         return Response(AgentTaskSerializer(task).data)

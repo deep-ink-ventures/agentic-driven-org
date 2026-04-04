@@ -126,8 +126,11 @@ export const api = {
   getProjectTasks: (projectId: string) =>
     request<import("./types").AgentTask[]>(`/api/projects/${projectId}/tasks/`),
 
-  approveTask: (projectId: string, taskId: string) =>
-    request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/approve/`, { method: "POST" }),
+  approveTask: (projectId: string, taskId: string, edits?: { step_plan?: string; exec_summary?: string }) =>
+    request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/approve/`, {
+      method: "POST",
+      body: JSON.stringify(edits ?? {}),
+    }),
 
   rejectTask: (projectId: string, taskId: string) =>
     request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/reject/`, { method: "POST" }),

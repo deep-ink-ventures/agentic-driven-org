@@ -22,6 +22,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Save,
+  Pencil,
   FileText,
   Terminal,
   Settings2,
@@ -59,12 +60,20 @@ function TaskCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editedPlan, setEditedPlan] = useState(task.step_plan);
+  const [editedSummary, setEditedSummary] = useState(task.exec_summary);
+
+  const isApproval = task.status === "awaiting_approval";
+  const hasEdits = editedPlan !== task.step_plan || editedSummary !== task.exec_summary;
 
   async function handleApprove() {
     setActing(true);
     try {
-      const updated = await api.approveTask(projectId, task.id);
+      const edits = hasEdits ? { step_plan: editedPlan, exec_summary: editedSummary } : undefined;
+      const updated = await api.approveTask(projectId, task.id, edits);
       onUpdate(updated);
+      setEditing(false);
     } finally {
       setActing(false);
     }
@@ -95,7 +104,7 @@ function TaskCard({
           {task.agent_name}
         </span>
         <span className="text-sm text-text-primary truncate flex-1">
-          {task.exec_summary}
+          {editing ? editedSummary : task.exec_summary}
         </span>
         <span className="text-xs text-text-secondary shrink-0">
           {new Date(task.created_at).toLocaleTimeString()}
@@ -109,18 +118,40 @@ function TaskCard({
 
       {expanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+          {/* Summary — editable for approval tasks */}
           <div>
             <p className="text-xs text-text-secondary mb-1">Summary</p>
-            <p className="text-sm text-text-primary">{task.exec_summary}</p>
+            {editing ? (
+              <Input
+                value={editedSummary}
+                onChange={(e) => setEditedSummary(e.target.value)}
+                className="bg-bg-input border-border text-text-primary text-sm"
+              />
+            ) : (
+              <p className="text-sm text-text-primary">{task.exec_summary}</p>
+            )}
           </div>
-          {task.step_plan && (
+
+          {/* Plan — editable for approval tasks */}
+          {(task.step_plan || editing) && (
             <div>
               <p className="text-xs text-text-secondary mb-1">Plan</p>
-              <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
-                {task.step_plan}
-              </pre>
+              {editing ? (
+                <textarea
+                  value={editedPlan}
+                  onChange={(e) => setEditedPlan(e.target.value)}
+                  rows={Math.max(6, editedPlan.split("\n").length + 2)}
+                  className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-xs text-text-primary font-mono outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-y"
+                />
+              ) : (
+                <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
+                  {task.step_plan}
+                </pre>
+              )}
             </div>
           )}
+
+          {/* Report — read only */}
           {task.report && (
             <div>
               <p className="text-xs text-text-secondary mb-1">Report</p>
@@ -143,25 +174,58 @@ function TaskCard({
               {task.token_usage.cost_usd.toFixed(4)}
             </p>
           )}
-          {task.status === "awaiting_approval" && (
-            <div className="flex gap-2 pt-1">
-              <Button
-                size="sm"
-                onClick={handleApprove}
-                disabled={acting}
-                className="bg-flag-strength text-white hover:bg-flag-strength/90 text-xs h-8"
-              >
-                <Check className="h-3.5 w-3.5 mr-1" /> Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleReject}
-                disabled={acting}
-                className="border-flag-critical/50 text-flag-critical hover:bg-flag-critical/10 text-xs h-8"
-              >
-                <X className="h-3.5 w-3.5 mr-1" /> Reject
-              </Button>
+
+          {/* Actions for approval tasks */}
+          {isApproval && (
+            <div className="flex items-center gap-2 pt-1">
+              {!editing ? (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={handleApprove}
+                    disabled={acting}
+                    className="bg-flag-strength text-white hover:bg-flag-strength/90 text-xs h-8"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditing(true)}
+                    className="border-border text-text-secondary hover:text-text-primary text-xs h-8"
+                  >
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleReject}
+                    disabled={acting}
+                    className="border-flag-critical/50 text-flag-critical hover:bg-flag-critical/10 text-xs h-8"
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={handleApprove}
+                    disabled={acting}
+                    className="bg-flag-strength text-white hover:bg-flag-strength/90 text-xs h-8"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> {hasEdits ? "Approve with edits" : "Approve"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setEditing(false); setEditedPlan(task.step_plan); setEditedSummary(task.exec_summary); }}
+                    className="border-border text-text-secondary hover:text-text-primary text-xs h-8"
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
