@@ -7,6 +7,7 @@ from django.utils import timezone
 class AgentTask(models.Model):
     class Status(models.TextChoices):
         AWAITING_APPROVAL = "awaiting_approval", "Awaiting Approval"
+        AWAITING_DEPENDENCIES = "awaiting_dependencies", "Awaiting Dependencies"
         PLANNED = "planned", "Planned"
         QUEUED = "queued", "Queued"
         PROCESSING = "processing", "Processing"
@@ -28,12 +29,25 @@ class AgentTask(models.Model):
         help_text="Set when the department leader delegates this task",
     )
     status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=Status.choices,
         default=Status.AWAITING_APPROVAL,
         db_index=True,
     )
     auto_execute = models.BooleanField(default=False)
+    command_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Command on the agent's blueprint this task executes. Used for auto_actions lookup.",
+    )
+    blocked_by = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependents",
+        help_text="This task can't run until the blocker completes.",
+    )
     exec_summary = models.TextField(blank=True, help_text="Short description of what to do")
     step_plan = models.TextField(blank=True, help_text="Detailed step-by-step plan")
     proposed_exec_at = models.DateTimeField(
