@@ -383,6 +383,7 @@ function AgentConfigEditor({
   const [config, setConfig] = useState(agent.config);
   const [autoActions, setAutoActions] = useState(agent.auto_actions);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const schema = blueprint.config_schema as {
     required?: string[];
@@ -397,8 +398,6 @@ function AgentConfigEditor({
     const val = config[k];
     return val !== undefined && val !== null && val !== "";
   });
-
-  const [saved, setSaved] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -429,29 +428,28 @@ function AgentConfigEditor({
   return (
     <div className="space-y-6">
       {/* Activation toggle */}
-      <div>
-        <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
-          Status
-        </h3>
-        <div className="flex items-center gap-2 text-xs">
-          <button
-            onClick={toggleActive}
-            disabled={!configComplete && !agent.is_active}
-            className={`shrink-0 transition-colors ${agent.is_active ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
-          >
-            {agent.is_active ? (
-              <ToggleRight className="h-4 w-4" />
-            ) : (
-              <ToggleLeft className="h-4 w-4" />
-            )}
-          </button>
-          <span className="text-text-primary font-medium">
-            {agent.is_active ? "Active" : "Inactive"}
-          </span>
+      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-bg-surface">
+        <div>
+          <p className="text-sm font-medium text-text-primary">
+            {agent.is_active ? "Agent is active" : "Agent is inactive"}
+          </p>
           {!configComplete && !agent.is_active && (
-            <span className="text-text-secondary">— fill required config to activate</span>
+            <p className="text-xs text-text-secondary mt-0.5">
+              Fill in required configuration to activate
+            </p>
           )}
         </div>
+        <button
+          onClick={toggleActive}
+          disabled={!configComplete && !agent.is_active}
+          className={`transition-colors ${agent.is_active ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
+        >
+          {agent.is_active ? (
+            <ToggleRight className="h-8 w-8" />
+          ) : (
+            <ToggleLeft className="h-8 w-8" />
+          )}
+        </button>
       </div>
 
       {/* Config fields */}
@@ -461,16 +459,16 @@ function AgentConfigEditor({
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
               Configuration
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {Object.entries(schema.properties).map(([key, spec]) => (
                 <div key={key}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs text-text-primary font-medium">
-                      {spec.title || key}
-                    </span>
-                    {requiredKeys.has(key) && <span className="text-flag-critical text-xs">*</span>}
-                    <span className="text-xs text-text-secondary">{spec.description}</span>
-                  </div>
+                  <label className="text-xs text-text-primary font-medium block mb-1">
+                    {spec.title || key}
+                    {requiredKeys.has(key) && <span className="text-flag-critical ml-0.5">*</span>}
+                  </label>
+                  <p className="text-[10px] text-text-secondary mb-1">
+                    {spec.description}
+                  </p>
                   <Input
                     value={
                       config[key] == null
@@ -482,8 +480,7 @@ function AgentConfigEditor({
                     onChange={(e) =>
                       setConfig({ ...config, [key]: e.target.value })
                     }
-                    placeholder={spec.title || key}
-                    className="bg-bg-input border-border text-text-primary text-xs md:text-xs"
+                    className="bg-bg-input border-border text-text-primary text-xs font-mono"
                   />
                 </div>
               ))}
@@ -501,7 +498,7 @@ function AgentConfigEditor({
             <p className="text-[10px] text-text-secondary mb-3">
               When enabled, tasks from these commands execute without manual approval.
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-3">
               {Object.keys(aaSchema.properties).map((cmdName) => {
                 const enabled = autoActions[cmdName] ?? false;
                 const cmd = blueprint.commands.find(
@@ -510,8 +507,25 @@ function AgentConfigEditor({
                 return (
                   <div
                     key={cmdName}
-                    className="flex items-center gap-2 text-xs"
+                    className="flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-bg-surface"
                   >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-text-primary font-medium">
+                          {cmdName}
+                        </span>
+                        {cmd?.schedule && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
+                            {cmd.schedule}
+                          </span>
+                        )}
+                      </div>
+                      {cmd?.description && (
+                        <p className="text-xs text-text-secondary mt-0.5 truncate">
+                          {cmd.description}
+                        </p>
+                      )}
+                    </div>
                     <button
                       onClick={() =>
                         setAutoActions({
@@ -519,25 +533,14 @@ function AgentConfigEditor({
                           [cmdName]: !enabled,
                         })
                       }
-                      className={`shrink-0 ${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
+                      className={`shrink-0 ml-3 ${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
                     >
                       {enabled ? (
-                        <ToggleRight className="h-4 w-4" />
+                        <ToggleRight className="h-6 w-6" />
                       ) : (
-                        <ToggleLeft className="h-4 w-4" />
+                        <ToggleLeft className="h-6 w-6" />
                       )}
                     </button>
-                    <span className="text-text-primary font-mono">
-                      {cmdName}
-                    </span>
-                    {cmd?.schedule && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
-                        {cmd.schedule}
-                      </span>
-                    )}
-                    <span className="text-text-secondary">
-                      {cmd?.description}
-                    </span>
                   </div>
                 );
               })}
