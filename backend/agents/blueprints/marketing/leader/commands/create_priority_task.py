@@ -1,4 +1,4 @@
-"""Leader command: propose the highest-value next task for any workforce agent."""
+"""Leader command: propose the highest-value initiative for the department's workforce."""
 from __future__ import annotations
 
 import json
@@ -13,7 +13,7 @@ from agents.blueprints.base import command
 logger = logging.getLogger(__name__)
 
 
-@command(name="create-priority-task", description="Propose the highest-value next task for a workforce agent", schedule="hourly")
+@command(name="create-priority-task", description="Propose the highest-value initiative — may involve one or multiple agents", schedule="hourly")
 def create_priority_task(self, agent: Agent) -> dict:
     from agents.ai.claude_client import call_claude
     from agents.models import AgentTask
