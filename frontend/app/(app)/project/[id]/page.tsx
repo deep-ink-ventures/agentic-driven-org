@@ -482,7 +482,7 @@ function AgentConfigEditor({
                       setConfig({ ...config, [key]: e.target.value })
                     }
                     placeholder={spec.title || key}
-                    className="bg-bg-input border-border text-text-primary text-xs"
+                    className="bg-bg-input border-border text-text-primary text-xs md:text-xs"
                   />
                 </div>
               ))}
