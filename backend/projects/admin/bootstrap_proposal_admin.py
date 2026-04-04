@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @admin.register(BootstrapProposal)
 class BootstrapProposalAdmin(admin.ModelAdmin):
-    list_display = ("project", "status", "created_at", "updated_at")
+    list_display = ("project", "status", "cost_display", "created_at", "updated_at")
     list_filter = ("status",)
     search_fields = ("project__name",)
     readonly_fields = ("id", "project", "proposal_formatted", "token_usage", "error_message", "created_at", "updated_at")
@@ -24,7 +24,13 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
         ("Debug", {"fields": ("error_message", "token_usage")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
-    actions = ["approve_and_apply", "reject_proposal"]
+    actions = ["approve_and_apply", "reject_proposal", "retry_now"]
+
+    @admin.display(description="Cost")
+    def cost_display(self, obj):
+        if obj.token_usage and "cost_usd" in obj.token_usage:
+            return f"${obj.token_usage['cost_usd']:.4f}"
+        return "—"
 
     @admin.display(description="Proposal (formatted)")
     def proposal_formatted(self, obj):
@@ -51,6 +57,22 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
             error_message="Rejected by admin",
         )
         self.message_user(request, f"{count} proposal(s) rejected.")
+
+    @admin.action(description="Retry now — re-dispatch stuck/failed proposals")
+    def retry_now(self, request, queryset):
+        from projects.tasks import bootstrap_project
+        retried = 0
+        for proposal in queryset.filter(status__in=[
+            BootstrapProposal.Status.PENDING,
+            BootstrapProposal.Status.PROCESSING,
+            BootstrapProposal.Status.FAILED,
+        ]):
+            proposal.status = BootstrapProposal.Status.PENDING
+            proposal.error_message = ""
+            proposal.save(update_fields=["status", "error_message", "updated_at"])
+            bootstrap_project.delay(str(proposal.id))
+            retried += 1
+        self.message_user(request, f"{retried} proposal(s) re-dispatched.")
 
     def _apply_proposal(self, proposal):
         """Create departments, leader + workforce agents, and documents from the proposal JSON."""

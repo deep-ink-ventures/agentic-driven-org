@@ -149,7 +149,7 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BEAT_SCHEDULE = {
     "recover-stuck-proposals": {
         "task": "projects.tasks.recover_stuck_proposals",
-        "schedule": 60,
+        "schedule": 900,  # every 15 minutes
     },
     "run-hourly-actions": {
         "task": "agents.tasks.run_scheduled_actions",
