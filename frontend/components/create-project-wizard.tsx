@@ -125,6 +125,7 @@ export function CreateProjectWizard({
 
   // Step 4-5
   const [proposal, setProposal] = useState<BootstrapProposal | null>(null);
+  const [phase, setPhase] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
 
   const closeWs = useCallback(() => {
@@ -275,8 +276,10 @@ export function CreateProjectWizard({
         `/ws/bootstrap/${pid}/`,
         async (data) => {
           const status = data.status as string;
+          if (data.phase) {
+            setPhase(data.phase as string);
+          }
           if (status === "proposed" || status === "failed") {
-            // Fetch full proposal data
             const latest = await api.getBootstrapLatest(pid);
             setProposal(latest);
             closeWs();
@@ -671,11 +674,10 @@ export function CreateProjectWizard({
                 <>
                   <Loader2 className="h-10 w-10 text-accent-gold animate-spin" />
                   <p className="text-text-heading font-medium text-lg">
-                    Analyzing your sources...
+                    {phase || "Preparing..."}
                   </p>
                   <p className="text-text-secondary text-sm">
-                    This may take a minute. We are building your project
-                    structure.
+                    This may take a moment.
                   </p>
                 </>
               )}

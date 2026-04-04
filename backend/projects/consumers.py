@@ -40,4 +40,5 @@ class BootstrapConsumer(AsyncWebsocketConsumer):
             "status": event.get("status"),
             "proposal_id": event.get("proposal_id"),
             "error_message": event.get("error_message"),
+            "phase": event.get("phase", ""),
         }))

@@ -26,7 +26,7 @@ def bootstrap_project(self, proposal_id: str):
 
     proposal.status = BootstrapProposal.Status.PROCESSING
     proposal.save(update_fields=["status", "updated_at"])
-    _broadcast_bootstrap(project.id, proposal.id, "processing")
+    _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Gathering sources")
 
     try:
         # Gather sources
@@ -50,6 +50,8 @@ def bootstrap_project(self, proposal_id: str):
         if not source_data:
             raise ValueError("No sources with extracted text found")
 
+        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Mapping your project")
+
         # Available departments with their workforce agents
         available_departments = []
         for dept_slug, dept_config in DEPARTMENTS.items():
@@ -72,12 +74,16 @@ def bootstrap_project(self, proposal_id: str):
             available_departments=available_departments,
         )
 
+        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Building your project structure")
+
         # Call Claude
         response, _usage = call_claude(
             system_prompt=BOOTSTRAP_SYSTEM_PROMPT,
             user_message=user_message,
             max_tokens=8192,
         )
+
+        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Validating proposal")
 
         # Parse JSON response — strip markdown fences if present
         cleaned = response.strip()
@@ -94,6 +100,8 @@ def bootstrap_project(self, proposal_id: str):
         validation_errors = proposal.validate_proposal()
         if validation_errors:
             raise ValueError(f"Invalid proposal from Claude: {'; '.join(validation_errors)}")
+
+        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Finalizing")
 
         proposal.token_usage = _usage
         proposal.status = BootstrapProposal.Status.PROPOSED
@@ -145,7 +153,7 @@ def recover_stuck_proposals():
         bootstrap_project.delay(str(p.id))
 
 
-def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_message=""):
+def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_message="", phase=""):
     """Send bootstrap status update via WebSocket."""
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
@@ -159,6 +167,7 @@ def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_messag
                 "status": bootstrap_status,
                 "proposal_id": str(proposal_id),
                 "error_message": error_message,
+                "phase": phase,
             },
         )
     except Exception:
