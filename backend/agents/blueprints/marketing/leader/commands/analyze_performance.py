@@ -48,8 +48,9 @@ Respond with JSON:
         model=self.get_model(agent, command_name="analyze-performance"),
     )
 
-    try:
-        return json.loads(response)
-    except (json.JSONDecodeError, KeyError):
+    from agents.ai.claude_client import parse_json_response
+    data = parse_json_response(response)
+    if not data:
         logger.warning("Failed to parse analyze-performance response: %s", response[:200])
         return None
+    return data

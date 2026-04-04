@@ -70,14 +70,14 @@ Respond with JSON:
         model=self.get_model(agent, command_name="create-campaign"),
     )
 
-    try:
-        data = json.loads(response)
-        return {
-            "campaign_name": data.get("campaign_name", "Campaign"),
-            "campaign_summary": data.get("campaign_summary", response),
-            "tasks": data.get("tasks", []),
-            "follow_up": data.get("follow_up"),
-        }
-    except (json.JSONDecodeError, KeyError):
+    from agents.ai.claude_client import parse_json_response
+    data = parse_json_response(response)
+    if not data:
         logger.warning("Failed to parse create-campaign response: %s", response[:200])
         return None
+    return {
+        "campaign_name": data.get("campaign_name", "Campaign"),
+        "campaign_summary": data.get("campaign_summary", ""),
+        "tasks": data.get("tasks", []),
+        "follow_up": data.get("follow_up"),
+    }

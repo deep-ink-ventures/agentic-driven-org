@@ -85,15 +85,10 @@ def bootstrap_project(self, proposal_id: str):
 
         _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Validating proposal")
 
-        # Parse JSON response — strip markdown fences if present
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
-        proposal_data = json.loads(cleaned)
+        from agents.ai.claude_client import parse_json_response
+        proposal_data = parse_json_response(response)
+        if proposal_data is None:
+            raise ValueError(f"Failed to parse Claude response as JSON: {response[:200]}")
 
         # Validate proposal against schema
         proposal.proposal = proposal_data

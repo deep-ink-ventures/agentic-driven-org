@@ -72,17 +72,15 @@ Respond with JSON:
         model=self.get_model(agent, command_name="create-priority-task"),
     )
 
-    try:
-        data = json.loads(response)
-        tasks = data.get("tasks", [])
-        if not tasks:
-            return None
-        # Return the first task for the chain, but include all tasks
-        # The caller (create_next_leader_task) will create tasks for each
-        return {
-            "exec_summary": data.get("exec_summary", "Priority initiative"),
-            "tasks": tasks,
-        }
-    except (json.JSONDecodeError, KeyError):
+    from agents.ai.claude_client import parse_json_response
+    data = parse_json_response(response)
+    if not data:
         logger.warning("Failed to parse create-priority-task response: %s", response[:200])
         return None
+    tasks = data.get("tasks", [])
+    if not tasks:
+        return None
+    return {
+        "exec_summary": data.get("exec_summary", "Priority initiative"),
+        "tasks": tasks,
+    }

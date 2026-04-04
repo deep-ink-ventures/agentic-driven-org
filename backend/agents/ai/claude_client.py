@@ -4,6 +4,7 @@ Claude API client for agent reasoning.
 All agent blueprint code calls this module to interact with Claude.
 """
 
+import json
 import logging
 
 import anthropic
@@ -71,3 +72,20 @@ def call_claude(
     logger.info("Claude response: model=%s input=%d output=%d cost=$%.4f", model, input_tokens, output_tokens, cost)
 
     return response_text, usage
+
+
+def parse_json_response(response: str) -> dict | None:
+    """
+    Parse a JSON response from Claude, stripping markdown fences if present.
+    Returns the parsed dict or None if parsing fails.
+    """
+    cleaned = response.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    cleaned = cleaned.strip()
+    try:
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        return None

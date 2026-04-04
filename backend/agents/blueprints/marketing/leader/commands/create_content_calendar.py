@@ -62,12 +62,12 @@ Respond with JSON:
         model=self.get_model(agent, command_name="create-content-calendar"),
     )
 
-    try:
-        data = json.loads(response)
-        return {
-            "calendar_summary": data.get("calendar_summary", response),
-            "days": data.get("days", []),
-        }
-    except (json.JSONDecodeError, KeyError):
+    from agents.ai.claude_client import parse_json_response
+    data = parse_json_response(response)
+    if not data:
         logger.warning("Failed to parse create-content-calendar response: %s", response[:200])
         return None
+    return {
+        "calendar_summary": data.get("calendar_summary", ""),
+        "days": data.get("days", []),
+    }
