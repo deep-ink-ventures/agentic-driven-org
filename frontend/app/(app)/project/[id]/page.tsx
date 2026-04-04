@@ -750,19 +750,16 @@ function AgentDetailView({
             </>
           ) : (
             <div
-              className="flex-1 overflow-y-auto min-h-0 cursor-text"
+              className="flex-1 min-h-0 rounded-lg border border-dashed border-border hover:border-accent-gold/40 p-4 cursor-text transition-colors overflow-y-auto"
               onClick={() => setEditingInstructions(true)}
             >
               {instructions ? (
-                <>
-                  <div className="max-w-none text-sm text-text-primary [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3 [&_h1]:mb-3 [&_h2]:mb-3 [&_h3]:mb-3 [&_h4]:mb-3 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&>*:last-child]:mb-0">
-                    <ReactMarkdown>{instructions}</ReactMarkdown>
-                  </div>
-                  <p className="text-text-secondary text-xs mt-4">Click to edit</p>
-                </>
+                <div className="max-w-none text-sm text-text-primary [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3 [&_h1]:mb-3 [&_h2]:mb-3 [&_h3]:mb-3 [&_h4]:mb-3 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&>*:last-child]:mb-0">
+                  <ReactMarkdown>{instructions}</ReactMarkdown>
+                </div>
               ) : (
                 <p className="text-text-secondary text-sm">
-                  No custom instructions. Click to add.
+                  Click to add custom instructions...
                 </p>
               )}
             </div>
