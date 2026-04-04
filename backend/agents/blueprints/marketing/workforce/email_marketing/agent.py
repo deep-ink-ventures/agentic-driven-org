@@ -24,9 +24,9 @@ class EmailMarketingBlueprint(WorkforceBlueprint):
     description = "Designs and sends email campaigns via SendGrid with strict approval gates"
     tags = ["email", "campaigns", "outreach", "nurture"]
     config_schema = {
-        "sendgrid_api_key": {"type": "str", "required": True, "description": "SendGrid API key"},
-        "default_from_email": {"type": "str", "required": True, "description": "Default sender email address"},
-        "mailing_lists": {"type": "dict", "required": True, "description": "Mailing list name -> SendGrid list ID mapping"},
+        "sendgrid_api_key": {"type": "str", "required": True, "label": "SendGrid API Key", "description": "Your SendGrid API key for sending emails"},
+        "default_from_email": {"type": "str", "required": True, "label": "Sender Email", "description": "Default sender email address for campaigns"},
+        "mailing_lists": {"type": "dict", "required": True, "label": "Mailing Lists", "description": "Mailing list name → SendGrid list ID mapping"},
     }
 
     @property

@@ -20,7 +20,7 @@ class LumaResearcherBlueprint(WorkforceBlueprint):
     description = "Monitors Lu.ma event calendars for networking and speaking opportunities"
     tags = ["research", "events", "networking"]
     config_schema = {
-        "calendar_urls": {"type": "list", "required": True, "description": "Lu.ma calendar URLs to monitor"},
+        "calendar_urls": {"type": "list", "required": True, "label": "Calendar URLs", "description": "Lu.ma calendar URLs to monitor for events"},
     }
 
     @property

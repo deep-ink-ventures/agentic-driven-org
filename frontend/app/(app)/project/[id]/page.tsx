@@ -384,11 +384,18 @@ function AgentConfigEditor({
   const [saving, setSaving] = useState(false);
 
   const schema = blueprint.config_schema as {
-    properties?: Record<string, { type: string; description: string }>;
+    required?: string[];
+    properties?: Record<string, { type: string; description: string; title?: string }>;
   };
   const aaSchema = blueprint.auto_actions_schema as {
     properties?: Record<string, unknown>;
   };
+
+  const requiredKeys = new Set(schema?.required ?? []);
+  const configComplete = [...requiredKeys].every((k) => {
+    const val = config[k];
+    return val !== undefined && val !== null && val !== "";
+  });
 
   async function save() {
     setSaving(true);
@@ -403,8 +410,45 @@ function AgentConfigEditor({
     }
   }
 
+  async function toggleActive() {
+    if (!configComplete && !agent.is_active) return;
+    setSaving(true);
+    try {
+      await api.updateAgent(agent.id, { is_active: !agent.is_active });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Activation toggle — top */}
+      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-bg-surface">
+        <div>
+          <p className="text-sm font-medium text-text-primary">
+            {agent.is_active ? "Agent is active" : "Agent is inactive"}
+          </p>
+          {!configComplete && !agent.is_active && (
+            <p className="text-xs text-text-secondary mt-0.5">
+              Fill in required configuration to activate
+            </p>
+          )}
+        </div>
+        <button
+          onClick={toggleActive}
+          disabled={!configComplete && !agent.is_active}
+          className={`transition-colors ${agent.is_active ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
+        >
+          {agent.is_active ? (
+            <ToggleRight className="h-8 w-8" />
+          ) : (
+            <ToggleLeft className="h-8 w-8" />
+          )}
+        </button>
+      </div>
+
+      {/* Config fields */}
       {schema?.properties &&
         Object.keys(schema.properties).length > 0 && (
           <div>
@@ -415,10 +459,11 @@ function AgentConfigEditor({
               {Object.entries(schema.properties).map(([key, spec]) => (
                 <div key={key}>
                   <label className="text-xs text-text-primary font-medium block mb-1">
-                    {key}
+                    {spec.title || key}
+                    {requiredKeys.has(key) && <span className="text-flag-critical ml-0.5">*</span>}
                   </label>
                   <p className="text-[10px] text-text-secondary mb-1">
-                    {(spec as { description?: string }).description}
+                    {spec.description}
                   </p>
                   <Input
                     value={
@@ -437,13 +482,17 @@ function AgentConfigEditor({
           </div>
         )}
 
+      {/* Auto Approve Actions */}
       {aaSchema?.properties &&
         Object.keys(aaSchema.properties).length > 0 && (
           <div>
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
-              Auto Actions
+              Auto Approve Actions
             </h3>
-            <div className="space-y-2">
+            <p className="text-[10px] text-text-secondary mb-3">
+              When enabled, tasks from these commands execute without manual approval.
+            </p>
+            <div className="space-y-3">
               {Object.keys(aaSchema.properties).map((cmdName) => {
                 const enabled = autoActions[cmdName] ?? false;
                 const cmd = blueprint.commands.find(
@@ -452,16 +501,23 @@ function AgentConfigEditor({
                 return (
                   <div
                     key={cmdName}
-                    className="flex items-center justify-between py-1.5"
+                    className="flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-bg-surface"
                   >
-                    <div>
-                      <span className="text-sm text-text-primary">
-                        {cmdName}
-                      </span>
-                      {cmd && (
-                        <span className="text-xs text-text-secondary ml-2">
-                          {cmd.schedule}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-text-primary font-medium">
+                          {cmdName}
                         </span>
+                        {cmd?.schedule && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
+                            {cmd.schedule}
+                          </span>
+                        )}
+                      </div>
+                      {cmd?.description && (
+                        <p className="text-xs text-text-secondary mt-0.5 truncate">
+                          {cmd.description}
+                        </p>
                       )}
                     </div>
                     <button
@@ -471,12 +527,12 @@ function AgentConfigEditor({
                           [cmdName]: !enabled,
                         })
                       }
-                      className={`${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
+                      className={`shrink-0 ml-3 ${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
                     >
                       {enabled ? (
-                        <ToggleRight className="h-5 w-5" />
+                        <ToggleRight className="h-6 w-6" />
                       ) : (
-                        <ToggleLeft className="h-5 w-5" />
+                        <ToggleLeft className="h-6 w-6" />
                       )}
                     </button>
                   </div>

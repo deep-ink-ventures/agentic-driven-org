@@ -21,8 +21,8 @@ class RedditBlueprint(WorkforceBlueprint):
     description = "Strategic brand placement on Reddit — finds trending posts and adds value-driven content"
     tags = ["social-media", "reddit", "placement", "brand-visibility"]
     config_schema = {
-        "reddit_username": {"type": "str", "required": True, "description": "Reddit username"},
-        "reddit_session": {"type": "str", "required": True, "description": "Browser session cookies for Reddit authentication"},
+        "reddit_username": {"type": "str", "required": True, "label": "Reddit Username", "description": "Your Reddit account username"},
+        "reddit_session": {"type": "str", "required": True, "label": "Reddit Session", "description": "Browser session cookies for Reddit authentication"},
     }
 
     @property

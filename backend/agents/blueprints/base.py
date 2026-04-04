@@ -124,7 +124,10 @@ class BaseBlueprint(ABC):
         properties = {}
         required = []
         for key, spec in self.config_schema.items():
-            prop: dict = {"description": spec.get("description", "")}
+            prop: dict = {
+                "description": spec.get("description", ""),
+                "title": spec.get("label", key),
+            }
             t = spec.get("type", "str")
             if t == "str":
                 prop["type"] = "string"
@@ -135,8 +138,6 @@ class BaseBlueprint(ABC):
             properties[key] = prop
             if spec.get("required"):
                 required.append(key)
-        # Allow "model" as an optional override on any agent
-        properties["model"] = {"type": "string", "description": "Claude model override for this agent"}
         schema: dict = {
             "type": "object",
             "properties": properties,

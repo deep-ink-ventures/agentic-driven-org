@@ -21,7 +21,7 @@ class TwitterBlueprint(WorkforceBlueprint):
     description = "Strategic brand placement on Twitter — finds trending tweets and adds value-driven content"
     tags = ["social-media", "twitter", "placement", "content-creation"]
     config_schema = {
-        "twitter_session": {"type": "str", "required": True, "description": "Browser session cookies for Twitter authentication"},
+        "twitter_session": {"type": "str", "required": True, "label": "Twitter Session", "description": "Browser session cookies for Twitter authentication"},
     }
 
     @property
