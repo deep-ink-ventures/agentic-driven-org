@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
+const features = [
+  { label: "Bring your own cloud", detail: "GCP, AWS, or Azure" },
+  { label: "Data never leaves your infra", detail: "Your VPC, your rules" },
+  { label: "Keys in your secret manager", detail: "Zero external access" },
+  { label: "No vendor lock-in", detail: "Leave anytime, keep everything" },
+];
+
 export default function Security() {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -11,34 +18,47 @@ export default function Security() {
       ([entry]) => {
         if (entry.isIntersecting) setVisible(true);
       },
-      { threshold: 0.2 }
+      { threshold: 0.15 }
     );
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
 
   return (
-    <section ref={ref} className="py-32 px-6">
-      <div
-        className={`max-w-3xl mx-auto ${visible ? "animate-fade-in" : "opacity-0"}`}
-      >
-        <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-8">
-          Your cloud. Your data.{" "}
-          <span className="bg-gradient-to-r from-violet to-violet-light bg-clip-text text-transparent">
-            Your keys.
-          </span>
-        </h2>
+    <section ref={ref} className="py-24 md:py-40 px-6 md:px-12 bg-navy-mid">
+      <div className="max-w-6xl mx-auto">
+        <div
+          className={`grid md:grid-cols-[1.2fr_1fr] gap-16 md:gap-24 items-start ${
+            visible ? "animate-fade-up" : "opacity-0"
+          }`}
+        >
+          <div>
+            <h2 className="font-display text-3xl md:text-5xl font-bold tracking-[-0.02em] leading-[1.1] mb-6">
+              Your cloud. Your data.
+              <br />
+              Your keys.
+            </h2>
+            <p className="text-silver text-[16px] leading-relaxed max-w-md">
+              Security-first architecture from day one. No data residency
+              surprises. No compromises.
+            </p>
+          </div>
 
-        <div className="space-y-6 text-lg text-silver leading-relaxed">
-          <p>
-            Bring your own cloud — GCP, AWS, or Azure. Your data never touches
-            our servers. API keys live in your secret manager. Agents run in your
-            VPC.
-          </p>
-          <p className="text-white font-medium">
-            No vendor lock-in. No data residency surprises. Security-first
-            architecture from day one.
-          </p>
+          <div className="space-y-0">
+            {features.map((f, i) => (
+              <div
+                key={f.label}
+                className={`flex justify-between items-baseline py-5 ${
+                  i < features.length - 1 ? "border-b border-silver/10" : ""
+                }`}
+              >
+                <span className="text-white font-medium text-[15px]">
+                  {f.label}
+                </span>
+                <span className="text-silver text-sm">{f.detail}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

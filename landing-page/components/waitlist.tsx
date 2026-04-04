@@ -6,7 +6,9 @@ export default function Waitlist() {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -14,7 +16,7 @@ export default function Waitlist() {
       ([entry]) => {
         if (entry.isIntersecting) setVisible(true);
       },
-      { threshold: 0.2 }
+      { threshold: 0.15 }
     );
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
@@ -43,38 +45,49 @@ export default function Waitlist() {
   }
 
   return (
-    <section id="waitlist" ref={ref} className="py-32 px-6">
+    <section id="waitlist" ref={ref} className="py-24 md:py-40 px-6 md:px-12 bg-navy-mid">
       <div
-        className={`max-w-xl mx-auto text-center ${visible ? "animate-fade-in" : "opacity-0"}`}
+        className={`max-w-2xl mx-auto ${
+          visible ? "animate-fade-up" : "opacity-0"
+        }`}
       >
-        <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4">
+        <p className="text-sm font-medium tracking-[0.2em] uppercase text-amber/80 mb-6">
+          Limited availability
+        </p>
+
+        <h2 className="font-display text-3xl md:text-5xl font-bold tracking-[-0.02em] leading-[1.1] mb-4">
           Currently invite-only.
         </h2>
-        <p className="text-lg text-silver mb-10">
-          Due to high demand, we&apos;re onboarding clients in batches. Join the
-          waitlist and we&apos;ll reach out when your spot opens.
+
+        <p className="text-[16px] text-silver mb-12 max-w-lg leading-relaxed">
+          We&apos;re onboarding clients in batches to ensure deep, focused
+          engagements. Join the waitlist and we&apos;ll reach out when your spot
+          opens.
         </p>
 
         {status === "success" ? (
-          <div className="bg-navy-card backdrop-blur-sm border border-violet/30 rounded-xl p-8">
-            <p className="text-xl text-white font-medium">
+          <div className="py-6 border-t border-violet/20">
+            <p className="text-lg text-white font-display font-medium">
               You&apos;re on the list. We&apos;ll be in touch.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4">
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col sm:flex-row gap-3"
+          >
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
               required
-              className="flex-1 bg-navy-light border border-silver/20 rounded-lg px-6 py-4 text-white placeholder:text-silver/50 focus:outline-none focus:border-violet focus:shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all duration-200"
+              className="flex-1 bg-navy border border-silver/15 rounded-lg px-5 py-3.5 text-white text-[15px] placeholder:text-silver/40 focus:outline-none focus:border-violet/50 transition-colors duration-200"
             />
             <button
               type="submit"
               disabled={status === "loading"}
-              className="bg-amber hover:bg-amber-hover disabled:opacity-50 text-navy font-semibold px-8 py-4 rounded-lg text-lg transition-all duration-200 hover:scale-105 whitespace-nowrap"
+              className="bg-amber hover:bg-amber-hover disabled:opacity-50 text-navy font-semibold px-7 py-3.5 rounded-lg text-[15px] transition-all duration-200 hover:translate-y-[-1px] whitespace-nowrap"
             >
               {status === "loading" ? "Joining..." : "Join the waitlist"}
             </button>

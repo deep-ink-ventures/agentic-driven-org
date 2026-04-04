@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, Inter } from "next/font/google";
 import "./globals.css";
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+  weight: ["400", "500", "700"],
+});
 
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
+  variable: "--font-body",
 });
 
 export const metadata: Metadata = {
@@ -27,8 +35,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.className}>
-      <body className="antialiased">{children}</body>
+    <html lang="en" className={`${dmSans.variable} ${inter.variable}`}>
+      <body className="antialiased font-[family-name:var(--font-body)]">{children}</body>
     </html>
   );
 }
