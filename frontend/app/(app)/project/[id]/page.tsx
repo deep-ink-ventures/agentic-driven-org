@@ -749,11 +749,8 @@ function AgentDetailView({
               </div>
             </>
           ) : (
-            <div className="space-y-6 flex-1 overflow-y-auto min-h-0">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs uppercase text-text-secondary font-medium">
-                  Custom Instructions
-                </h3>
+            <div className="space-y-4 flex-1 overflow-y-auto min-h-0">
+              <div className="flex justify-end">
                 <Button
                   variant="outline"
                   size="sm"
@@ -764,7 +761,7 @@ function AgentDetailView({
                 </Button>
               </div>
               {instructions ? (
-                <div className="prose prose-invert prose-sm max-w-none text-text-primary">
+                <div className="prose prose-invert max-w-none text-text-primary text-sm">
                   <ReactMarkdown>{instructions}</ReactMarkdown>
                 </div>
               ) : (
