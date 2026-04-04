@@ -15,6 +15,7 @@ def get_steps(config, provider, state) -> list:
     from .frontend import FrontendStep
     from .celery_vm import CeleryVMStep
     from .dns import DNSStep
+    from .service_account import ServiceAccountStep
 
     step_classes = [
         ProjectStep,
@@ -29,5 +30,6 @@ def get_steps(config, provider, state) -> list:
         FrontendStep,
         CeleryVMStep,
         DNSStep,
+        ServiceAccountStep,
     ]
     return [cls(config, provider, state) for cls in step_classes]

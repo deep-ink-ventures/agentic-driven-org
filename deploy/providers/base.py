@@ -87,3 +87,15 @@ class CloudProvider(ABC):
     @abstractmethod
     def check_ssl_status(self, project_id: str, domain: str) -> str:
         ...
+
+    @abstractmethod
+    def create_service_account(self, project_id: str, name: str, display_name: str) -> dict:
+        ...
+
+    @abstractmethod
+    def grant_project_role(self, project_id: str, member_email: str, role: str) -> None:
+        ...
+
+    @abstractmethod
+    def create_sa_key(self, project_id: str, sa_email: str, output_path: str) -> None:
+        ...

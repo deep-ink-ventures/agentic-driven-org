@@ -277,6 +277,31 @@ class GCloudProvider(CloudProvider):
         ] + self._project_flag(project_id))
         return {"domain": domain}
 
+    def create_service_account(self, project_id: str, name: str, display_name: str) -> dict:
+        self._run([
+            "iam", "service-accounts", "create", name,
+            f"--display-name={display_name}",
+        ] + self._project_flag(project_id), check=False)
+        return {"service_account": f"{name}@{project_id}.iam.gserviceaccount.com"}
+
+    def grant_project_role(self, project_id: str, member_email: str, role: str) -> None:
+        subprocess.run(
+            ["gcloud", "projects", "add-iam-policy-binding", project_id,
+             f"--member=serviceAccount:{member_email}",
+             f"--role={role}",
+             "--condition=None",
+             "--quiet"],
+            check=True, text=True, capture_output=True,
+        )
+
+    def create_sa_key(self, project_id: str, sa_email: str, output_path: str) -> None:
+        subprocess.run(
+            ["gcloud", "iam", "service-accounts", "keys", "create", output_path,
+             f"--iam-account={sa_email}",
+             f"--project={project_id}"],
+            check=True, text=True, capture_output=True,
+        )
+
     def check_ssl_status(self, project_id: str, domain: str) -> str:
         result = self._run_json([
             "run", "domain-mappings", "describe",
