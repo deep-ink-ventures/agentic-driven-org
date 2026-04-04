@@ -62,6 +62,7 @@ export interface AgentSummary {
   config: Record<string, unknown>;
   auto_actions: Record<string, boolean>;
   pending_task_count: number;
+  tags: string[];
   created_at: string;
 }
 

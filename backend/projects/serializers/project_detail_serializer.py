@@ -5,14 +5,22 @@ from agents.models import Agent
 
 class AgentSummarySerializer(serializers.ModelSerializer):
     pending_task_count = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
-        fields = ["id", "name", "agent_type", "is_leader", "is_active", "instructions", "config", "auto_actions", "internal_state", "pending_task_count", "created_at"]
+        fields = ["id", "name", "agent_type", "is_leader", "is_active", "instructions", "config", "auto_actions", "internal_state", "pending_task_count", "tags", "created_at"]
         read_only_fields = fields
 
     def get_pending_task_count(self, obj):
         return obj.tasks.filter(status="awaiting_approval").count()
+
+    def get_tags(self, obj):
+        try:
+            bp = obj.get_blueprint()
+            return bp.tags
+        except Exception:
+            return []
 
 
 class DepartmentDetailSerializer(serializers.ModelSerializer):

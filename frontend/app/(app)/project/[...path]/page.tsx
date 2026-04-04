@@ -339,7 +339,15 @@ function AgentCard({
           {agent.is_active ? "Active" : "Inactive"}
         </span>
       </div>
-      <p className="text-xs text-text-secondary">{agent.agent_type}</p>
+      {agent.tags && agent.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {agent.tags.map((tag) => (
+            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
       {agent.pending_task_count > 0 && (
         <p className="text-xs text-accent-gold mt-2">
           {agent.pending_task_count} pending task
@@ -654,9 +662,6 @@ function AgentDetailView({
 
       <div className="flex items-center gap-3 mb-1 shrink-0">
         <h2 className="text-2xl font-semibold">{agent.name}</h2>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
-          {agent.agent_type}
-        </span>
       </div>
 
       {blueprint?.tags && (
