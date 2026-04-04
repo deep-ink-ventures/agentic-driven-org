@@ -428,29 +428,30 @@ function AgentConfigEditor({
 
   return (
     <div className="space-y-6">
-      {/* Activation toggle — top */}
-      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-bg-surface">
-        <div>
-          <p className="text-sm font-medium text-text-primary">
-            {agent.is_active ? "Agent is active" : "Agent is inactive"}
-          </p>
+      {/* Activation toggle */}
+      <div>
+        <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
+          Status
+        </h3>
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            onClick={toggleActive}
+            disabled={!configComplete && !agent.is_active}
+            className={`shrink-0 transition-colors ${agent.is_active ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
+          >
+            {agent.is_active ? (
+              <ToggleRight className="h-4 w-4" />
+            ) : (
+              <ToggleLeft className="h-4 w-4" />
+            )}
+          </button>
+          <span className="text-text-primary font-medium">
+            {agent.is_active ? "Active" : "Inactive"}
+          </span>
           {!configComplete && !agent.is_active && (
-            <p className="text-xs text-text-secondary mt-0.5">
-              Fill in required configuration to activate
-            </p>
+            <span className="text-text-secondary">— fill required config to activate</span>
           )}
         </div>
-        <button
-          onClick={toggleActive}
-          disabled={!configComplete && !agent.is_active}
-          className={`transition-colors ${agent.is_active ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
-        >
-          {agent.is_active ? (
-            <ToggleRight className="h-8 w-8" />
-          ) : (
-            <ToggleLeft className="h-8 w-8" />
-          )}
-        </button>
       </div>
 
       {/* Config fields */}
@@ -500,7 +501,7 @@ function AgentConfigEditor({
             <p className="text-[10px] text-text-secondary mb-3">
               When enabled, tasks from these commands execute without manual approval.
             </p>
-            <div className="space-y-3">
+            <div className="space-y-1.5">
               {Object.keys(aaSchema.properties).map((cmdName) => {
                 const enabled = autoActions[cmdName] ?? false;
                 const cmd = blueprint.commands.find(
@@ -509,25 +510,8 @@ function AgentConfigEditor({
                 return (
                   <div
                     key={cmdName}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-bg-surface"
+                    className="flex items-center gap-2 text-xs"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-text-primary font-medium">
-                          {cmdName}
-                        </span>
-                        {cmd?.schedule && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
-                            {cmd.schedule}
-                          </span>
-                        )}
-                      </div>
-                      {cmd?.description && (
-                        <p className="text-xs text-text-secondary mt-0.5 truncate">
-                          {cmd.description}
-                        </p>
-                      )}
-                    </div>
                     <button
                       onClick={() =>
                         setAutoActions({
@@ -535,14 +519,25 @@ function AgentConfigEditor({
                           [cmdName]: !enabled,
                         })
                       }
-                      className={`shrink-0 ml-3 ${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
+                      className={`shrink-0 ${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
                     >
                       {enabled ? (
-                        <ToggleRight className="h-6 w-6" />
+                        <ToggleRight className="h-4 w-4" />
                       ) : (
-                        <ToggleLeft className="h-6 w-6" />
+                        <ToggleLeft className="h-4 w-4" />
                       )}
                     </button>
+                    <span className="text-text-primary font-mono">
+                      {cmdName}
+                    </span>
+                    {cmd?.schedule && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
+                        {cmd.schedule}
+                      </span>
+                    )}
+                    <span className="text-text-secondary">
+                      {cmd?.description}
+                    </span>
                   </div>
                 );
               })}
@@ -617,15 +612,15 @@ function AgentDetailView({
   ];
 
   return (
-    <div>
+    <div className="flex flex-col h-[calc(100vh-3.5rem-3rem)]">
       <button
         onClick={onBack}
-        className="flex items-center gap-1 text-text-secondary hover:text-text-primary text-sm mb-4 transition-colors"
+        className="flex items-center gap-1 text-text-secondary hover:text-text-primary text-sm mb-4 transition-colors shrink-0"
       >
         <ChevronLeft className="h-4 w-4" /> Back
       </button>
 
-      <div className="flex items-center gap-3 mb-1">
+      <div className="flex items-center gap-3 mb-1 shrink-0">
         <h2 className="text-2xl font-semibold">{agent.name}</h2>
         <span className="text-xs px-2 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
           {agent.agent_type}
@@ -646,7 +641,7 @@ function AgentDetailView({
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-border">
+      <div className="flex gap-1 mb-6 border-b border-border shrink-0">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -664,7 +659,7 @@ function AgentDetailView({
 
       {/* Overview tab */}
       {tab === "overview" && blueprint && (
-        <div className="space-y-6">
+        <div className="space-y-6 flex-1 overflow-y-auto min-h-0">
           <div>
             <p className="text-sm text-text-primary">
               {blueprint.description}
@@ -708,14 +703,14 @@ function AgentDetailView({
 
       {/* Instructions tab */}
       {tab === "instructions" && (
-        <div className="flex flex-col h-full min-h-0">
+        <div className="flex flex-col flex-1 min-h-0">
           {editingInstructions ? (
             <>
               <textarea
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
                 placeholder="Custom instructions for this agent..."
-                className="w-full flex-1 min-h-[200px] rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none font-mono"
+                className="w-full flex-1 min-h-0 rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none font-mono"
                 autoFocus
               />
               <div className="flex gap-2 mt-3 shrink-0">
@@ -742,8 +737,11 @@ function AgentDetailView({
               </div>
             </>
           ) : (
-            <div className="flex-1 overflow-y-auto">
-              <div className="flex justify-end mb-3">
+            <div className="space-y-6 flex-1 overflow-y-auto min-h-0">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs uppercase text-text-secondary font-medium">
+                  Custom Instructions
+                </h3>
                 <Button
                   variant="outline"
                   size="sm"
@@ -754,12 +752,12 @@ function AgentDetailView({
                 </Button>
               </div>
               {instructions ? (
-                <div className="prose prose-invert prose-sm max-w-none text-text-primary">
+                <div className="text-xs text-text-primary prose prose-invert prose-xs max-w-none">
                   <ReactMarkdown>{instructions}</ReactMarkdown>
                 </div>
               ) : (
-                <p className="text-text-secondary/50 text-sm italic">
-                  No custom instructions set.
+                <p className="text-text-secondary/50 text-xs">
+                  No custom instructions set. Click Edit to add.
                 </p>
               )}
             </div>
