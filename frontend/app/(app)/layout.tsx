@@ -29,7 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-bg-primary">
       <NavBar />
-      <main className="p-6">{children}</main>
+      <main>{children}</main>
     </div>
   );
 }

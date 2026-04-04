@@ -50,3 +50,69 @@ export interface BootstrapProposalData {
   }[];
   ignored_content: { source_id: string; source_name: string; reason: string }[];
 }
+
+export interface AgentSummary {
+  id: string;
+  name: string;
+  agent_type: string;
+  is_leader: boolean;
+  is_active: boolean;
+  instructions: string;
+  config: Record<string, unknown>;
+  auto_actions: Record<string, boolean>;
+  pending_task_count: number;
+  created_at: string;
+}
+
+export interface DepartmentDetail {
+  id: string;
+  department_type: string;
+  display_name: string;
+  agents: AgentSummary[];
+  created_at: string;
+}
+
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  goal: string;
+  status: "setup" | "active";
+  owner_email: string;
+  departments: DepartmentDetail[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentTask {
+  id: string;
+  agent: string;
+  agent_name: string;
+  agent_type: string;
+  created_by_agent: string | null;
+  created_by_agent_name: string | null;
+  status: "awaiting_approval" | "planned" | "queued" | "processing" | "done" | "failed";
+  auto_execute: boolean;
+  exec_summary: string;
+  step_plan: string;
+  report: string;
+  error_message: string;
+  proposed_exec_at: string | null;
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  token_usage: { model: string; input_tokens: number; output_tokens: number; cost_usd: number } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlueprintInfo {
+  name: string;
+  slug: string;
+  description: string;
+  tags: string[];
+  default_model: string;
+  skills_description: string;
+  commands: { name: string; description: string; schedule: string | null; model: string | null }[];
+  config_schema: Record<string, unknown>;
+  auto_actions_schema: Record<string, unknown>;
+}

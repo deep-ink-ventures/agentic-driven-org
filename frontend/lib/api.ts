@@ -119,4 +119,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify(proposal ? { proposal } : {}),
     }),
+
+  getProjectDetail: (id: string) =>
+    request<import("./types").ProjectDetail>(`/api/projects/${id}/detail/`),
+
+  getProjectTasks: (projectId: string) =>
+    request<import("./types").AgentTask[]>(`/api/projects/${projectId}/tasks/`),
+
+  approveTask: (projectId: string, taskId: string) =>
+    request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/approve/`, { method: "POST" }),
+
+  rejectTask: (projectId: string, taskId: string) =>
+    request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/reject/`, { method: "POST" }),
+
+  updateAgent: (agentId: string, data: { instructions?: string; config?: Record<string, unknown>; auto_actions?: Record<string, boolean>; is_active?: boolean }) =>
+    request<unknown>(`/api/agents/${agentId}/`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getAgentBlueprint: (agentId: string) =>
+    request<import("./types").BlueprintInfo>(`/api/agents/${agentId}/blueprint/`),
 };

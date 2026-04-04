@@ -1,0 +1,743 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { api } from "@/lib/api";
+import type {
+  ProjectDetail,
+  AgentTask,
+  AgentSummary,
+  DepartmentDetail,
+  BlueprintInfo,
+} from "@/lib/types";
+import {
+  Loader2,
+  LayoutDashboard,
+  ChevronLeft,
+  Check,
+  X,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  ToggleLeft,
+  ToggleRight,
+  Save,
+  FileText,
+  Terminal,
+  Settings2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+
+/* ------------------------------------------------------------------ */
+/*  Status badge colours                                              */
+/* ------------------------------------------------------------------ */
+
+const statusColors: Record<AgentTask["status"], string> = {
+  awaiting_approval:
+    "bg-accent-gold/15 text-accent-gold border-accent-gold/30",
+  planned: "bg-bg-surface text-text-secondary border-border",
+  queued: "bg-bg-surface text-text-secondary border-border",
+  processing: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  done: "bg-flag-strength/15 text-flag-strength border-flag-strength/30",
+  failed: "bg-flag-critical/15 text-flag-critical border-flag-critical/30",
+};
+
+/* ------------------------------------------------------------------ */
+/*  TaskCard                                                          */
+/* ------------------------------------------------------------------ */
+
+function TaskCard({
+  task,
+  projectId,
+  onUpdate,
+}: {
+  task: AgentTask;
+  projectId: string;
+  onUpdate: (t: AgentTask) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [acting, setActing] = useState(false);
+
+  async function handleApprove() {
+    setActing(true);
+    try {
+      const updated = await api.approveTask(projectId, task.id);
+      onUpdate(updated);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleReject() {
+    setActing(true);
+    try {
+      const updated = await api.rejectTask(projectId, task.id);
+      onUpdate(updated);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  return (
+    <div className="border border-border rounded-lg bg-bg-surface">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+      >
+        <span
+          className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${statusColors[task.status]}`}
+        >
+          {task.status.replace("_", " ")}
+        </span>
+        <span className="text-xs text-text-secondary shrink-0">
+          {task.agent_name}
+        </span>
+        <span className="text-sm text-text-primary truncate flex-1">
+          {task.exec_summary}
+        </span>
+        <span className="text-xs text-text-secondary shrink-0">
+          {new Date(task.created_at).toLocaleTimeString()}
+        </span>
+        {expanded ? (
+          <ChevronUp className="h-3.5 w-3.5 text-text-secondary" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+          <div>
+            <p className="text-xs text-text-secondary mb-1">Summary</p>
+            <p className="text-sm text-text-primary">{task.exec_summary}</p>
+          </div>
+          {task.step_plan && (
+            <div>
+              <p className="text-xs text-text-secondary mb-1">Plan</p>
+              <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
+                {task.step_plan}
+              </pre>
+            </div>
+          )}
+          {task.report && (
+            <div>
+              <p className="text-xs text-text-secondary mb-1">Report</p>
+              <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
+                {task.report}
+              </pre>
+            </div>
+          )}
+          {task.error_message && (
+            <div className="flex items-start gap-2 text-flag-critical text-xs p-2 rounded-lg bg-flag-critical/10">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              {task.error_message}
+            </div>
+          )}
+          {task.token_usage && (
+            <p className="text-[10px] text-text-secondary">
+              {task.token_usage.model} &middot;{" "}
+              {task.token_usage.input_tokens}&rarr;
+              {task.token_usage.output_tokens} tokens &middot; $
+              {task.token_usage.cost_usd.toFixed(4)}
+            </p>
+          )}
+          {task.status === "awaiting_approval" && (
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={handleApprove}
+                disabled={acting}
+                className="bg-flag-strength text-white hover:bg-flag-strength/90 text-xs h-8"
+              >
+                <Check className="h-3.5 w-3.5 mr-1" /> Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReject}
+                disabled={acting}
+                className="border-flag-critical/50 text-flag-critical hover:bg-flag-critical/10 text-xs h-8"
+              >
+                <X className="h-3.5 w-3.5 mr-1" /> Reject
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  DashboardView                                                     */
+/* ------------------------------------------------------------------ */
+
+function DashboardView({
+  tasks,
+  projectId,
+  onTaskUpdate,
+}: {
+  tasks: AgentTask[];
+  projectId: string;
+  onTaskUpdate: (t: AgentTask) => void;
+}) {
+  const statusOrder: AgentTask["status"][] = [
+    "awaiting_approval",
+    "processing",
+    "queued",
+    "planned",
+    "done",
+    "failed",
+  ];
+
+  const sorted = [...tasks].sort(
+    (a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status),
+  );
+
+  return (
+    <div>
+      <h2 className="text-2xl font-semibold mb-6">Task Queue</h2>
+      {sorted.length === 0 ? (
+        <p className="text-text-secondary text-sm py-10 text-center">
+          No tasks yet.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              projectId={projectId}
+              onUpdate={onTaskUpdate}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  AgentCard                                                         */
+/* ------------------------------------------------------------------ */
+
+function AgentCard({
+  agent,
+  onClick,
+}: {
+  agent: AgentSummary;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left border border-border rounded-lg bg-bg-surface hover:border-accent-gold/50 transition-colors p-4 group"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-text-heading group-hover:text-accent-gold transition-colors">
+          {agent.name}
+        </span>
+        <span
+          className={`text-[10px] px-1.5 py-0.5 rounded-full ${agent.is_active ? "bg-flag-strength/15 text-flag-strength" : "bg-bg-input text-text-secondary"}`}
+        >
+          {agent.is_active ? "Active" : "Inactive"}
+        </span>
+      </div>
+      <p className="text-xs text-text-secondary">{agent.agent_type}</p>
+      {agent.pending_task_count > 0 && (
+        <p className="text-xs text-accent-gold mt-2">
+          {agent.pending_task_count} pending task
+          {agent.pending_task_count !== 1 ? "s" : ""}
+        </p>
+      )}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  DepartmentView                                                    */
+/* ------------------------------------------------------------------ */
+
+function DepartmentView({
+  dept,
+  onSelectAgent,
+}: {
+  dept: DepartmentDetail;
+  onSelectAgent: (a: AgentSummary) => void;
+}) {
+  const leader = dept.agents.find((a) => a.is_leader);
+  const workforce = dept.agents.filter((a) => !a.is_leader);
+
+  return (
+    <div>
+      <h2 className="text-2xl font-semibold mb-6">{dept.display_name}</h2>
+
+      {leader && (
+        <div className="mb-6">
+          <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
+            Department Leader
+          </h3>
+          <AgentCard
+            agent={leader}
+            onClick={() => onSelectAgent(leader)}
+          />
+        </div>
+      )}
+
+      <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
+        Workforce
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {workforce.map((agent) => (
+          <AgentCard
+            key={agent.id}
+            agent={agent}
+            onClick={() => onSelectAgent(agent)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  AgentConfigEditor                                                 */
+/* ------------------------------------------------------------------ */
+
+function AgentConfigEditor({
+  agent,
+  blueprint,
+  onSaved,
+}: {
+  agent: AgentSummary;
+  blueprint: BlueprintInfo;
+  onSaved: () => void;
+}) {
+  const [config, setConfig] = useState(agent.config);
+  const [autoActions, setAutoActions] = useState(agent.auto_actions);
+  const [saving, setSaving] = useState(false);
+
+  const schema = blueprint.config_schema as {
+    properties?: Record<string, { type: string; description: string }>;
+  };
+  const aaSchema = blueprint.auto_actions_schema as {
+    properties?: Record<string, unknown>;
+  };
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.updateAgent(agent.id, {
+        config,
+        auto_actions: autoActions,
+      });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {schema?.properties &&
+        Object.keys(schema.properties).length > 0 && (
+          <div>
+            <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
+              Configuration
+            </h3>
+            <div className="space-y-3">
+              {Object.entries(schema.properties).map(([key, spec]) => (
+                <div key={key}>
+                  <label className="text-xs text-text-primary font-medium block mb-1">
+                    {key}
+                  </label>
+                  <p className="text-[10px] text-text-secondary mb-1">
+                    {(spec as { description?: string }).description}
+                  </p>
+                  <Input
+                    value={
+                      typeof config[key] === "string"
+                        ? (config[key] as string)
+                        : JSON.stringify(config[key] ?? "")
+                    }
+                    onChange={(e) =>
+                      setConfig({ ...config, [key]: e.target.value })
+                    }
+                    className="bg-bg-input border-border text-text-primary text-xs font-mono"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      {aaSchema?.properties &&
+        Object.keys(aaSchema.properties).length > 0 && (
+          <div>
+            <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
+              Auto Actions
+            </h3>
+            <div className="space-y-2">
+              {Object.keys(aaSchema.properties).map((cmdName) => {
+                const enabled = autoActions[cmdName] ?? false;
+                const cmd = blueprint.commands.find(
+                  (c) => c.name === cmdName,
+                );
+                return (
+                  <div
+                    key={cmdName}
+                    className="flex items-center justify-between py-1.5"
+                  >
+                    <div>
+                      <span className="text-sm text-text-primary">
+                        {cmdName}
+                      </span>
+                      {cmd && (
+                        <span className="text-xs text-text-secondary ml-2">
+                          {cmd.schedule}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setAutoActions({
+                          ...autoActions,
+                          [cmdName]: !enabled,
+                        })
+                      }
+                      className={`${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
+                    >
+                      {enabled ? (
+                        <ToggleRight className="h-5 w-5" />
+                      ) : (
+                        <ToggleLeft className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+      <Button
+        onClick={save}
+        disabled={saving}
+        className="bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50"
+      >
+        {saving ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            <Save className="h-4 w-4 mr-1" /> Save
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  AgentDetailView                                                   */
+/* ------------------------------------------------------------------ */
+
+function AgentDetailView({
+  agent,
+  onBack,
+  onAgentUpdated,
+}: {
+  agent: AgentSummary;
+  projectId: string;
+  onBack: () => void;
+  onAgentUpdated: () => void;
+}) {
+  const [tab, setTab] = useState<"overview" | "instructions" | "config">(
+    "overview",
+  );
+  const [blueprint, setBlueprint] = useState<BlueprintInfo | null>(null);
+  const [instructions, setInstructions] = useState(agent.instructions);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.getAgentBlueprint(agent.id).then(setBlueprint).catch(() => {});
+  }, [agent.id]);
+
+  async function saveInstructions() {
+    setSaving(true);
+    try {
+      await api.updateAgent(agent.id, { instructions });
+      onAgentUpdated();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const tabs = [
+    { key: "overview" as const, label: "Overview", icon: FileText },
+    { key: "instructions" as const, label: "Instructions", icon: Terminal },
+    { key: "config" as const, label: "Config", icon: Settings2 },
+  ];
+
+  return (
+    <div>
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-text-secondary hover:text-text-primary text-sm mb-4 transition-colors"
+      >
+        <ChevronLeft className="h-4 w-4" /> Back
+      </button>
+
+      <div className="flex items-center gap-3 mb-1">
+        <h2 className="text-2xl font-semibold">{agent.name}</h2>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
+          {agent.agent_type}
+        </span>
+      </div>
+
+      {blueprint?.tags && (
+        <div className="flex gap-1.5 mb-6">
+          {blueprint.tags.map((tag) => (
+            <span
+              key={tag}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold border border-accent-gold/20"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-border">
+        {tabs.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
+              tab === key
+                ? "border-accent-gold text-accent-gold"
+                : "border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview tab */}
+      {tab === "overview" && blueprint && (
+        <div className="space-y-6">
+          <div>
+            <p className="text-sm text-text-primary">
+              {blueprint.description}
+            </p>
+          </div>
+          <div>
+            <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
+              Skills
+            </h3>
+            <pre className="text-xs text-text-primary whitespace-pre-wrap">
+              {blueprint.skills_description}
+            </pre>
+          </div>
+          <div>
+            <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
+              Commands
+            </h3>
+            <div className="space-y-1.5">
+              {blueprint.commands.map((cmd) => (
+                <div
+                  key={cmd.name}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <span className="text-text-primary font-mono">
+                    {cmd.name}
+                  </span>
+                  {cmd.schedule && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
+                      {cmd.schedule}
+                    </span>
+                  )}
+                  <span className="text-text-secondary">
+                    {cmd.description}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Instructions tab */}
+      {tab === "instructions" && (
+        <div className="space-y-4">
+          <textarea
+            rows={12}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="Custom instructions for this agent..."
+            className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none font-mono"
+          />
+          <Button
+            onClick={saveInstructions}
+            disabled={saving || instructions === agent.instructions}
+            className="bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-1" /> Save
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Config tab */}
+      {tab === "config" && blueprint && (
+        <AgentConfigEditor
+          agent={agent}
+          blueprint={blueprint}
+          onSaved={onAgentUpdated}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main page                                                         */
+/* ------------------------------------------------------------------ */
+
+export default function ProjectDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"dashboard" | "department" | "agent">(
+    "dashboard",
+  );
+  const [selectedDept, setSelectedDept] = useState<DepartmentDetail | null>(
+    null,
+  );
+  const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(
+    null,
+  );
+
+  const load = useCallback(() => {
+    if (!id) return;
+    Promise.all([api.getProjectDetail(id), api.getProjectTasks(id)])
+      .then(([proj, t]) => {
+        setProject(proj);
+        setTasks(t);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function handleTaskUpdate(updated: AgentTask) {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === updated.id ? updated : t)),
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+        <Loader2 className="h-6 w-6 text-text-secondary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
+        <p className="text-text-secondary">Project not found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-[calc(100vh-3.5rem)]">
+      {/* Sidebar */}
+      <div className="w-56 border-r border-border bg-bg-surface shrink-0 flex flex-col">
+        <button
+          onClick={() => {
+            setView("dashboard");
+            setSelectedDept(null);
+            setSelectedAgent(null);
+          }}
+          className={`flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
+            view === "dashboard"
+              ? "text-accent-gold bg-accent-gold/10"
+              : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
+          }`}
+        >
+          <LayoutDashboard className="h-4 w-4" />
+          Dashboard
+        </button>
+        <Separator />
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <p className="text-[10px] uppercase text-text-secondary font-medium px-2 mb-2">
+            Departments
+          </p>
+          {project.departments.map((dept) => (
+            <button
+              key={dept.id}
+              onClick={() => {
+                setView("department");
+                setSelectedDept(dept);
+                setSelectedAgent(null);
+              }}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                selectedDept?.id === dept.id && view !== "dashboard"
+                  ? "bg-accent-gold/10 text-accent-gold"
+                  : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
+              }`}
+            >
+              {dept.display_name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main area */}
+      <div className="flex-1 overflow-y-auto p-6">
+        {view === "dashboard" && (
+          <DashboardView
+            tasks={tasks}
+            projectId={project.id}
+            onTaskUpdate={handleTaskUpdate}
+          />
+        )}
+        {view === "department" && selectedDept && !selectedAgent && (
+          <DepartmentView
+            dept={selectedDept}
+            onSelectAgent={(agent) => {
+              setSelectedAgent(agent);
+              setView("agent");
+            }}
+          />
+        )}
+        {view === "agent" && selectedAgent && (
+          <AgentDetailView
+            agent={selectedAgent}
+            projectId={project.id}
+            onBack={() => {
+              setSelectedAgent(null);
+              setView("department");
+            }}
+            onAgentUpdated={load}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
