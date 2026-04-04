@@ -62,6 +62,7 @@ function TaskCard({
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
   const [editedPlan, setEditedPlan] = useState(task.step_plan);
   const [editedSummary, setEditedSummary] = useState(task.exec_summary);
 
@@ -133,21 +134,34 @@ function TaskCard({
             )}
           </div>
 
-          {/* Plan — editable for approval tasks */}
+          {/* Plan — toggle visibility, editable for approval tasks */}
           {(task.step_plan || editing) && (
             <div>
-              <p className="text-xs text-text-secondary mb-1">Plan</p>
-              {editing ? (
-                <textarea
-                  value={editedPlan}
-                  onChange={(e) => setEditedPlan(e.target.value)}
-                  rows={Math.max(6, editedPlan.split("\n").length + 2)}
-                  className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-xs text-text-primary font-mono outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-y"
-                />
-              ) : (
-                <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
-                  {task.step_plan}
-                </pre>
+              {!editing && (
+                <button
+                  onClick={() => setShowPlan(!showPlan)}
+                  className="text-xs text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1 mb-2"
+                >
+                  {showPlan ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  {showPlan ? "Hide plan" : "Show plan"}
+                </button>
+              )}
+              {(showPlan || editing) && (
+                editing ? (
+                  <textarea
+                    value={editedPlan}
+                    onChange={(e) => setEditedPlan(e.target.value)}
+                    rows={Math.max(6, editedPlan.split("\n").length + 2)}
+                    className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-xs text-text-primary font-mono outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-y"
+                  />
+                ) : (
+                  <div
+                    onClick={isApproval ? () => setEditing(true) : undefined}
+                    className={`rounded-lg border border-dashed border-border p-3 text-sm text-text-primary max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&>*:last-child]:mb-0 ${isApproval ? "cursor-pointer hover:border-accent-gold/40 transition-colors" : ""}`}
+                  >
+                    <ReactMarkdown>{task.step_plan}</ReactMarkdown>
+                  </div>
+                )
               )}
             </div>
           )}
