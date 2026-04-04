@@ -6,10 +6,10 @@ from projects.serializers.project_detail_serializer import ProjectDetailSerializ
 
 
 class ProjectDetailView(RetrieveAPIView):
-    """GET /api/projects/{id}/detail/ — full project with departments + agents."""
+    """GET /api/projects/{slug}/detail/ — full project with departments + agents."""
     serializer_class = ProjectDetailSerializer
     permission_classes = [IsAuthenticated]
-    lookup_field = "pk"
+    lookup_field = "slug"
 
     def get_queryset(self):
         return Project.objects.filter(members=self.request.user).prefetch_related(

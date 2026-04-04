@@ -120,8 +120,8 @@ export const api = {
       body: JSON.stringify(proposal ? { proposal } : {}),
     }),
 
-  getProjectDetail: (id: string) =>
-    request<import("./types").ProjectDetail>(`/api/projects/${id}/detail/`),
+  getProjectDetail: (slug: string) =>
+    request<import("./types").ProjectDetail>(`/api/projects/${slug}/detail/`),
 
   getProjectTasks: (projectId: string) =>
     request<import("./types").AgentTask[]>(`/api/projects/${projectId}/tasks/`),

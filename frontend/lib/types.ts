@@ -9,6 +9,7 @@ export interface User {
 export interface Project {
   id: string;
   name: string;
+  slug: string;
   goal: string;
   status: "setup" | "active";
   department_count: number;
@@ -76,6 +77,7 @@ export interface DepartmentDetail {
 export interface ProjectDetail {
   id: string;
   name: string;
+  slug: string;
   goal: string;
   status: "setup" | "active";
   owner_email: string;

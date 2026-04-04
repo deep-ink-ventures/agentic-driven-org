@@ -4,7 +4,7 @@ from agents import views as views_agents
 
 urlpatterns = [
     path("projects/", views.ProjectListView.as_view(), name="project-list"),
-    path("projects/<uuid:pk>/detail/", views.ProjectDetailView.as_view(), name="project-detail"),
+    path("projects/<slug:slug>/detail/", views.ProjectDetailView.as_view(), name="project-detail"),
     path("projects/<uuid:project_id>/sources/", views.ProjectSourceListView.as_view(), name="project-sources"),
     path("projects/<uuid:project_id>/tasks/", views_agents.ProjectTaskListView.as_view(), name="project-tasks"),
     path("projects/<uuid:project_id>/tasks/<uuid:task_id>/approve/", views_agents.TaskApproveView.as_view(), name="task-approve"),

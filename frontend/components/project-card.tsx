@@ -78,7 +78,7 @@ export function ProjectCard({ project, onSetup }: ProjectCardProps) {
   }
 
   return (
-    <Link href={`/project/${project.id}`}>
+    <Link href={`/project/${project.slug}`}>
       {card}
     </Link>
   );

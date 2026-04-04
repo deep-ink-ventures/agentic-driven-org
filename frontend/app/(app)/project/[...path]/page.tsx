@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type {
   ProjectDetail,
@@ -32,6 +32,10 @@ import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+
+function slugifyName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
 
 /* ------------------------------------------------------------------ */
 /*  Status badge colours                                              */
@@ -809,7 +813,13 @@ function AgentDetailView({
 /* ------------------------------------------------------------------ */
 
 export default function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ path: string[] }>();
+  const pathSegments = params.path || [];
+  const projectSlug = pathSegments[0] || "";
+  const deptSlug = pathSegments[1] || "";
+  const agentSlug = pathSegments[2] || "";
+  const router = useRouter();
+
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -822,14 +832,46 @@ export default function ProjectDetailPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(
     null,
   );
+  const [initialDeepLinkDone, setInitialDeepLinkDone] = useState(false);
+
+  // Apply deep link from URL on first load
+  useEffect(() => {
+    if (!project || initialDeepLinkDone) return;
+    setInitialDeepLinkDone(true);
+
+    if (deptSlug) {
+      const dept = project.departments.find(
+        (d) => d.department_type === deptSlug,
+      );
+      if (dept) {
+        setSelectedDept(dept);
+        if (agentSlug) {
+          const agent = dept.agents.find(
+            (a) => a.agent_type === agentSlug || slugifyName(a.name) === agentSlug,
+          );
+          if (agent) {
+            setSelectedAgent(agent);
+            setView("agent");
+            // Handle #config hash
+            if (typeof window !== "undefined" && window.location.hash === "#config") {
+              // Tab will be set in AgentDetailView
+            }
+          } else {
+            setView("department");
+          }
+        } else {
+          setView("department");
+        }
+      }
+    }
+  }, [project, initialDeepLinkDone, deptSlug, agentSlug]);
 
   const load = useCallback(() => {
-    if (!id) return;
-    Promise.all([api.getProjectDetail(id), api.getProjectTasks(id)])
+    if (!projectSlug) return;
+    Promise.all([api.getProjectDetail(projectSlug), api.getProjectTasks(project?.id || projectSlug)])
       .then(([proj, t]) => {
         setProject(proj);
         setTasks(t);
-        // Sync selected dept/agent with fresh data
         setSelectedDept((prev) => {
           if (!prev) return prev;
           return proj.departments.find((d) => d.id === prev.id) ?? prev;
@@ -845,7 +887,7 @@ export default function ProjectDetailPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [projectSlug, project?.id]);
 
   useEffect(() => {
     load();
@@ -882,6 +924,7 @@ export default function ProjectDetailPage() {
             setView("dashboard");
             setSelectedDept(null);
             setSelectedAgent(null);
+            router.push(`/project/${projectSlug}`);
           }}
           className={`flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
             view === "dashboard"
@@ -907,6 +950,7 @@ export default function ProjectDetailPage() {
                   setView("department");
                   setSelectedDept(dept);
                   setSelectedAgent(null);
+                  router.push(`/project/${projectSlug}/${dept.department_type}`);
                 }}
                 className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
                   selectedDept?.id === dept.id && view !== "dashboard"
@@ -939,6 +983,7 @@ export default function ProjectDetailPage() {
             onSelectAgent={(agent) => {
               setSelectedAgent(agent);
               setView("agent");
+              router.push(`/project/${projectSlug}/${selectedDept.department_type}/${slugifyName(agent.name)}`);
             }}
           />
         )}
@@ -949,6 +994,7 @@ export default function ProjectDetailPage() {
             onBack={() => {
               setSelectedAgent(null);
               setView("department");
+              if (selectedDept) router.push(`/project/${projectSlug}/${selectedDept.department_type}`);
             }}
             onAgentUpdated={load}
           />
