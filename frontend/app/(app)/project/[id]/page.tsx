@@ -27,6 +27,7 @@ import {
   Terminal,
   Settings2,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -397,6 +398,8 @@ function AgentConfigEditor({
     return val !== undefined && val !== null && val !== "";
   });
 
+  const [saved, setSaved] = useState(false);
+
   async function save() {
     setSaving(true);
     try {
@@ -405,6 +408,8 @@ function AgentConfigEditor({
         auto_actions: autoActions,
       });
       onSaved();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } finally {
       setSaving(false);
     }
@@ -546,11 +551,15 @@ function AgentConfigEditor({
 
       <Button
         onClick={save}
-        disabled={saving}
-        className="bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50"
+        disabled={saving || saved}
+        className={`${saved ? "bg-flag-strength hover:bg-flag-strength" : "bg-accent-gold hover:bg-accent-gold-hover"} text-bg-primary disabled:opacity-90 transition-colors`}
       >
         {saving ? (
           <Loader2 className="h-4 w-4 animate-spin" />
+        ) : saved ? (
+          <>
+            <Check className="h-4 w-4 mr-1" /> Saved
+          </>
         ) : (
           <>
             <Save className="h-4 w-4 mr-1" /> Save
@@ -580,7 +589,9 @@ function AgentDetailView({
   );
   const [blueprint, setBlueprint] = useState<BlueprintInfo | null>(null);
   const [instructions, setInstructions] = useState(agent.instructions);
+  const [editingInstructions, setEditingInstructions] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [instructionsSaved, setInstructionsSaved] = useState(false);
 
   useEffect(() => {
     api.getAgentBlueprint(agent.id).then(setBlueprint).catch(() => {});
@@ -591,6 +602,8 @@ function AgentDetailView({
     try {
       await api.updateAgent(agent.id, { instructions });
       onAgentUpdated();
+      setInstructionsSaved(true);
+      setTimeout(() => setInstructionsSaved(false), 2000);
     } finally {
       setSaving(false);
     }
@@ -660,9 +673,9 @@ function AgentDetailView({
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
               Skills
             </h3>
-            <pre className="text-xs text-text-primary whitespace-pre-wrap">
-              {blueprint.skills_description}
-            </pre>
+            <div className="text-xs text-text-primary prose prose-invert prose-xs max-w-none">
+              <ReactMarkdown>{blueprint.skills_description}</ReactMarkdown>
+            </div>
           </div>
           <div>
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
@@ -694,27 +707,55 @@ function AgentDetailView({
 
       {/* Instructions tab */}
       {tab === "instructions" && (
-        <div className="space-y-4">
-          <textarea
-            rows={12}
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            placeholder="Custom instructions for this agent..."
-            className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none font-mono"
-          />
-          <Button
-            onClick={saveInstructions}
-            disabled={saving || instructions === agent.instructions}
-            className="bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-1" /> Save
-              </>
-            )}
-          </Button>
+        <div className="flex flex-col h-full min-h-0">
+          {editingInstructions ? (
+            <>
+              <textarea
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="Custom instructions for this agent..."
+                className="w-full flex-1 min-h-[200px] rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none font-mono"
+                autoFocus
+              />
+              <div className="flex gap-2 mt-3 shrink-0">
+                <Button
+                  onClick={() => { saveInstructions(); setEditingInstructions(false); }}
+                  disabled={saving || instructions === agent.instructions}
+                  className={`${instructionsSaved ? "bg-flag-strength hover:bg-flag-strength" : "bg-accent-gold hover:bg-accent-gold-hover"} text-bg-primary disabled:opacity-90 transition-colors`}
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : instructionsSaved ? (
+                    <><Check className="h-4 w-4 mr-1" /> Saved</>
+                  ) : (
+                    <><Save className="h-4 w-4 mr-1" /> Save</>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setInstructions(agent.instructions); setEditingInstructions(false); }}
+                  className="border-border text-text-secondary hover:text-text-primary"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div
+              onClick={() => setEditingInstructions(true)}
+              className="flex-1 rounded-lg border border-border bg-bg-surface p-4 cursor-text hover:border-accent-gold/30 transition-colors overflow-y-auto"
+            >
+              {instructions ? (
+                <div className="prose prose-invert prose-sm max-w-none text-text-primary">
+                  <ReactMarkdown>{instructions}</ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-text-secondary/50 text-sm italic">
+                  Click to add custom instructions...
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
