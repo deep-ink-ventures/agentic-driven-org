@@ -652,7 +652,7 @@ export function CreateProjectWizard({
 
           {/* Step 4: Bootstrap Processing */}
           {step === 4 && (
-            <div className="flex flex-col items-center justify-center gap-4 py-12">
+            <div className="flex flex-col items-center justify-center gap-4 h-full">
               {proposal?.status === "failed" ? (
                 <>
                   <AlertCircle className="h-12 w-12 text-flag-critical" />
