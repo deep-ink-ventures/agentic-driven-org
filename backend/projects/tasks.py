@@ -110,6 +110,41 @@ def bootstrap_project(self, proposal_id: str):
         _broadcast_bootstrap(project.id, proposal.id, "failed", str(e)[:200])
 
 
+@shared_task
+def recover_stuck_proposals():
+    """
+    Self-healing: find proposals stuck in pending/processing and retry them.
+    - pending for >30s: dispatch bootstrap_project
+    - processing for >5min: reset to pending and dispatch (task likely crashed)
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from projects.models import BootstrapProposal
+
+    now = timezone.now()
+
+    # Pending proposals that were never picked up (>30s old)
+    pending = BootstrapProposal.objects.filter(
+        status=BootstrapProposal.Status.PENDING,
+        updated_at__lt=now - timedelta(seconds=30),
+    )
+    for p in pending:
+        logger.info("Recovering pending proposal %s for project %s", p.id, p.project.name)
+        bootstrap_project.delay(str(p.id))
+
+    # Processing proposals stuck for >5min (task crashed)
+    stuck = BootstrapProposal.objects.filter(
+        status=BootstrapProposal.Status.PROCESSING,
+        updated_at__lt=now - timedelta(minutes=5),
+    )
+    for p in stuck:
+        logger.warning("Recovering stuck proposal %s for project %s", p.id, p.project.name)
+        p.status = BootstrapProposal.Status.PENDING
+        p.error_message = "Auto-recovered from stuck processing state"
+        p.save(update_fields=["status", "error_message", "updated_at"])
+        bootstrap_project.delay(str(p.id))
+
+
 def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_message=""):
     """Send bootstrap status update via WebSocket."""
     from asgiref.sync import async_to_sync

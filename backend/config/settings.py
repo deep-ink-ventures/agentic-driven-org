@@ -147,6 +147,10 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 1800}
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BEAT_SCHEDULE = {
+    "recover-stuck-proposals": {
+        "task": "projects.tasks.recover_stuck_proposals",
+        "schedule": 60,
+    },
     "run-hourly-actions": {
         "task": "agents.tasks.run_scheduled_actions",
         "schedule": 3600,
