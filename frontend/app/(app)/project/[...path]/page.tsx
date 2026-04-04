@@ -946,8 +946,8 @@ export default function ProjectDetailPage() {
             Departments
           </p>
           {project.departments.map((dept) => {
-            const activeCount = dept.agents.filter((a) => a.is_active && !a.is_leader).length;
-            const totalCount = dept.agents.filter((a) => !a.is_leader).length;
+            const activeCount = dept.agents.filter((a) => a.is_active).length;
+            const totalCount = dept.agents.length;
             return (
               <button
                 key={dept.id}
