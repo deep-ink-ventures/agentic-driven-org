@@ -110,12 +110,16 @@ class BootstrapApproveView(APIView):
                     doc.tags.add(tag)
 
             if not department.agents.filter(is_leader=True).exists():
+                leader_bp = DEPARTMENTS[department_type]["leader"]
+                leader_needs_config = any(
+                    s.get("required") for s in leader_bp.config_schema.values()
+                )
                 Agent.objects.create(
                     name=f"Head of {department.name}",
                     agent_type="leader",
                     department=department,
                     is_leader=True,
-                    is_active=False,
+                    is_active=not leader_needs_config,
                     instructions=f"Lead the {department.name} department for project: {project.name}. Goal: {project.goal[:200]}",
                 )
 
@@ -124,11 +128,16 @@ class BootstrapApproveView(APIView):
                 agent_type = agent_data["agent_type"]
                 if agent_type not in available_workforce:
                     continue
+                bp = available_workforce[agent_type]
+                needs_config = any(
+                    s.get("required") for s in bp.config_schema.values()
+                )
                 Agent.objects.create(
                     name=agent_data["name"],
                     agent_type=agent_type,
                     department=department,
                     is_leader=False,
+                    is_active=not needs_config,
                     instructions=agent_data.get("instructions", ""),
                 )
 

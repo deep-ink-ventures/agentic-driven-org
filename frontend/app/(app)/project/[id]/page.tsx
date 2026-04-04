@@ -755,6 +755,19 @@ export default function ProjectDetailPage() {
       .then(([proj, t]) => {
         setProject(proj);
         setTasks(t);
+        // Sync selected dept/agent with fresh data
+        setSelectedDept((prev) => {
+          if (!prev) return prev;
+          return proj.departments.find((d) => d.id === prev.id) ?? prev;
+        });
+        setSelectedAgent((prev) => {
+          if (!prev) return prev;
+          for (const dept of proj.departments) {
+            const fresh = dept.agents.find((a) => a.id === prev.id);
+            if (fresh) return fresh;
+          }
+          return prev;
+        });
       })
       .catch(() => {})
       .finally(() => setLoading(false));
