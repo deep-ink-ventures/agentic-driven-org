@@ -6,10 +6,12 @@ from agents.models import Agent
 class AgentSummarySerializer(serializers.ModelSerializer):
     pending_task_count = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
+    effective_config = serializers.SerializerMethodField()
+    config_source = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
-        fields = ["id", "name", "agent_type", "is_leader", "is_active", "instructions", "config", "auto_actions", "internal_state", "pending_task_count", "tags", "created_at"]
+        fields = ["id", "name", "agent_type", "is_leader", "is_active", "instructions", "config", "auto_actions", "internal_state", "pending_task_count", "tags", "effective_config", "config_source", "created_at"]
         read_only_fields = fields
 
     def get_pending_task_count(self, obj):
@@ -22,16 +24,41 @@ class AgentSummarySerializer(serializers.ModelSerializer):
         except Exception:
             return []
 
+    def get_effective_config(self, obj):
+        merged = {}
+        pc = obj.department.project.config
+        if pc and pc.config:
+            merged.update(pc.config)
+        if obj.department.config:
+            merged.update(obj.department.config)
+        merged.update(obj.config)
+        return merged
+
+    def get_config_source(self, obj):
+        sources = {}
+        pc = obj.department.project.config
+        if pc and pc.config:
+            for k in pc.config:
+                sources[k] = "project"
+        if obj.department.config:
+            for k in obj.department.config:
+                sources[k] = "department"
+        for k in obj.config:
+            sources[k] = "agent"
+        return sources
+
 
 class DepartmentDetailSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="department_type", read_only=True)
     display_name = serializers.SerializerMethodField()
     description = serializers.SerializerMethodField()
     agents = AgentSummarySerializer(many=True, read_only=True)
+    config = serializers.JSONField(read_only=True)
+    config_schema = serializers.SerializerMethodField()
 
     class Meta:
         model = Department
-        fields = ["id", "department_type", "name", "display_name", "description", "agents", "created_at"]
+        fields = ["id", "department_type", "name", "display_name", "description", "agents", "config", "config_schema", "created_at"]
         read_only_fields = fields
 
     def get_display_name(self, obj):
@@ -41,6 +68,10 @@ class DepartmentDetailSerializer(serializers.ModelSerializer):
         from agents.blueprints import DEPARTMENTS
         dept = DEPARTMENTS.get(obj.department_type)
         return dept["description"] if dept else ""
+
+    def get_config_schema(self, obj):
+        from agents.blueprints import get_department_config_schema
+        return get_department_config_schema(obj.department_type)
 
 
 class ProjectDetailSerializer(serializers.ModelSerializer):
