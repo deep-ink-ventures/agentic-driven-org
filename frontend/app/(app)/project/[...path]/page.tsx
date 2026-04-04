@@ -514,11 +514,21 @@ function AgentConfigEditor({
                           ? (config[key] as string)
                           : JSON.stringify(config[key])
                     }
+                    placeholder={
+                      agent.effective_config[key] != null && !(key in config)
+                        ? String(agent.effective_config[key])
+                        : (spec.title || key)
+                    }
                     onChange={(e) =>
                       setConfig({ ...config, [key]: e.target.value })
                     }
                     className="bg-bg-input border-border text-text-primary text-xs font-mono"
                   />
+                  {agent.config_source[key] && agent.config_source[key] !== "agent" && !(key in config) && (
+                    <p className="text-[10px] text-accent-gold mt-0.5">
+                      Inherited from {agent.config_source[key]}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

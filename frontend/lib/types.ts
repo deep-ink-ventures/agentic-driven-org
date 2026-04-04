@@ -62,6 +62,8 @@ export interface AgentSummary {
   config: Record<string, unknown>;
   auto_actions: Record<string, boolean>;
   pending_task_count: number;
+  effective_config: Record<string, unknown>;
+  config_source: Record<string, string>;
   tags: string[];
   created_at: string;
 }
@@ -71,6 +73,8 @@ export interface DepartmentDetail {
   department_type: string;
   display_name: string;
   description: string;
+  config: Record<string, unknown>;
+  config_schema: Record<string, unknown>;
   agents: AgentSummary[];
   created_at: string;
 }
