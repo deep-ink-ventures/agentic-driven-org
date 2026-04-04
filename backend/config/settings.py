@@ -161,6 +161,10 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 86400,
         "args": ["daily"],
     },
+    "archive-stale-documents": {
+        "task": "projects.tasks.archive_stale_documents",
+        "schedule": 86400,
+    },
 }
 
 REST_FRAMEWORK = {

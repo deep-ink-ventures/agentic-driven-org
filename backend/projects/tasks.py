@@ -148,6 +148,24 @@ def recover_stuck_proposals():
         bootstrap_project.delay(str(p.id))
 
 
+@shared_task
+def archive_stale_documents():
+    """Daily: archive research documents older than 30 days."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from projects.models import Document
+
+    cutoff = timezone.now() - timedelta(days=30)
+    count = Document.objects.filter(
+        doc_type=Document.DocType.RESEARCH,
+        is_archived=False,
+        created_at__lt=cutoff,
+    ).update(is_archived=True)
+
+    if count:
+        logger.info("Archived %d stale research documents", count)
+
+
 def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_message="", phase=""):
     """Send bootstrap status update via WebSocket."""
     from asgiref.sync import async_to_sync
