@@ -463,13 +463,13 @@ function AgentConfigEditor({
             <div className="space-y-4">
               {Object.entries(schema.properties).map(([key, spec]) => (
                 <div key={key}>
-                  <label className="text-sm text-text-primary font-medium block mb-0.5">
-                    {spec.title || key}
-                    {requiredKeys.has(key) && <span className="text-flag-critical ml-0.5">*</span>}
-                  </label>
-                  <p className="text-xs text-text-secondary mb-2">
-                    {spec.description}
-                  </p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs text-text-primary font-medium">
+                      {spec.title || key}
+                    </span>
+                    {requiredKeys.has(key) && <span className="text-flag-critical text-xs">*</span>}
+                    <span className="text-xs text-text-secondary">{spec.description}</span>
+                  </div>
                   <Input
                     value={
                       config[key] == null
@@ -482,7 +482,7 @@ function AgentConfigEditor({
                       setConfig({ ...config, [key]: e.target.value })
                     }
                     placeholder={spec.title || key}
-                    className="bg-bg-input border-border text-text-primary text-sm"
+                    className="bg-bg-input border-border text-text-primary text-xs"
                   />
                 </div>
               ))}
