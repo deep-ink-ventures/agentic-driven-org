@@ -669,7 +669,7 @@ function AgentDetailView({
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
               Skills
             </h3>
-            <div className="text-xs text-text-primary prose prose-invert prose-xs max-w-none">
+            <div className="prose prose-invert prose-sm max-w-none text-text-primary">
               <ReactMarkdown>{blueprint.skills_description}</ReactMarkdown>
             </div>
           </div>
@@ -752,7 +752,7 @@ function AgentDetailView({
                 </Button>
               </div>
               {instructions ? (
-                <div className="text-xs text-text-primary prose prose-invert prose-xs max-w-none">
+                <div className="prose prose-invert prose-sm max-w-none text-text-primary">
                   <ReactMarkdown>{instructions}</ReactMarkdown>
                 </div>
               ) : (
