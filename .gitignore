@@ -27,3 +27,6 @@ frontend/.next/
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Worktrees
+.worktrees/
