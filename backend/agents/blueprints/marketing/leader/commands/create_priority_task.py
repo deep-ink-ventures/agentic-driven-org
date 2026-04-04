@@ -23,7 +23,7 @@ def create_priority_task(self, agent: Agent) -> dict:
         .values_list("id", "name", "agent_type")
     )
     if not workforce:
-        return {"exec_summary": "No workforce agents in department", "step_plan": ""}
+        return None
 
     workforce_desc = "\n".join(f"- {name} ({atype})" for _, name, atype in workforce)
 

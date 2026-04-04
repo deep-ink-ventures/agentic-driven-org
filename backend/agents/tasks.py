@@ -32,6 +32,10 @@ def run_scheduled_actions(schedule: str):
                 # Run the command to get task details
                 result = blueprint.run_command(cmd_name, agent)
 
+                if result is None:
+                    logger.info("Command %s for %s returned None — skipping", cmd_name, agent.name)
+                    continue
+
                 task = AgentTask.objects.create(
                     agent=agent,
                     status=AgentTask.Status.QUEUED,
@@ -117,6 +121,10 @@ def create_next_leader_task(leader_agent_id: str):
 
     try:
         proposal = blueprint.generate_task_proposal(agent)
+
+        if proposal is None:
+            logger.info("Leader %s has nothing to propose (no active workforce)", agent.name)
+            return
 
         target_type = proposal.get("target_agent_type")
         if target_type:

@@ -741,17 +741,24 @@ function AgentDetailView({
               </div>
             </>
           ) : (
-            <div
-              onClick={() => setEditingInstructions(true)}
-              className="flex-1 rounded-lg border border-border bg-bg-surface p-4 cursor-text hover:border-accent-gold/30 transition-colors overflow-y-auto"
-            >
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex justify-end mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingInstructions(true)}
+                  className="border-border text-text-secondary hover:text-text-primary text-xs h-7"
+                >
+                  <Pencil className="h-3 w-3 mr-1" /> Edit
+                </Button>
+              </div>
               {instructions ? (
                 <div className="prose prose-invert prose-sm max-w-none text-text-primary">
                   <ReactMarkdown>{instructions}</ReactMarkdown>
                 </div>
               ) : (
                 <p className="text-text-secondary/50 text-sm italic">
-                  Click to add custom instructions...
+                  No custom instructions set.
                 </p>
               )}
             </div>
@@ -864,23 +871,30 @@ export default function ProjectDetailPage() {
           <p className="text-[10px] uppercase text-text-secondary font-medium px-2 mb-2">
             Departments
           </p>
-          {project.departments.map((dept) => (
-            <button
-              key={dept.id}
-              onClick={() => {
-                setView("department");
-                setSelectedDept(dept);
-                setSelectedAgent(null);
-              }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                selectedDept?.id === dept.id && view !== "dashboard"
-                  ? "bg-accent-gold/10 text-accent-gold"
-                  : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
-              }`}
-            >
-              {dept.display_name}
-            </button>
-          ))}
+          {project.departments.map((dept) => {
+            const activeCount = dept.agents.filter((a) => a.is_active && !a.is_leader).length;
+            const totalCount = dept.agents.filter((a) => !a.is_leader).length;
+            return (
+              <button
+                key={dept.id}
+                onClick={() => {
+                  setView("department");
+                  setSelectedDept(dept);
+                  setSelectedAgent(null);
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  selectedDept?.id === dept.id && view !== "dashboard"
+                    ? "bg-accent-gold/10 text-accent-gold"
+                    : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
+                }`}
+              >
+                <span className="text-sm">{dept.display_name}</span>
+                <span className="block text-[10px] mt-0.5 opacity-60">
+                  {activeCount}/{totalCount} agents active
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
