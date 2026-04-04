@@ -672,8 +672,17 @@ function AgentDetailView({
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
               Skills
             </h3>
-            <div className="prose prose-invert prose-sm max-w-none text-text-primary">
-              <ReactMarkdown>{blueprint.skills_description}</ReactMarkdown>
+            <div className="space-y-1.5">
+              {blueprint.skills_description.split("\n").filter(Boolean).map((line, i) => {
+                const match = line.match(/^- \*\*(.+?)\*\*:\s*(.+)$/);
+                if (!match) return null;
+                return (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className="text-text-primary font-mono">{match[1]}</span>
+                    <span className="text-text-secondary">{match[2]}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div>
