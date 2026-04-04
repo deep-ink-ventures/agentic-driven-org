@@ -165,6 +165,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "projects.tasks.archive_stale_documents",
         "schedule": 86400,
     },
+    "monitor-pending-webhooks": {
+        "task": "integrations.tasks.monitor_pending_webhooks",
+        "schedule": 300,
+    },
 }
 
 REST_FRAMEWORK = {
