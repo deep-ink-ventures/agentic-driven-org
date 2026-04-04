@@ -68,6 +68,7 @@ export interface DepartmentDetail {
   id: string;
   department_type: string;
   display_name: string;
+  description: string;
   agents: AgentSummary[];
   created_at: string;
 }

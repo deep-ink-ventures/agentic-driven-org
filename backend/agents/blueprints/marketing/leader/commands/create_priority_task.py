@@ -44,19 +44,26 @@ def create_priority_task(self, agent: Agent) -> dict:
 {awaiting_text}
 
 # Task
-Propose the single highest-value task for one of the workforce agents above. Consider:
+Propose the single highest-value initiative for this department. This may involve one agent or multiple agents working together.
+
+Consider:
 - Recent research findings (web researcher, lu.ma researcher)
 - Current campaign status and messaging
 - Engagement metrics and timing
 - Project goal alignment
 
-Include clear branding and tone instructions in the task. Specify timing if relevant.
+For each agent that should be involved, create a task with clear branding and tone instructions. If only one agent is needed, that's fine too.
 
 Respond with JSON:
 {{
-    "target_agent_type": "one of: web_researcher, luma_researcher, reddit, twitter, email_marketing",
-    "exec_summary": "One-line description of the task",
-    "step_plan": "Detailed step-by-step plan with branding/tone guidance"
+    "exec_summary": "One-line description of the initiative",
+    "tasks": [
+        {{
+            "target_agent_type": "agent type from the list above",
+            "exec_summary": "What this agent should do",
+            "step_plan": "Detailed step-by-step plan with branding/tone guidance"
+        }}
+    ]
 }}"""
 
     response, _usage = call_claude(
@@ -67,10 +74,14 @@ Respond with JSON:
 
     try:
         data = json.loads(response)
+        tasks = data.get("tasks", [])
+        if not tasks:
+            return None
+        # Return the first task for the chain, but include all tasks
+        # The caller (create_next_leader_task) will create tasks for each
         return {
-            "target_agent_type": data.get("target_agent_type"),
-            "exec_summary": data.get("exec_summary", "Priority task"),
-            "step_plan": data.get("step_plan", response),
+            "exec_summary": data.get("exec_summary", "Priority initiative"),
+            "tasks": tasks,
         }
     except (json.JSONDecodeError, KeyError):
-        return {"exec_summary": "Priority task", "step_plan": response}
+        return {"exec_summary": "Priority task", "tasks": []}

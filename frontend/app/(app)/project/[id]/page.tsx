@@ -337,13 +337,13 @@ function DepartmentView({
 
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-6">{dept.display_name}</h2>
+      <h2 className="text-2xl font-semibold mb-2">{dept.display_name}</h2>
+      {dept.description && (
+        <p className="text-sm text-text-secondary mb-6">{dept.description}</p>
+      )}
 
       {leader && (
         <div className="mb-6">
-          <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
-            Department Leader
-          </h3>
           <AgentCard
             agent={leader}
             onClick={() => onSelectAgent(leader)}
@@ -460,14 +460,14 @@ function AgentConfigEditor({
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
               Configuration
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {Object.entries(schema.properties).map(([key, spec]) => (
                 <div key={key}>
-                  <label className="text-xs text-text-primary font-medium block mb-1">
+                  <label className="text-sm text-text-primary font-medium block mb-0.5">
                     {spec.title || key}
                     {requiredKeys.has(key) && <span className="text-flag-critical ml-0.5">*</span>}
                   </label>
-                  <p className="text-[10px] text-text-secondary mb-1">
+                  <p className="text-xs text-text-secondary mb-2">
                     {spec.description}
                   </p>
                   <Input
@@ -481,7 +481,8 @@ function AgentConfigEditor({
                     onChange={(e) =>
                       setConfig({ ...config, [key]: e.target.value })
                     }
-                    className="bg-bg-input border-border text-text-primary text-xs font-mono"
+                    placeholder={spec.title || key}
+                    className="bg-bg-input border-border text-text-primary text-sm"
                   />
                 </div>
               ))}

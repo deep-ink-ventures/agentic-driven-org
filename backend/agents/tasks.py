@@ -126,34 +126,46 @@ def create_next_leader_task(leader_agent_id: str):
             logger.info("Leader %s has nothing to propose (no active workforce)", agent.name)
             return
 
-        target_type = proposal.get("target_agent_type")
-        if target_type:
-            target_agent = Agent.objects.filter(
-                department=agent.department,
-                agent_type=target_type,
-                is_active=True,
-                is_leader=False,
-            ).first()
-            if target_agent:
+        # Multi-task format: proposal has "tasks" list
+        tasks = proposal.get("tasks", [])
+        if tasks:
+            workforce_agents = {
+                a.agent_type: a
+                for a in Agent.objects.filter(
+                    department=agent.department,
+                    is_active=True,
+                    is_leader=False,
+                )
+            }
+            created = 0
+            for task_data in tasks:
+                target_type = task_data.get("target_agent_type")
+                target_agent = workforce_agents.get(target_type)
+                if not target_agent:
+                    logger.warning("Leader %s: no active agent of type %s", agent.name, target_type)
+                    continue
                 AgentTask.objects.create(
                     agent=target_agent,
                     created_by_agent=agent,
                     status=AgentTask.Status.AWAITING_APPROVAL,
                     auto_execute=False,
-                    exec_summary=proposal.get("exec_summary", "Priority task"),
-                    step_plan=proposal.get("step_plan", ""),
+                    exec_summary=task_data.get("exec_summary", "Priority task"),
+                    step_plan=task_data.get("step_plan", ""),
                 )
-                logger.info("Leader %s proposed task for %s: %s", agent.name, target_agent.name, proposal.get("exec_summary", "")[:80])
-                return
+                created += 1
+            logger.info("Leader %s proposed %d task(s): %s", agent.name, created, proposal.get("exec_summary", "")[:80])
+            return
 
-        AgentTask.objects.create(
-            agent=agent,
-            status=AgentTask.Status.AWAITING_APPROVAL,
-            auto_execute=False,
-            exec_summary=proposal.get("exec_summary", "Leader task"),
-            step_plan=proposal.get("step_plan", ""),
-        )
-        logger.info("Leader %s proposed own task: %s", agent.name, proposal.get("exec_summary", "")[:80])
+        # Fallback: single task on the leader itself
+        if proposal.get("exec_summary"):
+            AgentTask.objects.create(
+                agent=agent,
+                status=AgentTask.Status.AWAITING_APPROVAL,
+                auto_execute=False,
+                exec_summary=proposal.get("exec_summary", "Leader task"),
+                step_plan=proposal.get("step_plan", ""),
+            )
+            logger.info("Leader %s proposed own task: %s", agent.name, proposal.get("exec_summary", "")[:80])
 
     except Exception as e:
         logger.exception("Failed to create next leader task for %s: %s", agent.name, e)
