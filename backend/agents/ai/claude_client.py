@@ -35,7 +35,7 @@ def call_claude(
     system_prompt: str,
     user_message: str,
     model: str = "claude-sonnet-4-6",
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
 ) -> tuple[str, dict]:
     """
     Call Claude API and return (response_text, usage_dict).

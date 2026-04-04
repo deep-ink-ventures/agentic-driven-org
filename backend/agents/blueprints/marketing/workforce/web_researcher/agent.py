@@ -64,12 +64,40 @@ Respond with your findings JSON and report."""
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
             model=self.get_model(agent),
+            max_tokens=16384,
         )
         task.token_usage = usage
         task.save(update_fields=["token_usage"])
 
-        try:
-            data = json.loads(response)
-            return data.get("report", response)
-        except (json.JSONDecodeError, KeyError):
-            return response
+        from agents.ai.claude_client import parse_json_response
+        from projects.models import Document, Tag
+
+        data = parse_json_response(response)
+        report = data.get("report", response) if data else response
+
+        # Store research findings as a department document
+        department = agent.department
+        findings = data.get("findings", []) if data else []
+        if findings:
+            doc_content = f"# Research: {task.exec_summary}\n\n"
+            for f in findings:
+                doc_content += f"## {f.get('title', 'Finding')}\n"
+                if f.get("url"):
+                    doc_content += f"**Source:** {f['url']}\n"
+                if f.get("relevance"):
+                    doc_content += f"**Relevance:** {f['relevance']}\n"
+                doc_content += f"\n{f.get('summary', '')}\n"
+                if f.get("suggested_angle"):
+                    doc_content += f"\n**Suggested angle:** {f['suggested_angle']}\n"
+                doc_content += "\n---\n\n"
+
+            doc = Document.objects.create(
+                title=f"Research: {task.exec_summary[:80]}",
+                content=doc_content,
+                department=department,
+            )
+            tag, _ = Tag.objects.get_or_create(name="research")
+            doc.tags.add(tag)
+            logger.info("Stored research findings as document %s", doc.id)
+
+        return report

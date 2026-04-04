@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 _command_registry: dict[str, dict] = {}
 
 
-def command(name: str, description: str, schedule: str | None = None, model: str | None = None):
+def command(name: str, description: str, schedule: str | None = None, model: str | None = None, max_tokens: int | None = None):
     """
     Decorator to register a method as a blueprint command.
 
@@ -26,9 +26,10 @@ def command(name: str, description: str, schedule: str | None = None, model: str
         description: Human-readable description
         schedule: "hourly", "daily", or None (on-demand only)
         model: Override model for this command (e.g. "claude-haiku-4-5")
+        max_tokens: Override max output tokens for this command
     """
     def decorator(func):
-        func._command_meta = {"name": name, "description": description, "schedule": schedule, "model": model}
+        func._command_meta = {"name": name, "description": description, "schedule": schedule, "model": model, "max_tokens": max_tokens}
         return func
     return decorator
 
