@@ -1,0 +1,210 @@
+name: Deploy to clients
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'deploy/**'
+      - 'landing-page/**'
+      - '*.md'
+  workflow_dispatch:
+    inputs:
+      client:
+        description: 'Deploy to a specific client (leave empty for all)'
+        required: false
+        default: ''
+
+jobs:
+  # Read client list and set up matrix
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      clients: ${{ steps.set-matrix.outputs.clients }}
+      region: ${{ steps.set-matrix.outputs.region }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: set-matrix
+        run: |
+          if [ -n "${{ github.event.inputs.client }}" ]; then
+            echo "clients=[\"${{ github.event.inputs.client }}\"]" >> $GITHUB_OUTPUT
+          else
+            echo "clients=$(jq -c '.clients' deploy/tenants.json)" >> $GITHUB_OUTPUT
+          fi
+          echo "region=$(jq -r '.region' deploy/tenants.json)" >> $GITHUB_OUTPUT
+
+  # Build backend image once
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          tags: agentdriven-backend:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/backend.tar
+
+      - name: Upload backend image
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image
+          path: /tmp/backend.tar
+          retention-days: 1
+
+  # Deploy to each client in parallel
+  deploy:
+    needs: [prepare, build-backend]
+    if: ${{ fromJson(needs.prepare.outputs.clients)[0] != null }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        client: ${{ fromJson(needs.prepare.outputs.clients) }}
+      fail-fast: false
+    env:
+      REGION: ${{ needs.prepare.outputs.region }}
+      CLIENT: ${{ matrix.client }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive resource names
+        id: names
+        run: |
+          CLIENT="${{ matrix.client }}"
+          CLIENT_UPPER=$(echo "${CLIENT}" | tr '[:lower:]' '[:upper:]')
+          echo "project=${CLIENT}-agentdriven" >> $GITHUB_OUTPUT
+          echo "client_upper=${CLIENT_UPPER}" >> $GITHUB_OUTPUT
+          echo "registry=${REGION}-docker.pkg.dev/${CLIENT}-agentdriven/${CLIENT}-agentdriven" >> $GITHUB_OUTPUT
+          echo "backend_service=${CLIENT}-backend" >> $GITHUB_OUTPUT
+          echo "frontend_service=${CLIENT}-frontend" >> $GITHUB_OUTPUT
+          echo "celery_vm=${CLIENT}-celery-vm" >> $GITHUB_OUTPUT
+          echo "domain=${CLIENT}.as.agentdriven.org" >> $GITHUB_OUTPUT
+          echo "secret_prefix=${CLIENT}-agentdriven" >> $GITHUB_OUTPUT
+          echo "vpc_connector=${CLIENT}-vpc-connector" >> $GITHUB_OUTPUT
+          echo "sql_connection=${CLIENT}-agentdriven:${REGION}:${CLIENT}-agentdriven-db" >> $GITHUB_OUTPUT
+          echo "bucket=${CLIENT}-agentdriven-storage" >> $GITHUB_OUTPUT
+          echo "zone=${REGION}-b" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets[format('GCP_SA_KEY_{0}', steps.names.outputs.client_upper)] }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Download backend image
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-image
+          path: /tmp
+
+      - name: Load and push backend image
+        run: |
+          docker load -i /tmp/backend.tar
+          docker tag agentdriven-backend:${{ github.sha }} ${{ steps.names.outputs.registry }}/backend:${{ github.sha }}
+          docker tag agentdriven-backend:${{ github.sha }} ${{ steps.names.outputs.registry }}/backend:latest
+          docker push ${{ steps.names.outputs.registry }}/backend:${{ github.sha }}
+          docker push ${{ steps.names.outputs.registry }}/backend:latest
+
+      - name: Build and push frontend image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=https://${{ steps.names.outputs.domain }} \
+            --build-arg NEXT_PUBLIC_PROJECT_NAME=Frontier \
+            -t ${{ steps.names.outputs.registry }}/frontend:${{ github.sha }} \
+            -t ${{ steps.names.outputs.registry }}/frontend:latest \
+            frontend/
+          docker push ${{ steps.names.outputs.registry }}/frontend:${{ github.sha }}
+          docker push ${{ steps.names.outputs.registry }}/frontend:latest
+
+      - name: Fetch secrets for Cloud Run env vars
+        id: secrets
+        run: |
+          PREFIX="${{ steps.names.outputs.secret_prefix }}"
+          PROJECT="${{ steps.names.outputs.project }}"
+          echo "django_sk=$(gcloud secrets versions access latest --secret=${PREFIX}-django-secret-key --project=${PROJECT})" >> $GITHUB_OUTPUT
+          echo "pg_pass=$(gcloud secrets versions access latest --secret=${PREFIX}-postgres-password --project=${PROJECT})" >> $GITHUB_OUTPUT
+          echo "anthropic_key=$(gcloud secrets versions access latest --secret=${PREFIX}-anthropic-api-key --project=${PROJECT})" >> $GITHUB_OUTPUT
+          echo "google_cid=$(gcloud secrets versions access latest --secret=${PREFIX}-google-client-id --project=${PROJECT})" >> $GITHUB_OUTPUT
+          echo "google_csecret=$(gcloud secrets versions access latest --secret=${PREFIX}-google-client-secret --project=${PROJECT})" >> $GITHUB_OUTPUT
+          echo "redis_host=$(gcloud redis instances describe ${CLIENT}-agentdriven-redis --region=${REGION} --project=${PROJECT} --format='value(host)')" >> $GITHUB_OUTPUT
+
+      - name: Deploy backend to Cloud Run
+        run: |
+          gcloud run deploy ${{ steps.names.outputs.backend_service }} \
+            --image=${{ steps.names.outputs.registry }}/backend:${{ github.sha }} \
+            --region=${REGION} \
+            --project=${{ steps.names.outputs.project }} \
+            --vpc-connector=${{ steps.names.outputs.vpc_connector }} \
+            --add-cloudsql-instances=${{ steps.names.outputs.sql_connection }} \
+            --allow-unauthenticated \
+            --memory=1Gi \
+            --cpu=2 \
+            --min-instances=0 \
+            --max-instances=3 \
+            --port=8000 \
+            --set-env-vars="\
+          DJANGO_SETTINGS_MODULE=config.settings,\
+          DJANGO_DEBUG=false,\
+          DJANGO_ALLOWED_HOSTS=${{ steps.names.outputs.domain }},\
+          DJANGO_SECRET_KEY=${{ steps.secrets.outputs.django_sk }},\
+          POSTGRES_DB=agentdriven,\
+          POSTGRES_USER=agentdriven,\
+          POSTGRES_PASSWORD=${{ steps.secrets.outputs.pg_pass }},\
+          POSTGRES_HOST=/cloudsql/${{ steps.names.outputs.sql_connection }},\
+          POSTGRES_PORT=5432,\
+          REDIS_URL=redis://${{ steps.secrets.outputs.redis_host }}:6379/0,\
+          GOOGLE_CLIENT_ID=${{ steps.secrets.outputs.google_cid }},\
+          GOOGLE_CLIENT_SECRET=${{ steps.secrets.outputs.google_csecret }},\
+          ANTHROPIC_API_KEY=${{ steps.secrets.outputs.anthropic_key }},\
+          STORAGE_BACKEND=gcs,\
+          GCS_BUCKET=${{ steps.names.outputs.bucket }},\
+          GCP_PROJECT_ID=${{ steps.names.outputs.project }},\
+          FRONTEND_URL=https://${{ steps.names.outputs.domain }},\
+          CORS_ALLOWED_ORIGINS=https://${{ steps.names.outputs.domain }},\
+          CSRF_TRUSTED_ORIGINS=https://${{ steps.names.outputs.domain }},\
+          ONLY_ALLOWLIST_CAN_SIGN_UP=true"
+
+      - name: Deploy frontend to Cloud Run
+        run: |
+          gcloud run deploy ${{ steps.names.outputs.frontend_service }} \
+            --image=${{ steps.names.outputs.registry }}/frontend:${{ github.sha }} \
+            --region=${REGION} \
+            --project=${{ steps.names.outputs.project }} \
+            --vpc-connector=${{ steps.names.outputs.vpc_connector }} \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=3 \
+            --port=3000
+
+      - name: Deploy Celery VM
+        run: |
+          gcloud compute ssh ${{ steps.names.outputs.celery_vm }} \
+            --zone=${{ steps.names.outputs.zone }} \
+            --project=${{ steps.names.outputs.project }} \
+            --command="
+              export CLIENT=${{ matrix.client }}
+              export PROJECT=${{ steps.names.outputs.project }}
+              export REGION=${REGION}
+              export REGISTRY_URL=${{ steps.names.outputs.registry }}
+              export SQL_CONNECTION=${{ steps.names.outputs.sql_connection }}
+              export SECRET_PREFIX=${{ steps.names.outputs.secret_prefix }}
+              export REDIS_HOST=${{ steps.secrets.outputs.redis_host }}
+              export SQL_DATABASE=agentdriven
+              export SQL_USER=agentdriven
+              export BUCKET_NAME=${{ steps.names.outputs.bucket }}
+              export DOMAIN=${{ steps.names.outputs.domain }}
+              bash -s
+            " < deploy/scripts/deploy-celery-vm.sh
