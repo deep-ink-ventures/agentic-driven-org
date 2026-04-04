@@ -155,71 +155,142 @@ All functions are stateless — take the token as a parameter. The token comes f
 
 Add `PyGithub` or use plain `requests` with the GitHub REST API. I recommend `requests` — it's already a dependency and we only need a few endpoints. No new package needed.
 
-## 4. Webhook Endpoint
+## 4. Generic Webhook System (in integrations/)
 
-### URL
+### Architecture
+
+Webhooks are NOT hardwired to GitHub. Each integration that supports webhooks registers an adapter. The system is generic — `github` is just the first adapter.
+
+### URL pattern
 
 ```
-POST /api/projects/{project_id}/webhooks/github/
+POST /api/webhooks/{integration_slug}/{project_id}/{webhook_secret}/
 ```
 
-No auth header — GitHub webhooks use HMAC signature verification via `X-Hub-Signature-256` header.
+Examples:
+- `POST /api/webhooks/github/abc123/hmac-secret-here/`
+- `POST /api/webhooks/sendgrid/abc123/another-secret/`
 
-### Flow
+The secret is in the URL — no database lookup needed for initial auth. The adapter then does its own verification (e.g. GitHub uses HMAC signature on the body, SendGrid uses basic auth).
 
-1. GitHub sends webhook event (workflow_run, pull_request, etc.)
-2. Endpoint looks up the project, finds the engineering department
-3. Reads `webhook_secret` from department config
-4. Verifies HMAC signature
-5. Parses event type and payload
-6. For `workflow_run.completed`:
-   - Finds tasks in `internal_state` that reference this `run_id`
-   - Fetches logs via GitHub API
-   - Stores logs in the task report
-   - Unblocks dependent tasks
-7. For `pull_request.closed` (merged):
-   - Updates related task status
+### Webhook adapter interface
 
-### Webhook view
+```
+integrations/
+├── webhooks/
+│   ├── __init__.py          # adapter registry
+│   ├── base.py              # BaseWebhookAdapter ABC
+│   └── adapters/
+│       ├── __init__.py
+│       └── github.py        # GitHubWebhookAdapter
+```
 
 ```python
-class GitHubWebhookView(APIView):
-    permission_classes = [AllowAny]  # Auth via HMAC signature
+# integrations/webhooks/base.py
+class BaseWebhookAdapter(ABC):
+    slug: str = ""
     
-    def post(self, request, project_id):
-        # Verify signature
-        # Parse event
-        # Dispatch to handler
+    @abstractmethod
+    def verify(self, request, webhook_secret: str) -> bool:
+        """Verify the webhook is authentic."""
+
+    @abstractmethod
+    def parse_event(self, request) -> dict:
+        """Parse the webhook payload into a normalized event dict."""
+        # Returns: {"event_type": "workflow_run.completed", "data": {...}}
+
+    @abstractmethod
+    def handle_event(self, project, event: dict) -> None:
+        """Process the event — unblock tasks, store logs, etc."""
+```
+
+```python
+# integrations/webhooks/adapters/github.py
+class GitHubWebhookAdapter(BaseWebhookAdapter):
+    slug = "github"
+    
+    def verify(self, request, webhook_secret):
+        # HMAC-SHA256 signature verification via X-Hub-Signature-256
+        
+    def parse_event(self, request):
+        # Parse X-GitHub-Event header + JSON body
+        
+    def handle_event(self, project, event):
+        # workflow_run.completed → find pending tasks, fetch logs, unblock
+        # pull_request.closed → update task status
+```
+
+### Adapter registry
+
+```python
+# integrations/webhooks/__init__.py
+WEBHOOK_ADAPTERS = {}
+
+def register_adapter(adapter_class):
+    WEBHOOK_ADAPTERS[adapter_class.slug] = adapter_class()
+
+def get_adapter(slug):
+    return WEBHOOK_ADAPTERS.get(slug)
+```
+
+### Generic webhook view
+
+Lives in `integrations/webhooks/views.py`:
+
+```python
+class WebhookReceiveView(APIView):
+    permission_classes = [AllowAny]  # Auth via adapter.verify()
+    
+    def post(self, request, integration_slug, project_id, webhook_secret):
+        adapter = get_adapter(integration_slug)
+        if not adapter:
+            return Response(status=404)
+        if not adapter.verify(request, webhook_secret):
+            return Response(status=403)
+        event = adapter.parse_event(request)
+        adapter.handle_event(project, event)
+        return Response(status=200)
+```
+
+### URL routing
+
+```python
+# integrations/urls.py
+urlpatterns = [
+    path("webhooks/<slug:integration_slug>/<uuid:project_id>/<str:webhook_secret>/",
+         WebhookReceiveView.as_view(), name="webhook-receive"),
+]
+
+# config/urls.py
+path("api/", include("integrations.urls")),
 ```
 
 ### Security
 
-- HMAC-SHA256 signature verification — same as GitHub's standard webhook security
-- Project-scoped — webhook URL contains project_id, secret is per-department
-- Only processes events for projects the webhook was configured for
-- Rate-limited to prevent abuse
+- Webhook secret in URL — generated per-project per-integration, stored in department config
+- Adapter-specific verification on top (HMAC for GitHub, etc.)
+- No database lookup for initial routing — the URL itself contains everything needed
 
-## 5. Beat Task: monitor_github_workflows
+## 5. Beat Task: monitor_pending_webhooks
 
-### Cleanup/fallback beat
+### Generic cleanup beat — not GitHub-specific
 
-`monitor_github_workflows` runs every 5 minutes:
+`monitor_pending_webhooks` runs every 5 minutes:
 
-1. Finds all agents with `internal_state` containing `pending_github_runs`
-2. For each pending run, checks status via GitHub API
-3. If completed and no webhook was received (missed event), processes it:
-   - Fetches logs
-   - Stores in task report
-   - Unblocks dependents
-4. Cleans up runs older than 1 hour (stale)
+1. Finds all agents with `internal_state` containing `pending_webhook_events`
+2. Groups by integration slug
+3. For each integration, calls `adapter.check_pending(events)` — the adapter knows how to poll its service
+4. If an event completed and no webhook was received, processes it
+5. Cleans up events older than 1 hour
 
-### Agent internal_state format
+### Agent internal_state format (generic)
 
 ```json
 {
-    "pending_github_runs": [
+    "pending_webhook_events": [
         {
-            "run_id": 12345,
+            "integration": "github",
+            "external_id": "12345",
             "repo": "owner/repo",
             "task_id": "uuid",
             "created_at": "2026-04-04T10:00:00Z"
@@ -227,6 +298,20 @@ class GitHubWebhookView(APIView):
     ]
 }
 ```
+
+### Adapter check_pending method
+
+```python
+class BaseWebhookAdapter(ABC):
+    # ... existing methods ...
+    
+    def check_pending(self, events: list[dict], config: dict) -> list[dict]:
+        """Check pending events via polling. Returns completed events with results."""
+        # Default: return empty (adapter doesn't support polling)
+        return []
+```
+
+GitHub adapter implements this by calling `get_workflow_run()` for each pending run.
 
 ## 6. DEPARTMENTS Registry Update
 
@@ -263,8 +348,9 @@ Marketing gets an empty `config_schema` — backward compatible.
 - Agent model: add `get_config_value()` method (no migration)
 - Agent serializer: add `effective_config`, `config_source`
 - Integration: create `integrations/github_dev/service.py`
-- Webhook: create `projects/views/webhook_view.py`
-- Beat: add `monitor_github_workflows` to projects/tasks.py
+- Integration: create `integrations/webhooks/` (base, registry, views, github adapter)
+- Integration: create `integrations/urls.py`
+- Beat: add `monitor_pending_webhooks` to `integrations/tasks.py`
 - Registry: add `config_schema` to DEPARTMENTS entries
 - Frontend: update config tab to show inherited values
 
@@ -275,8 +361,9 @@ Marketing gets an empty `config_schema` — backward compatible.
 - Cascading config lookup (agent → department → project)
 - Effective config + source in serializer
 - GitHub integration service (integrations/github_dev/service.py)
-- Webhook endpoint with HMAC verification
-- monitor_github_workflows beat task
+- Generic webhook system in integrations/ (base adapter, registry, view, GitHub adapter)
+- integrations/urls.py with webhook routing
+- monitor_pending_webhooks beat task (generic, adapter-driven)
 - Frontend config tab shows inherited values
 
 **Out of scope (spec 2):**
@@ -284,3 +371,4 @@ Marketing gets an empty `config_schema` — backward compatible.
 - Agent bootstrap commands (create project, set up webhooks)
 - Claude Code GitHub Action workflow file
 - PR management workflows
+- Additional webhook adapters (sendgrid, luma, etc.)
