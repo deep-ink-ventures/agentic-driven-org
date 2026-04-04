@@ -84,4 +84,5 @@ Respond with JSON:
             "tasks": tasks,
         }
     except (json.JSONDecodeError, KeyError):
-        return {"exec_summary": "Priority task", "tasks": []}
+        logger.warning("Failed to parse create-priority-task response: %s", response[:200])
+        return None

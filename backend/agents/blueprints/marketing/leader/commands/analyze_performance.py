@@ -51,4 +51,5 @@ Respond with JSON:
     try:
         return json.loads(response)
     except (json.JSONDecodeError, KeyError):
-        return {"performance_summary": response, "wins": [], "issues": [], "recommendations": [], "proposed_tasks": []}
+        logger.warning("Failed to parse analyze-performance response: %s", response[:200])
+        return None

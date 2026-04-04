@@ -79,4 +79,5 @@ Respond with JSON:
             "follow_up": data.get("follow_up"),
         }
     except (json.JSONDecodeError, KeyError):
-        return {"campaign_name": "Campaign", "campaign_summary": response, "tasks": []}
+        logger.warning("Failed to parse create-campaign response: %s", response[:200])
+        return None

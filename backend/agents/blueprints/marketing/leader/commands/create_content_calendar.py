@@ -69,4 +69,5 @@ Respond with JSON:
             "days": data.get("days", []),
         }
     except (json.JSONDecodeError, KeyError):
-        return {"calendar_summary": response, "days": []}
+        logger.warning("Failed to parse create-content-calendar response: %s", response[:200])
+        return None
