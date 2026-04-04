@@ -85,6 +85,8 @@ def execute_agent_task(self, task_id: str):
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "report", "completed_at", "updated_at"])
 
+        _unblock_dependents(task)
+
         logger.info("Task %s completed: %s", task_id, task.exec_summary[:80])
 
     except Exception as e:
@@ -93,6 +95,27 @@ def execute_agent_task(self, task_id: str):
         task.error_message = str(e)[:500]
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+
+
+def _unblock_dependents(completed_task):
+    """When a task completes, unblock any tasks waiting on it."""
+    from agents.models import AgentTask
+
+    dependents = AgentTask.objects.filter(
+        blocked_by=completed_task,
+        status=AgentTask.Status.AWAITING_DEPENDENCIES,
+    ).select_related("agent")
+
+    for dep in dependents:
+        if dep.command_name and dep.agent.is_action_enabled(dep.command_name):
+            dep.status = AgentTask.Status.QUEUED
+            dep.save(update_fields=["status", "updated_at"])
+            execute_agent_task.delay(str(dep.id))
+            logger.info("Auto-unblocked and queued task %s (command: %s)", dep.id, dep.command_name)
+        else:
+            dep.status = AgentTask.Status.AWAITING_APPROVAL
+            dep.save(update_fields=["status", "updated_at"])
+            logger.info("Unblocked task %s → awaiting approval", dep.id)
 
 
 @shared_task
@@ -127,8 +150,8 @@ def create_next_leader_task(leader_agent_id: str):
             return
 
         # Multi-task format: proposal has "tasks" list
-        tasks = proposal.get("tasks", [])
-        if tasks:
+        tasks_data = proposal.get("tasks", [])
+        if tasks_data:
             workforce_agents = {
                 a.agent_type: a
                 for a in Agent.objects.filter(
@@ -137,21 +160,43 @@ def create_next_leader_task(leader_agent_id: str):
                     is_leader=False,
                 )
             }
+            previous_task = None
             created = 0
-            for task_data in tasks:
+            for task_data in tasks_data:
                 target_type = task_data.get("target_agent_type")
                 target_agent = workforce_agents.get(target_type)
                 if not target_agent:
                     logger.warning("Leader %s: no active agent of type %s", agent.name, target_type)
                     continue
-                AgentTask.objects.create(
+
+                depends_on_previous = task_data.get("depends_on_previous", False)
+                command_name = task_data.get("command_name", "")
+
+                # Determine initial status
+                if depends_on_previous and previous_task:
+                    initial_status = AgentTask.Status.AWAITING_DEPENDENCIES
+                    blocked_by = previous_task
+                elif command_name and target_agent.is_action_enabled(command_name):
+                    initial_status = AgentTask.Status.QUEUED
+                    blocked_by = None
+                else:
+                    initial_status = AgentTask.Status.AWAITING_APPROVAL
+                    blocked_by = None
+
+                new_task = AgentTask.objects.create(
                     agent=target_agent,
                     created_by_agent=agent,
-                    status=AgentTask.Status.AWAITING_APPROVAL,
-                    auto_execute=False,
+                    status=initial_status,
+                    command_name=command_name,
+                    blocked_by=blocked_by,
                     exec_summary=task_data.get("exec_summary", "Priority task"),
                     step_plan=task_data.get("step_plan", ""),
                 )
+
+                if initial_status == AgentTask.Status.QUEUED:
+                    execute_agent_task.delay(str(new_task.id))
+
+                previous_task = new_task
                 created += 1
             logger.info("Leader %s proposed %d task(s): %s", agent.name, created, proposal.get("exec_summary", "")[:80])
             return
