@@ -186,10 +186,18 @@ class BaseBlueprint(ABC):
         department = agent.department
         project = department.project
 
-        docs = list(department.documents.values_list("title", "content"))
+        # Department documents — exclude archived, include type and age
+        docs = list(
+            department.documents
+            .filter(is_archived=False)
+            .values_list("title", "content", "doc_type", "created_at")
+        )
         docs_text = ""
-        for title, content in docs:
-            docs_text += f"\n\n--- {title} ---\n{content[:3000]}"
+        for title, content, doc_type, created_at in docs:
+            from django.utils import timezone
+            age = (timezone.now() - created_at).days
+            age_str = f", {age}d ago" if doc_type == "research" else ""
+            docs_text += f"\n\n--- [{doc_type}{age_str}] {title} ---\n{content[:3000]}"
 
         sibling_ids = list(
             department.agents.exclude(id=agent.id)
