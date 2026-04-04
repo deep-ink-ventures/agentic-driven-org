@@ -750,7 +750,7 @@ function AgentDetailView({
             </>
           ) : (
             <div
-              className="flex-1 min-h-0 rounded-lg border border-dashed border-border hover:border-accent-gold/40 p-4 cursor-text transition-colors overflow-y-auto"
+              className="flex-1 min-h-0 rounded-lg border border-dashed border-border hover:border-accent-gold/40 p-4 cursor-pointer transition-colors overflow-y-auto"
               onClick={() => setEditingInstructions(true)}
             >
               {instructions ? (
