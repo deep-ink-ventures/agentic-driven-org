@@ -467,9 +467,11 @@ function AgentConfigEditor({
                   </p>
                   <Input
                     value={
-                      typeof config[key] === "string"
-                        ? (config[key] as string)
-                        : JSON.stringify(config[key] ?? "")
+                      config[key] == null
+                        ? ""
+                        : typeof config[key] === "string"
+                          ? (config[key] as string)
+                          : JSON.stringify(config[key])
                     }
                     onChange={(e) =>
                       setConfig({ ...config, [key]: e.target.value })
