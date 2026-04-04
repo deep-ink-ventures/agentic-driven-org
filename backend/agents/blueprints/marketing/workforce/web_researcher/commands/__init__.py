@@ -1,6 +1,5 @@
-"""Web researcher agent commands registry."""
-from .research_trends import research_trends
-from .research_competitors import research_competitors
-from .find_content_opportunities import find_content_opportunities
+"""Web researcher commands registry."""
+from .research_gather import research_gather
+from .research_analyze import research_analyze
 
-ALL_COMMANDS = [research_trends, research_competitors, find_content_opportunities]
+ALL_COMMANDS = [research_gather, research_analyze]

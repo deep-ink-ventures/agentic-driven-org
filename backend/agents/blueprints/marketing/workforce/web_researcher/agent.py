@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.marketing.workforce.web_researcher.skills import format_skills
-from agents.blueprints.marketing.workforce.web_researcher.commands import research_trends, research_competitors, find_content_opportunities
+from agents.blueprints.marketing.workforce.web_researcher.commands import research_gather, research_analyze
 
 logger = logging.getLogger(__name__)
 
@@ -38,48 +38,102 @@ When executing tasks, respond with a JSON object:
         return format_skills()
 
     # Register commands
-    research_trends = research_trends
-    research_competitors = research_competitors
-    find_content_opportunities = find_content_opportunities
+    research_gather = research_gather
+    research_analyze = research_analyze
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        if task.command_name == "research-analyze":
+            return self._execute_analyze(agent, task)
+        return self._execute_gather(agent, task)
+
+    def _execute_gather(self, agent: Agent, task: AgentTask) -> str:
+        """Phase 1: Search and collect raw findings (Haiku)."""
         from agents.ai.claude_client import call_claude
         from integrations.websearch.service import search
 
-        # Extract search query from task
         query = task.exec_summary or ""
         search_results = search(query)
 
-        suffix = f"""Here are the web search results to analyze:
+        suffix = f"""Here are the web search results to organize:
 
 <search_results>
 {json.dumps(search_results, default=str, indent=2) if search_results else 'No results found.'}
 </search_results>
 
-Respond with your findings JSON and report."""
+Organize these results. Extract key facts, URLs, and relevance. Return structured JSON:
+{{
+    "findings": [
+        {{"title": "...", "url": "...", "relevance": "high|medium|low", "summary": "...", "raw_data": "..."}}
+    ]
+}}"""
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
-
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
-            model=self.get_model(agent),
+            model="claude-haiku-4-5",
+            max_tokens=8192,
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        # Create the analyze task as a dependent
+        from agents.models import AgentTask as TaskModel
+        TaskModel.objects.create(
+            agent=agent,
+            command_name="research-analyze",
+            status=TaskModel.Status.AWAITING_DEPENDENCIES,
+            blocked_by=task,
+            exec_summary=f"Analyze: {task.exec_summary}",
+            step_plan="Analyze the gathered research and produce strategic recommendations.",
+        )
+        logger.info("Created research-analyze task dependent on %s", task.id)
+
+        return response
+
+    def _execute_analyze(self, agent: Agent, task: AgentTask) -> str:
+        """Phase 2: Deep analysis of gathered data (Sonnet). Stores results as document."""
+        from agents.ai.claude_client import call_claude, parse_json_response
+        from projects.models import Document, Tag
+
+        # Read raw findings from the blocker task
+        raw_findings = ""
+        if task.blocked_by and task.blocked_by.report:
+            raw_findings = task.blocked_by.report
+
+        suffix = f"""Here are the raw research findings to analyze:
+
+<raw_research>
+{raw_findings or 'No raw findings available.'}
+</raw_research>
+
+Analyze these findings in the context of the project goal. Produce strategic recommendations.
+Return JSON:
+{{
+    "findings": [
+        {{"title": "...", "url": "...", "relevance": "high|medium|low", "summary": "...", "suggested_angle": "..."}}
+    ],
+    "report": "Executive summary of the analysis with key takeaways and recommended actions"
+}}"""
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model="claude-sonnet-4-6",
             max_tokens=16384,
         )
         task.token_usage = usage
         task.save(update_fields=["token_usage"])
 
-        from agents.ai.claude_client import parse_json_response
-        from projects.models import Document, Tag
-
         data = parse_json_response(response)
         report = data.get("report", response) if data else response
 
-        # Store research findings as a department document
+        # Store analysis as a research document
         department = agent.department
         findings = data.get("findings", []) if data else []
         if findings:
-            doc_content = f"# Research: {task.exec_summary}\n\n"
+            doc_content = f"# Research Analysis: {task.exec_summary}\n\n"
             for f in findings:
                 doc_content += f"## {f.get('title', 'Finding')}\n"
                 if f.get("url"):
@@ -95,9 +149,10 @@ Respond with your findings JSON and report."""
                 title=f"Research: {task.exec_summary[:80]}",
                 content=doc_content,
                 department=department,
+                doc_type=Document.DocType.RESEARCH,
             )
             tag, _ = Tag.objects.get_or_create(name="research")
             doc.tags.add(tag)
-            logger.info("Stored research findings as document %s", doc.id)
+            logger.info("Stored research analysis as document %s", doc.id)
 
         return report
