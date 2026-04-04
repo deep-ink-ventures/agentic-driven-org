@@ -22,11 +22,11 @@ def bootstrap_project(self, proposal_id: str):
         logger.error("BootstrapProposal %s not found", proposal_id)
         return
 
+    project = proposal.project
+
     proposal.status = BootstrapProposal.Status.PROCESSING
     proposal.save(update_fields=["status", "updated_at"])
     _broadcast_bootstrap(project.id, proposal.id, "processing")
-
-    project = proposal.project
 
     try:
         # Gather sources
