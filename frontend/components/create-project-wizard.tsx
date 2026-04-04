@@ -317,12 +317,38 @@ export function CreateProjectWizard({
 
   // ----- Step 5 handlers (Review) -----
 
+  const [editedProposal, setEditedProposal] = useState<BootstrapProposalData | null>(null);
+
+  // Sync editedProposal when proposal arrives
+  useEffect(() => {
+    if (proposal?.proposal && !editedProposal) {
+      setEditedProposal(proposal.proposal);
+    }
+  }, [proposal?.proposal, editedProposal]);
+
+  function removeDepartment(deptIndex: number) {
+    if (!editedProposal) return;
+    setEditedProposal({
+      ...editedProposal,
+      departments: editedProposal.departments.filter((_, i) => i !== deptIndex),
+    });
+  }
+
+  function removeAgent(deptIndex: number, agentIndex: number) {
+    if (!editedProposal) return;
+    const newDepts = editedProposal.departments.map((dept, i) => {
+      if (i !== deptIndex) return dept;
+      return { ...dept, agents: dept.agents.filter((_, j) => j !== agentIndex) };
+    });
+    setEditedProposal({ ...editedProposal, departments: newDepts });
+  }
+
   async function handleApprove() {
-    if (!projectId || !proposal) return;
+    if (!projectId || !proposal || !editedProposal) return;
     setLoading(true);
     setError("");
     try {
-      await api.approveBootstrap(projectId, proposal.id);
+      await api.approveBootstrap(projectId, proposal.id, editedProposal);
       onCreated();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to approve proposal");
@@ -685,7 +711,7 @@ export function CreateProjectWizard({
           )}
 
           {/* Step 5: Review & Approve */}
-          {step === 5 && proposal?.proposal && (
+          {step === 5 && editedProposal && (
             <div className="flex flex-col gap-5">
               {/* Summary */}
               <div>
@@ -693,7 +719,7 @@ export function CreateProjectWizard({
                   Summary
                 </h3>
                 <p className="text-sm text-text-secondary leading-relaxed">
-                  {proposal.proposal.summary}
+                  {editedProposal.summary}
                 </p>
               </div>
 
@@ -702,18 +728,30 @@ export function CreateProjectWizard({
               {/* Departments */}
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-text-heading">
-                  Departments
+                  Recommended Setup
                 </h3>
-                {proposal.proposal.departments.map((dept, i) => (
+                <p className="text-[10px] text-text-secondary -mt-2">
+                  Remove departments or agents you don&apos;t need.
+                </p>
+                {editedProposal.departments.map((dept, i) => (
                   <div
                     key={i}
                     className="rounded-lg border border-border bg-bg-primary/30 p-4 space-y-3"
                   >
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-accent-gold" />
-                      <span className="text-sm font-medium text-text-heading capitalize">
-                        {dept.department_type.replace(/_/g, " ")}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-accent-gold" />
+                        <span className="text-sm font-medium text-text-heading capitalize">
+                          {dept.department_type.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => removeDepartment(i)}
+                        className="text-text-secondary hover:text-flag-critical transition-colors p-1 rounded-md hover:bg-flag-critical/10"
+                        title="Remove department"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
 
                     {dept.agents.length > 0 && (
@@ -729,9 +767,16 @@ export function CreateProjectWizard({
                           {dept.agents.map((agent, j) => (
                             <span
                               key={j}
-                              className="inline-flex items-center rounded-md bg-accent-gold-muted px-2 py-0.5 text-xs text-accent-gold"
+                              className="inline-flex items-center gap-1 rounded-md bg-accent-gold-muted px-2 py-0.5 text-xs text-accent-gold group"
                             >
                               {agent.name}
+                              <button
+                                onClick={() => removeAgent(i, j)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-flag-critical"
+                                title="Remove agent"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
                             </span>
                           ))}
                         </div>
@@ -761,10 +806,16 @@ export function CreateProjectWizard({
                     )}
                   </div>
                 ))}
+
+                {editedProposal.departments.length === 0 && (
+                  <p className="text-sm text-text-secondary text-center py-4">
+                    All departments removed. Go back to add sources or re-run the analysis.
+                  </p>
+                )}
               </div>
 
               {/* Ignored content */}
-              {proposal.proposal.ignored_content.length > 0 && (
+              {editedProposal.ignored_content && editedProposal.ignored_content.length > 0 && (
                 <>
                   <Separator className="bg-border" />
                   <div>
@@ -772,7 +823,7 @@ export function CreateProjectWizard({
                       Ignored content
                     </h3>
                     <div className="space-y-1.5">
-                      {proposal.proposal.ignored_content.map((item, i) => (
+                      {editedProposal.ignored_content.map((item, i) => (
                         <div key={i} className="text-xs text-text-secondary">
                           <span className="text-text-primary">
                             {item.source_name}
