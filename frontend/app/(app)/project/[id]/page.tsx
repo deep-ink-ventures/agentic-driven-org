@@ -648,7 +648,7 @@ function AgentDetailView({
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => key === "instructions" && tab === "instructions" && !editingInstructions ? setEditingInstructions(true) : setTab(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
               tab === key
                 ? "border-accent-gold text-accent-gold"
@@ -656,6 +656,9 @@ function AgentDetailView({
             }`}
           >
             <Icon className="h-3.5 w-3.5" /> {label}
+            {key === "instructions" && tab === "instructions" && !editingInstructions && (
+              <Pencil className="h-3 w-3 ml-0.5 opacity-50 hover:opacity-100" />
+            )}
           </button>
         ))}
       </div>
@@ -749,17 +752,7 @@ function AgentDetailView({
               </div>
             </>
           ) : (
-            <div className="space-y-4 flex-1 overflow-y-auto min-h-0">
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingInstructions(true)}
-                  className="border-border text-text-secondary hover:text-text-primary text-xs h-7"
-                >
-                  <Pencil className="h-3 w-3 mr-1" /> Edit
-                </Button>
-              </div>
+            <div className="flex-1 overflow-y-auto min-h-0">
               {instructions ? (
                 <div className="max-w-none text-sm text-text-primary [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3 [&_h1]:mb-3 [&_h2]:mb-3 [&_h3]:mb-3 [&_h4]:mb-3 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&>*:last-child]:mb-0">
                   <ReactMarkdown>{instructions}</ReactMarkdown>
