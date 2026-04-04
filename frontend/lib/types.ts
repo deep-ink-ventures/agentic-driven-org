@@ -91,8 +91,11 @@ export interface AgentTask {
   agent_type: string;
   created_by_agent: string | null;
   created_by_agent_name: string | null;
-  status: "awaiting_approval" | "planned" | "queued" | "processing" | "done" | "failed";
+  status: "awaiting_approval" | "awaiting_dependencies" | "planned" | "queued" | "processing" | "done" | "failed";
   auto_execute: boolean;
+  command_name: string;
+  blocked_by: string | null;
+  blocked_by_summary: string | null;
   exec_summary: string;
   step_plan: string;
   report: string;

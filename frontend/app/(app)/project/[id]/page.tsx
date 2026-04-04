@@ -26,6 +26,7 @@ import {
   FileText,
   Terminal,
   Settings2,
+  Clock,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import { Separator } from "@/components/ui/separator";
 const statusColors: Record<AgentTask["status"], string> = {
   awaiting_approval:
     "bg-accent-gold/15 text-accent-gold border-accent-gold/30",
+  awaiting_dependencies: "bg-bg-surface text-text-secondary border-border",
   planned: "bg-bg-surface text-text-secondary border-border",
   queued: "bg-bg-surface text-text-secondary border-border",
   processing: "bg-blue-500/15 text-blue-400 border-blue-500/30",
@@ -190,6 +192,14 @@ function TaskCard({
             </p>
           )}
 
+          {/* Blocker info for awaiting_dependencies tasks */}
+          {task.status === "awaiting_dependencies" && task.blocked_by_summary && (
+            <div className="flex items-center gap-2 text-xs text-text-secondary p-2 rounded-lg bg-bg-input">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              <span>Waiting on: {task.blocked_by_summary}</span>
+            </div>
+          )}
+
           {/* Actions for approval tasks */}
           {isApproval && (
             <div className="flex items-center gap-2 pt-1">
@@ -264,6 +274,7 @@ function DashboardView({
 }) {
   const statusOrder: AgentTask["status"][] = [
     "awaiting_approval",
+    "awaiting_dependencies",
     "processing",
     "queued",
     "planned",
