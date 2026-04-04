@@ -34,6 +34,7 @@ def twitter_agent(department):
         agent_type="twitter",
         department=department,
         auto_actions={"place-content": True, "post-content": False},
+        is_active=True,
     )
 
 
@@ -44,6 +45,7 @@ def twitter_agent_disabled(department):
         agent_type="twitter",
         department=department,
         auto_actions={},
+        is_active=True,
     )
 
 
@@ -55,6 +57,7 @@ def leader_agent(department):
         department=department,
         is_leader=True,
         auto_actions={"create-priority-task": True},
+        is_active=True,
     )
 
 
@@ -123,6 +126,7 @@ class TestRunScheduledActions:
             agent_type="twitter",
             department=department,
             auto_actions={"post-content": True},
+            is_active=True,
         )
         run_scheduled_actions("daily")
 

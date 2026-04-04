@@ -106,10 +106,11 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
             # Auto-create leader agent if department doesn't have one
             if not department.agents.filter(is_leader=True).exists():
                 Agent.objects.create(
-                    name=f"{department.name} Leader",
+                    name=f"Head of {department.name}",
                     agent_type="leader",
                     department=department,
                     is_leader=True,
+                    is_active=False,
                     instructions=f"Lead the {department.name} department for project: {project.name}. Goal: {project.goal[:200]}",
                 )
 

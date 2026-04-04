@@ -38,7 +38,7 @@ class Agent(models.Model):
         blank=True,
         help_text="Maps command names to auto-execute booleans, e.g. {\"engage-tweets\": true, \"post-content\": false}. Defaults all false.",
     )
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

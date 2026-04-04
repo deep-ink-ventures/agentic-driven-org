@@ -43,6 +43,7 @@ def leader_agent(department):
         department=department,
         is_leader=True,
         instructions="Focus on crypto audience",
+        is_active=True,
     )
 
 
@@ -53,6 +54,7 @@ def twitter_agent(department):
         agent_type="twitter",
         department=department,
         instructions="Be witty",
+        is_active=True,
     )
 
 
@@ -62,6 +64,7 @@ def reddit_agent(department):
         name="Reddit Poster",
         agent_type="reddit",
         department=department,
+        is_active=True,
     )
 
 

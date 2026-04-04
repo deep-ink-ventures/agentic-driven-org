@@ -40,6 +40,7 @@ def agent(department):
         agent_type="twitter",
         department=department,
         is_leader=False,
+        is_active=True,
         instructions="Be nice",
         config={"api_key": "xxx"},
         auto_actions={"place-content": True, "post-content": False},
@@ -53,6 +54,7 @@ def leader_agent(department):
         agent_type="leader",
         department=department,
         is_leader=True,
+        is_active=True,
     )
 
 
