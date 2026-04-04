@@ -218,9 +218,15 @@ class TestCreateNextLeaderTask:
         mock_claude.return_value = (
             json.dumps(
                 {
-                    "target_agent_type": "twitter",
                     "exec_summary": "Engage crypto influencers",
-                    "step_plan": "1. Find influencers\n2. Engage",
+                    "tasks": [
+                        {
+                            "target_agent_type": "twitter",
+                            "command_name": "place-content",
+                            "exec_summary": "Engage crypto influencers on Twitter",
+                            "step_plan": "1. Find influencers\n2. Engage",
+                        }
+                    ],
                 }
             ),
             {"model": "claude-sonnet-4-6", "input_tokens": 100, "output_tokens": 50},
@@ -233,9 +239,11 @@ class TestCreateNextLeaderTask:
         # Should create a task for the twitter agent
         task = AgentTask.objects.filter(agent=twitter_agent).first()
         assert task is not None
-        assert task.status == AgentTask.Status.AWAITING_APPROVAL
+        # place-content is enabled in auto_actions, so task is auto-queued
+        assert task.status in [AgentTask.Status.QUEUED, AgentTask.Status.AWAITING_APPROVAL]
         assert task.created_by_agent == leader_agent
-        assert "Engage crypto influencers" in task.exec_summary
+        assert task.command_name == "place-content"
+        assert "crypto influencers" in task.exec_summary
 
     def test_skips_inactive_leader(self, inactive_leader):
         from agents.tasks import create_next_leader_task

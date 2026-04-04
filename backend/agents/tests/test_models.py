@@ -122,6 +122,7 @@ class TestAgentTaskModel:
         slugs = {c[0] for c in AgentTask.Status.choices}
         assert slugs == {
             "awaiting_approval",
+            "awaiting_dependencies",
             "planned",
             "queued",
             "processing",

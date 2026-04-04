@@ -34,7 +34,7 @@ class TestCallClaude:
         assert usage["output_tokens"] == 50
         mock_client.messages.create.assert_called_once_with(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=8192,
             system="You are helpful",
             messages=[{"role": "user", "content": "Hi"}],
         )

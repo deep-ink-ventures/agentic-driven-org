@@ -91,6 +91,7 @@ class TestCommandDecorator:
             "description": "A test command",
             "schedule": "hourly",
             "model": None,
+            "max_tokens": None,
         }
 
     def test_no_schedule(self):
