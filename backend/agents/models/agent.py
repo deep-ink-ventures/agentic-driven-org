@@ -56,6 +56,21 @@ class Agent(models.Model):
         """Check if a scheduled command is enabled for auto-execution."""
         return self.auto_actions.get(command_name, False)
 
+    def get_config_value(self, key, default=None):
+        """Look up config value with cascading: agent → department → project."""
+        # Agent level (most specific)
+        if key in self.config:
+            return self.config[key]
+        # Department level
+        dept_config = self.department.config or {}
+        if key in dept_config:
+            return dept_config[key]
+        # Project level (most general)
+        project_config = self.department.project.config
+        if project_config and project_config.config and key in project_config.config:
+            return project_config.config[key]
+        return default
+
     def get_blueprint(self):
         from agents.blueprints import get_blueprint
         return get_blueprint(self.agent_type, self.department.department_type)
