@@ -25,7 +25,19 @@ def create_priority_task(self, agent: Agent) -> dict:
     if not workforce:
         return None
 
-    workforce_desc = "\n".join(f"- {name} ({atype})" for _, name, atype in workforce)
+    workforce_desc = ""
+    for wid, wname, wtype in workforce:
+        workforce_desc += f"- {wname} ({wtype})"
+        try:
+            from agents.blueprints import get_blueprint
+            bp = get_blueprint(wtype, agent.department.department_type)
+            cmds = bp.get_commands()
+            if cmds:
+                cmd_names = ", ".join(c["name"] for c in cmds)
+                workforce_desc += f"\n  Commands: {cmd_names}"
+        except Exception:
+            pass
+        workforce_desc += "\n"
 
     awaiting_by_agent = {}
     for wid, wname, wtype in workforce:
@@ -60,11 +72,18 @@ Respond with JSON:
     "tasks": [
         {{
             "target_agent_type": "agent type from the list above",
+            "command_name": "specific command to invoke (from the agent's commands list)",
             "exec_summary": "What this agent should do",
-            "step_plan": "Detailed step-by-step plan with branding/tone guidance"
+            "step_plan": "Detailed step-by-step plan with branding/tone guidance",
+            "depends_on_previous": false
         }}
     ]
-}}"""
+}}
+
+IMPORTANT:
+- Set depends_on_previous to true if this task needs the previous task's results.
+- For research, always create research-gather first, then research-analyze with depends_on_previous: true.
+- Use the exact command names from each agent's commands list."""
 
     response, _usage = call_claude(
         system_prompt=self.build_system_prompt(agent),
