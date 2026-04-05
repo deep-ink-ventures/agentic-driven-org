@@ -42,6 +42,7 @@ def _broadcast_task(task, event_type="task.updated"):
                     "token_usage": task.token_usage,
                     "review_verdict": task.review_verdict,
                     "review_score": task.review_score,
+                    "sprint": str(task.sprint_id) if task.sprint_id else None,
                     "created_at": task.created_at.isoformat(),
                     "updated_at": task.updated_at.isoformat(),
                 },

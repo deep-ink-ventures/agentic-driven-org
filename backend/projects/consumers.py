@@ -123,3 +123,11 @@ class ProjectConsumer(AsyncWebsocketConsumer):
     async def task_updated(self, event):
         """Forward task updated event."""
         await self.send(text_data=json.dumps({"type": "task.updated", "task": event.get("task")}))
+
+    async def sprint_created(self, event):
+        """Forward sprint created event."""
+        await self.send(text_data=json.dumps({"type": "sprint.created", "sprint": event.get("sprint")}))
+
+    async def sprint_updated(self, event):
+        """Forward sprint updated event."""
+        await self.send(text_data=json.dumps({"type": "sprint.updated", "sprint": event.get("sprint")}))

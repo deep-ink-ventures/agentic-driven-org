@@ -43,4 +43,11 @@ urlpatterns = [
         views.AvailableAgentsView.as_view(),
         name="available-agents",
     ),
+    path("projects/<uuid:project_id>/sprints/", views.SprintListCreateView.as_view(), name="sprint-list"),
+    path("projects/<uuid:project_id>/sprints/suggest/", views.SprintSuggestView.as_view(), name="sprint-suggest"),
+    path(
+        "projects/<uuid:project_id>/sprints/<uuid:sprint_id>/",
+        views.SprintDetailView.as_view(),
+        name="sprint-detail",
+    ),
 ]
