@@ -36,7 +36,7 @@ def execute_task(self, agent, task):
 
 ---
 
-## 3. Review dimensions as single source of truth [TODO]
+## 3. Review dimensions as single source of truth [DONE]
 
 **Problem:** Scoring dimensions are hardcoded in 3 places per reviewer:
 1. `get_review_pairs()` on the leader
@@ -51,7 +51,7 @@ Adding a dimension requires 3 edits. They can drift.
 
 ---
 
-## 4. Writers room `_evaluate_feedback` duplicates base class logic [TODO]
+## 4. Writers room `_evaluate_feedback` duplicates base class logic [DONE]
 
 **Problem:** `_evaluate_feedback` in the writers room leader is a 150-line method that reimplements what `_evaluate_review_and_loop` already does:
 - Ask Claude to score
@@ -75,7 +75,7 @@ Extract a `_evaluate_score_and_route(agent, score, stage_key, fix_proposal_fn)` 
 
 ---
 
-## 5. Pipeline department pattern (Sales ≈ Community) [TODO]
+## 5. Pipeline department pattern (Sales ≈ Community) [DONE]
 
 **Problem:** Sales and Community are structural clones:
 - researcher → analyst → writer → reviewer
@@ -91,13 +91,13 @@ If we add "HR", "Legal", or "PR" departments, each will be another clone.
 - A `generate_task_proposal` that calls a configurable planning command
 - Standard review pair wiring from workforce metadata
 
-May be as simple as: after #2 lands, sales and community leaders shrink to ~20 lines each (system prompt + get_review_pairs + one command). No separate base class needed — they're just thin.
+After items 1 and 2 landed, sales and community leaders naturally resolved to ~20 lines each: system prompt + get_review_pairs + commands + generate_task_proposal (4 lines). No separate base class needed — they're just thin config on top of LeaderBlueprint.
 
 **Impact:** Prevents clone drift. New pipeline departments are trivial to add.
 
 ---
 
-## 6. Kill skills/ boilerplate [TODO]
+## 6. Kill skills/ boilerplate [DONE]
 
 **Problem:** Every agent has a `skills/` directory with identical `__init__.py` boilerplate (pkgutil iteration). Skills are just static NAME/DESCRIPTION strings injected into the system prompt. They're not callable, not composable, not discoverable at runtime.
 
@@ -111,21 +111,21 @@ May be as simple as: after #2 lands, sales and community leaders shrink to ~20 l
 
 ---
 
-## 7. Command validation at import time [TODO]
+## 7. Command validation at import time [N/A]
 
 **Problem:** No enforcement that a registered command has a corresponding execution path. A command could be registered via `@command` but never wired into `execute_task`'s dispatch logic.
 
-**Solution:** Add a `validate_commands()` class method on `BaseBlueprint` that checks every `_command_meta` attribute has a callable handler. Call it at import time (in `__init_subclass__`) or at blueprint registration.
+**Solution:** Skipped — commands are methods on the class (inherently validated). The default `execute_task` on WorkforceBlueprint means most agents no longer have custom dispatch logic. No real wiring risk remains.
 
-**Impact:** Catches wiring bugs early. Low risk.
+**Impact:** N/A.
 
 ---
 
-## 8. Output declarations [TODO]
+## 8. Output declarations [DONE]
 
 **Problem:** Some agents produce persistent artifacts (Documents, GitHub issues) but this is buried in execute_task. No way for the leader or UI to know what an agent produces.
 
-**Solution:** Add an optional `outputs: list[str]` on blueprints (e.g., `["document"]`, `["github_issue"]`, `["report"]`). Metadata only — doesn't change execution. Leaders and UI can use it to understand agent capabilities.
+**Solution:** Added `outputs: list[str] = []` on `BaseBlueprint`. Set on web_researcher (`["document"]`), story_researcher (`["document"]`), and ticket_manager (`["github_issue"]`). Metadata only — doesn't change execution. Leaders and UI can use it to understand agent capabilities.
 
 **Impact:** Self-describing agents. Low risk, low effort.
 
