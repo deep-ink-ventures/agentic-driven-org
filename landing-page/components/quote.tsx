@@ -34,7 +34,7 @@ export default function Quote() {
         </svg>
 
         <blockquote className="font-display text-2xl md:text-4xl font-medium text-heading leading-[1.3] tracking-[-0.01em]">
-          The Agent Driven Org is the OpenClaw moment for the enterprises.
+          The Agent Driven Org is the OpenClaw moment for the business world.
         </blockquote>
 
         <div className="mt-10 flex items-center gap-4">
