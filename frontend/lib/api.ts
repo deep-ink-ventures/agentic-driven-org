@@ -285,4 +285,43 @@ export const api = {
       },
     );
   },
+
+  listSprints: (projectId: string, params?: { status?: string; department?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.department) sp.set("department", params.department);
+    const qs = sp.toString();
+    return request<import("./types").Sprint[]>(
+      `/api/projects/${projectId}/sprints/${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  createSprint: (projectId: string, data: { text: string; department_ids: string[]; source_ids?: string[] }) =>
+    request<import("./types").Sprint>(`/api/projects/${projectId}/sprints/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateSprint: (projectId: string, sprintId: string, data: { status?: string; completion_summary?: string }) =>
+    request<import("./types").Sprint>(`/api/projects/${projectId}/sprints/${sprintId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  suggestSprints: (projectId: string, departmentIds: string[]) =>
+    request<{ suggestions: string[] }>(`/api/projects/${projectId}/sprints/suggest/`, {
+      method: "POST",
+      body: JSON.stringify({ department_ids: departmentIds }),
+    }),
+
+  uploadSource: (projectId: string, formData: FormData) =>
+    fetch(`${API_URL}/api/projects/${projectId}/sources/`, {
+      method: "POST",
+      headers: { "X-CSRFToken": getCsrfToken() || "" },
+      credentials: "include",
+      body: formData,
+    }).then(async (r) => {
+      if (!r.ok) throw new Error(await r.text());
+      return r.json() as Promise<import("./types").Source>;
+    }),
 };
