@@ -374,9 +374,33 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 agent.save(update_fields=["internal_state"])
                 return _tag_sprint(self._propose_creative_tasks(agent, next_stg, config))
 
-            logger.info("Writers Room: target stage '%s' PASSED — project complete", current_stage)
+            logger.info("Writers Room: target stage '%s' PASSED — sprint complete", current_stage)
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
+
+            # Auto-complete the sprint
+            from projects.models import Sprint
+
+            running_sprint = Sprint.objects.filter(
+                departments=agent.department,
+                status=Sprint.Status.RUNNING,
+            ).first()
+            if running_sprint:
+                from django.utils import timezone as tz
+
+                running_sprint.status = Sprint.Status.DONE
+                running_sprint.completion_summary = (
+                    f"Target stage '{current_stage}' reached and passed review. "
+                    f"Writers room completed all planned stages."
+                )
+                running_sprint.completed_at = tz.now()
+                running_sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+
+                from projects.views.sprint_view import _broadcast_sprint
+
+                _broadcast_sprint(running_sprint, "sprint.updated")
+                logger.info("Writers Room: auto-completed sprint '%s'", running_sprint.text[:60])
+
             return None
 
         if status == "fix_in_progress":
@@ -1073,11 +1097,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         review_snippet = review_task.report or ""
         polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
 
-        return {
-            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}",
-            "tasks": [
+        creative_agents = CREATIVE_MATRIX.get(current_stage, ["story_architect"])
+        tasks = []
+        for i, agent_type in enumerate(creative_agents):
+            tasks.append(
                 {
-                    "target_agent_type": "story_architect",
+                    "target_agent_type": agent_type,
                     "command_name": "write",
                     "exec_summary": f"Fix review issues for stage '{current_stage}' (score {score}/10)",
                     "step_plan": (
@@ -1085,11 +1110,16 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                         f"Review round: {round_num}. Locale: {locale}\n\n"
                         f"The creative reviewer has requested changes. Fix the issues below.\n\n"
                         f"## Review Report\n{review_snippet}\n\n"
-                        f"Address every CHANGES_REQUESTED item. Focus on the weakest dimensions first."
+                        f"Address every CHANGES_REQUESTED item relevant to your role. "
+                        f"Focus on the weakest dimensions first."
                     ),
-                    "depends_on_previous": False,
+                    "depends_on_previous": i > 0,
                 }
-            ],
+            )
+
+        return {
+            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}",
+            "tasks": tasks,
         }
 
 
