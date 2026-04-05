@@ -75,6 +75,64 @@ def call_claude(
     return response_text, usage
 
 
+def call_claude_with_tools(
+    system_prompt: str,
+    user_message: str,
+    tools: list[dict],
+    model: str = "claude-sonnet-4-6",
+    max_tokens: int = 8192,
+) -> tuple[str, dict | None, dict]:
+    """
+    Call Claude API with tools and return (response_text, tool_input_or_None, usage_dict).
+    Concatenates text blocks into the report. Extracts the first tool_use block's
+    input as structured data. Returns None for tool_input if no tool was called.
+    """
+    client = _get_client()
+    logger.info(
+        "Calling Claude with tools: model=%s, system_len=%d, msg_len=%d, tools=%d",
+        model,
+        len(system_prompt),
+        len(user_message),
+        len(tools),
+    )
+    message = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+        tools=tools,
+    )
+    response_text = ""
+    tool_input = None
+    for block in message.content:
+        if block.type == "text":
+            response_text += block.text
+        elif block.type == "tool_use" and tool_input is None:
+            tool_input = block.input
+
+    input_tokens = message.usage.input_tokens
+    output_tokens = message.usage.output_tokens
+    from agents.ai.pricing import estimate_cost
+
+    cost = estimate_cost(model, input_tokens, output_tokens)
+
+    usage = {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": cost,
+    }
+    logger.info(
+        "Claude response (tools): model=%s input=%d output=%d cost=$%.4f tool_called=%s",
+        model,
+        input_tokens,
+        output_tokens,
+        cost,
+        tool_input is not None,
+    )
+    return response_text, tool_input, usage
+
+
 def stream_claude(
     system_prompt: str,
     user_message: str,

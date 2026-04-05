@@ -1,6 +1,4 @@
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 class TestCallClaude:
@@ -99,3 +97,100 @@ class TestCallClaude:
 
         # Reset for other tests
         mod._client = None
+
+
+class TestCallClaudeWithTools:
+    @patch("agents.ai.claude_client._client", None)
+    @patch("agents.ai.claude_client.anthropic")
+    def test_returns_text_and_tool_input(self, mock_anthropic):
+        from agents.ai.claude_client import call_claude_with_tools
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Here is my analysis."
+
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.input = {"verdict": "approved", "score": 9}
+
+        mock_message = MagicMock()
+        mock_message.content = [text_block, tool_block]
+        mock_message.usage.input_tokens = 150
+        mock_message.usage.output_tokens = 75
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        tools = [{"name": "submit_verdict", "input_schema": {}}]
+        text, tool_input, usage = call_claude_with_tools(
+            system_prompt="You are a reviewer",
+            user_message="Review this",
+            tools=tools,
+        )
+
+        assert text == "Here is my analysis."
+        assert tool_input == {"verdict": "approved", "score": 9}
+        assert usage["model"] == "claude-sonnet-4-6"
+        assert usage["input_tokens"] == 150
+        assert usage["output_tokens"] == 75
+        call_kwargs = mock_client.messages.create.call_args
+        assert "tools" in call_kwargs.kwargs
+        assert call_kwargs.kwargs["tools"] == tools
+
+    @patch("agents.ai.claude_client._client", None)
+    @patch("agents.ai.claude_client.anthropic")
+    def test_returns_none_when_no_tool_call(self, mock_anthropic):
+        from agents.ai.claude_client import call_claude_with_tools
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Just text, no tool."
+
+        mock_message = MagicMock()
+        mock_message.content = [text_block]
+        mock_message.usage.input_tokens = 50
+        mock_message.usage.output_tokens = 20
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        text, tool_input, usage = call_claude_with_tools(
+            system_prompt="sys",
+            user_message="msg",
+            tools=[],
+        )
+
+        assert text == "Just text, no tool."
+        assert tool_input is None
+
+    @patch("agents.ai.claude_client._client", None)
+    @patch("agents.ai.claude_client.anthropic")
+    def test_extracts_first_tool_use_only(self, mock_anthropic):
+        from agents.ai.claude_client import call_claude_with_tools
+
+        tool_block1 = MagicMock()
+        tool_block1.type = "tool_use"
+        tool_block1.input = {"first": True}
+
+        tool_block2 = MagicMock()
+        tool_block2.type = "tool_use"
+        tool_block2.input = {"second": True}
+
+        mock_message = MagicMock()
+        mock_message.content = [tool_block1, tool_block2]
+        mock_message.usage.input_tokens = 80
+        mock_message.usage.output_tokens = 40
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        text, tool_input, usage = call_claude_with_tools(
+            system_prompt="sys",
+            user_message="msg",
+            tools=[],
+        )
+
+        assert tool_input == {"first": True}
