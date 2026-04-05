@@ -130,3 +130,43 @@ class TaskRejectView(APIView):
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
         return Response(AgentTaskSerializer(task).data)
+
+
+class TaskRetryView(APIView):
+    """POST /api/projects/{project_id}/tasks/{task_id}/retry/"""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, project_id, task_id):
+        task = get_object_or_404(
+            AgentTask,
+            id=task_id,
+            agent__department__project_id=project_id,
+            agent__department__project__members=request.user,
+        )
+        if task.status != AgentTask.Status.FAILED:
+            return Response(
+                {"error": f"Task is {task.status}, not failed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from agents.tasks import execute_agent_task
+
+        task.status = AgentTask.Status.QUEUED
+        task.error_message = ""
+        task.report = ""
+        task.started_at = None
+        task.completed_at = None
+        task.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "report",
+                "started_at",
+                "completed_at",
+                "updated_at",
+            ]
+        )
+
+        execute_agent_task.delay(str(task.id))
+        return Response(AgentTaskSerializer(task).data)

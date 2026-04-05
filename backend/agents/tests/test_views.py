@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from agents.models import Agent, AgentTask
 from projects.models import Department, Project
@@ -201,6 +202,51 @@ class TestTaskRejectView:
         task = AgentTask.objects.create(agent=agent, exec_summary="Processing", status=AgentTask.Status.PROCESSING)
         resp = authed_client.post(f"/api/projects/{project.id}/tasks/{task.id}/reject/")
         assert resp.status_code == 400
+
+
+# ── TaskRetryView ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestTaskRetryView:
+    @patch("agents.tasks.execute_agent_task")
+    def test_retry_requeues_failed_task(self, mock_exec, authed_client, project, agent):
+        task = AgentTask.objects.create(
+            agent=agent,
+            exec_summary="Failed task",
+            status=AgentTask.Status.FAILED,
+            error_message="Worker died",
+            started_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+        resp = authed_client.post(f"/api/projects/{project.id}/tasks/{task.id}/retry/")
+        assert resp.status_code == 200
+        task.refresh_from_db()
+        assert task.status == AgentTask.Status.QUEUED
+        assert task.error_message == ""
+        assert task.report == ""
+        assert task.started_at is None
+        assert task.completed_at is None
+        mock_exec.delay.assert_called_once_with(str(task.id))
+
+    def test_retry_rejects_non_failed_task(self, authed_client, project, agent):
+        task = AgentTask.objects.create(
+            agent=agent,
+            exec_summary="Processing task",
+            status=AgentTask.Status.PROCESSING,
+        )
+        resp = authed_client.post(f"/api/projects/{project.id}/tasks/{task.id}/retry/")
+        assert resp.status_code == 400
+
+    def test_retry_requires_membership(self, api_client, other_user, project, agent):
+        task = AgentTask.objects.create(
+            agent=agent,
+            exec_summary="Failed task",
+            status=AgentTask.Status.FAILED,
+        )
+        api_client.force_authenticate(user=other_user)
+        resp = api_client.post(f"/api/projects/{project.id}/tasks/{task.id}/retry/")
+        assert resp.status_code == 404
 
 
 # ── AgentUpdateView ────────────────────────────────────────────────────────────

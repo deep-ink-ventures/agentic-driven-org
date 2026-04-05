@@ -1,9 +1,12 @@
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from django.utils import timezone
 
 from agents.models import Agent, AgentTask
+from agents.tasks import recover_stuck_tasks
 from projects.models import Department, Project
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -262,3 +265,72 @@ class TestCreateNextLeaderTask:
         create_next_leader_task(fake_id)
 
         assert AgentTask.objects.count() == 0
+
+
+# ── recover_stuck_tasks ──────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestRecoverStuckTasks:
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(email="stuck@test.com", password="pass")
+        self.project = Project.objects.create(name="Test", goal="g", owner=self.user)
+        self.project.members.add(self.user)
+        self.dept = Department.objects.create(project=self.project, department_type="eng")
+        self.agent = Agent.objects.create(name="Bot", agent_type="bot", department=self.dept)
+
+    @patch("agents.tasks._broadcast_task")
+    def test_marks_stuck_processing_tasks_as_failed(self, mock_broadcast):
+        task = AgentTask.objects.create(
+            agent=self.agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Stuck task",
+            started_at=timezone.now() - timedelta(hours=2),
+        )
+        recover_stuck_tasks()
+        task.refresh_from_db()
+        assert task.status == AgentTask.Status.FAILED
+        assert "Worker died" in task.error_message
+        assert task.completed_at is not None
+        mock_broadcast.assert_called_once()
+
+    @patch("agents.tasks._broadcast_task")
+    def test_ignores_recent_processing_tasks(self, mock_broadcast):
+        task = AgentTask.objects.create(
+            agent=self.agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Recent task",
+            started_at=timezone.now() - timedelta(minutes=30),
+        )
+        recover_stuck_tasks()
+        task.refresh_from_db()
+        assert task.status == AgentTask.Status.PROCESSING
+        mock_broadcast.assert_not_called()
+
+    @patch("agents.tasks._broadcast_task")
+    def test_ignores_non_processing_tasks(self, mock_broadcast):
+        task = AgentTask.objects.create(
+            agent=self.agent,
+            status=AgentTask.Status.QUEUED,
+            exec_summary="Queued task",
+        )
+        recover_stuck_tasks()
+        task.refresh_from_db()
+        assert task.status == AgentTask.Status.QUEUED
+        mock_broadcast.assert_not_called()
+
+    @patch("agents.tasks._broadcast_task")
+    def test_handles_processing_with_no_started_at(self, mock_broadcast):
+        task = AgentTask.objects.create(
+            agent=self.agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="No started_at",
+            started_at=None,
+        )
+        recover_stuck_tasks()
+        task.refresh_from_db()
+        assert task.status == AgentTask.Status.FAILED

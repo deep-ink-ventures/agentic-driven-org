@@ -1,6 +1,7 @@
 import logging
 
 from celery import shared_task
+from django.db import models
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,39 @@ def _unblock_dependents(completed_task):
             dep.save(update_fields=["status", "updated_at"])
             _broadcast_task(dep)
             logger.info("Unblocked task %s → awaiting approval", dep.id)
+
+
+@shared_task
+def recover_stuck_tasks():
+    """
+    Self-healing: find AgentTask records stuck in processing for >1 hour.
+    Marks them failed so users can retry via the UI.
+    Runs every 15 minutes via celery beat.
+    """
+    from datetime import timedelta
+
+    from agents.models import AgentTask
+
+    now = timezone.now()
+    cutoff = now - timedelta(hours=1)
+
+    stuck = (
+        AgentTask.objects.filter(
+            status=AgentTask.Status.PROCESSING,
+        )
+        .filter(
+            models.Q(started_at__isnull=True) | models.Q(started_at__lt=cutoff),
+        )
+        .select_related("agent", "agent__department__project", "created_by_agent", "blocked_by")
+    )
+
+    for task in stuck:
+        logger.warning("Recovering stuck task %s (%s): %s", task.id, task.agent.name, task.exec_summary[:80])
+        task.status = AgentTask.Status.FAILED
+        task.error_message = "Worker died — task was processing for over 1 hour without completing"
+        task.completed_at = now
+        task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+        _broadcast_task(task)
 
 
 def _trigger_continuous_mode(completed_task):

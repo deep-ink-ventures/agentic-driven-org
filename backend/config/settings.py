@@ -151,6 +151,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "projects.tasks.recover_stuck_proposals",
         "schedule": 900,  # every 15 minutes
     },
+    "recover-stuck-tasks": {
+        "task": "agents.tasks.recover_stuck_tasks",
+        "schedule": 900,  # every 15 minutes
+    },
     "run-hourly-actions": {
         "task": "agents.tasks.run_scheduled_actions",
         "schedule": 3600,

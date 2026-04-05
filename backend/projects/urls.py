@@ -19,6 +19,11 @@ urlpatterns = [
         views_agents.TaskRejectView.as_view(),
         name="task-reject",
     ),
+    path(
+        "projects/<uuid:project_id>/tasks/<uuid:task_id>/retry/",
+        views_agents.TaskRetryView.as_view(),
+        name="task-retry",
+    ),
     path("projects/<uuid:project_id>/bootstrap/", views.BootstrapTriggerView.as_view(), name="bootstrap-trigger"),
     path("projects/<uuid:project_id>/bootstrap/latest/", views.BootstrapLatestView.as_view(), name="bootstrap-latest"),
     path(
