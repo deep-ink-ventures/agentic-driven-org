@@ -18,6 +18,13 @@ class ContentReviewerBlueprint(WorkforceBlueprint):
     slug = "content_reviewer"
     description = "Reviews marketing content drafts for brand alignment, audience fit, channel conventions, and messaging clarity — quality gate before publishing"
     tags = ["review", "quality", "marketing", "brand", "content"]
+    review_dimensions = [
+        "brand_alignment",
+        "audience_fit",
+        "channel_conventions",
+        "messaging_clarity",
+        "cta_effectiveness",
+    ]
     config_schema = {}
 
     @property

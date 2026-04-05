@@ -18,6 +18,7 @@ class OutreachReviewerBlueprint(WorkforceBlueprint):
     slug = "outreach_reviewer"
     description = "Reviews outreach drafts for personalization, tone, value prop clarity, and CTA effectiveness — quality gate before sending"
     tags = ["review", "quality", "outreach", "editing"]
+    review_dimensions = ["personalization", "value_proposition", "tone", "cta", "length"]
     config_schema = {}
 
     @property

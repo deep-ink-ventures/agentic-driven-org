@@ -453,3 +453,61 @@ class TestWorkforceDefaultExecuteTask:
             for agent_slug, bp in dept["workforce"].items():
                 assert hasattr(bp, "execute_task"), f"{dept_slug}/{agent_slug} missing execute_task"
                 assert callable(bp.execute_task), f"{dept_slug}/{agent_slug}.execute_task not callable"
+
+
+# ── Review dimensions single source of truth ──────────────────────────────���─
+
+
+class TestReviewDimensions:
+    def test_reviewer_blueprints_have_dimensions(self):
+        """Reviewer agents declare review_dimensions on the blueprint."""
+        from agents.blueprints import get_blueprint
+
+        cases = {
+            ("outreach_reviewer", "sales"): ["personalization", "value_proposition", "tone", "cta", "length"],
+            ("partnership_reviewer", "community"): ["mutual_value", "specificity", "tone", "structure", "next_steps"],
+            ("content_reviewer", "marketing"): [
+                "brand_alignment",
+                "audience_fit",
+                "channel_conventions",
+                "messaging_clarity",
+                "cta_effectiveness",
+            ],
+            ("review_engineer", "engineering"): [
+                "correctness",
+                "test_coverage",
+                "security",
+                "design_quality",
+                "accessibility",
+                "code_quality",
+            ],
+        }
+        for (agent_type, dept), expected_dims in cases.items():
+            bp = get_blueprint(agent_type, dept)
+            assert (
+                bp.review_dimensions == expected_dims
+            ), f"{dept}/{agent_type} dimensions mismatch: {bp.review_dimensions}"
+
+    def test_non_reviewer_blueprints_have_empty_dimensions(self):
+        """Non-reviewer workforce agents have empty review_dimensions by default."""
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("twitter", "marketing")
+        assert bp.review_dimensions == []
+
+    def test_propose_review_chain_reads_from_blueprint(self, department, leader_agent, twitter_agent):
+        """_propose_review_chain reads dimensions from the reviewer blueprint."""
+        bp = get_blueprint("leader", "marketing")
+        task = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.DONE,
+            exec_summary="Tweet draft",
+            report="Here is my tweet draft.",
+        )
+        workforce_types = {"twitter", "content_reviewer"}
+        result = bp._propose_review_chain(leader_agent, task, workforce_types)
+        assert result is not None
+        step_plan = result["tasks"][0]["step_plan"]
+        # Dimensions from ContentReviewerBlueprint.review_dimensions
+        assert "brand_alignment" in step_plan
+        assert "cta_effectiveness" in step_plan

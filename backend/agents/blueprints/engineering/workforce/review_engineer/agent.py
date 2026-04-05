@@ -58,6 +58,7 @@ class ReviewEngineerBlueprint(WorkforceBlueprint):
     controls = ["backend_engineer", "frontend_engineer"]
     description = "Reviews PRs with structured criteria, severity-tagged comments, and iterative re-review capability"
     tags = ["engineering", "review", "quality", "code-review"]
+    review_dimensions = ["correctness", "test_coverage", "security", "design_quality", "accessibility", "code_quality"]
     config_schema = {
         "github_repos": {
             "type": "list",

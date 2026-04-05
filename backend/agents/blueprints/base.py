@@ -377,6 +377,8 @@ class WorkforceBlueprint(BaseBlueprint):
     Override execute_task() only for agents with integrations or special dispatch.
     """
 
+    review_dimensions: list[str] = []
+
     def get_task_suffix(self, agent: Agent, task: AgentTask) -> str:
         """Return extra instructions appended to the task message.
 
@@ -506,7 +508,13 @@ class LeaderBlueprint(BaseBlueprint):
             }
 
         report_snippet = (creator_task.report or "")[:3000]
-        dims_text = ", ".join(pair["dimensions"])
+        # Read dimensions from reviewer blueprint (single source of truth),
+        # falling back to pair definition for backwards compatibility
+        from agents.blueprints import get_blueprint
+
+        reviewer_bp = get_blueprint(pair["reviewer"], agent.department.department_type)
+        dims = reviewer_bp.review_dimensions or pair.get("dimensions", [])
+        dims_text = ", ".join(dims)
 
         return {
             "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary[:80]}",

@@ -18,6 +18,7 @@ class PartnershipReviewerBlueprint(WorkforceBlueprint):
     slug = "partnership_reviewer"
     description = "Reviews partnership proposals for mutual value, tone, specificity, and actionability — quality gate before outreach"
     tags = ["review", "quality", "partnerships", "editing"]
+    review_dimensions = ["mutual_value", "specificity", "tone", "structure", "next_steps"]
     config_schema = {}
 
     @property
