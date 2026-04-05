@@ -25,10 +25,14 @@ def get_proposal_json_schema() -> dict:
         "type": "object",
         "required": ["summary", "departments"],
         "properties": {
+            "enriched_goal": {
+                "type": "string",
+                "description": "The user's original goal preserved verbatim with typo fixes, formatting, and added context from sources — must never be shorter than the original",
+            },
             "summary": {
                 "type": "string",
                 "minLength": 10,
-                "description": "2-3 sentence analysis of the project",
+                "description": "2-3 sentence analysis of the project for display purposes",
             },
             "departments": {
                 "type": "array",

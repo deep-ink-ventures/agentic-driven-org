@@ -83,9 +83,12 @@ class BootstrapApproveView(APIView):
                 self._apply_proposal(proposal)
                 proposal.status = BootstrapProposal.Status.APPROVED
                 proposal.save(update_fields=["status", "proposal", "updated_at"])
-            # Update goal with Claude's exec summary and mark active
-            if proposal.proposal and proposal.proposal.get("summary"):
-                project.goal = proposal.proposal["summary"]
+            # Enrich the goal with context from sources — never reduce it
+            if proposal.proposal and proposal.proposal.get("enriched_goal"):
+                enriched = proposal.proposal["enriched_goal"]
+                # Safety: only apply if enriched version is at least as long as original
+                if len(enriched) >= len(project.goal or ""):
+                    project.goal = enriched
             project.status = Project.Status.ACTIVE
             project.save(update_fields=["goal", "status", "updated_at"])
             return Response(BootstrapProposalSerializer(proposal).data)
