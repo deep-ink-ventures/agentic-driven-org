@@ -36,7 +36,6 @@ def check_progress(self, agent: Agent) -> dict:
     now = timezone.now()
 
     issues = []
-    follow_up_tasks = []
 
     # ── Check for stalled tasks (running > 2 hours) ────────────────────
     stalled = list(
@@ -152,12 +151,15 @@ def check_progress(self, agent: Agent) -> dict:
     report_lines.append(f"Stalled tasks: {stalled_count}")
     report_lines.append(f"\nFull stage status: {json.dumps(stage_status, indent=2)}")
 
-    result = {
-        "exec_summary": f"Progress check: stage='{current_stage}' status='{current_info.get('status', 'not_started')}' active={active_count} queued={queued_count}",
-        "step_plan": "\n".join(report_lines),
-    }
+    # If state advanced, trigger the leader chain directly instead of
+    # going through Claude delegation (which can create unwanted PLANNED tasks)
+    state_advanced = current_info.get("status") in ("writing_done", "feedback_done")
+    if state_advanced:
+        from agents.tasks import create_next_leader_task
 
-    if follow_up_tasks:
-        result["tasks"] = follow_up_tasks
+        create_next_leader_task.delay(str(agent.id))
+        logger.info("Writers Room check_progress: state advanced, triggered leader chain")
 
-    return result
+    # Return None so the base execute_task does not create follow-up tasks
+    # via Claude delegation. The state machine drives the pipeline.
+    return None
