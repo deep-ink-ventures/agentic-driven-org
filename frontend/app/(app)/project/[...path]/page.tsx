@@ -55,6 +55,8 @@ export default function ProjectDetailPage() {
   );
   const [initialDeepLinkDone, setInitialDeepLinkDone] = useState(false);
   const [taskWsEvent, setTaskWsEvent] = useState<{ type: string; task: import("@/lib/types").AgentTask } | null>(null);
+  // Map of department ID → set of active task IDs (processing/queued)
+  const [activeTasks, setActiveTasks] = useState<Map<string, Set<string>>>(new Map());
 
   // Apply deep link from URL on first load
   useEffect(() => {
@@ -122,7 +124,34 @@ export default function ProjectDetailPage() {
     let cancelled = false;
     connectWs(`/ws/project/${project.id}/`, (data) => {
       if (data.type === "task.created" || data.type === "task.updated") {
-        setTaskWsEvent({ type: data.type, task: data.task as import("@/lib/types").AgentTask });
+        const task = data.task as import("@/lib/types").AgentTask;
+        setTaskWsEvent({ type: data.type, task });
+        // Track which departments have active tasks via a map of dept → active task count
+        const agentId = task.agent;
+        setProject((prev) => {
+          if (!prev) return prev;
+          const dept = prev.departments.find((d) => d.agents.some((a) => a.id === agentId));
+          if (dept) {
+            setActiveTasks((prevMap) => {
+              const next = new Map(prevMap);
+              const isActive = task.status === "processing" || task.status === "queued";
+              const deptTasks = next.get(dept.id) || new Set<string>();
+              const updated = new Set(deptTasks);
+              if (isActive) {
+                updated.add(task.id);
+              } else {
+                updated.delete(task.id);
+              }
+              if (updated.size > 0) {
+                next.set(dept.id, updated);
+              } else {
+                next.delete(dept.id);
+              }
+              return next;
+            });
+          }
+          return prev;
+        });
       }
       if (data.type === "agent.status") {
         const agentId = data.agent_id as string;
@@ -179,6 +208,27 @@ export default function ProjectDetailPage() {
     );
   }
 
+  // Derive department status — always returns a value
+  function getDeptStatus(dept: DepartmentDetail): "working" | "setup" | "provisioning" | "ready" | "idle" {
+    // Setup: JSON Schema has top-level "required" array — check if any are missing from config
+    const schema = dept.config_schema as { required?: string[]; properties?: Record<string, unknown> } | undefined;
+    if (schema?.required && schema.required.length > 0) {
+      const config = (dept.config || {}) as Record<string, unknown>;
+      const missingRequired = schema.required.some(
+        (key) => config[key] === undefined || config[key] === null || config[key] === "",
+      );
+      if (missingRequired) return "setup";
+    }
+    // Provisioning: at least one agent still being set up
+    if (dept.agents.some((a) => a.status === "provisioning")) return "provisioning";
+    // Working: at least one active task in this department
+    if (activeTasks.has(dept.id)) return "working";
+    // Ready: at least one agent is active
+    if (dept.agents.some((a) => a.status === "active")) return "ready";
+    // Idle: all agents inactive or failed
+    return "idle";
+  }
+
   const sidebarContent = (
     <>
       <button
@@ -206,6 +256,7 @@ export default function ProjectDetailPage() {
         {project.departments.map((dept) => {
           const activeCount = dept.agents.filter((a) => a.status === "active").length;
           const totalCount = dept.agents.length;
+          const deptStatus = getDeptStatus(dept);
           return (
             <button
               key={dept.id}
@@ -222,7 +273,16 @@ export default function ProjectDetailPage() {
                   : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
               }`}
             >
-              <span className="text-sm">{dept.display_name}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">{dept.display_name}</span>
+                <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${
+                  deptStatus === "setup" ? "bg-flag-critical" :
+                  deptStatus === "provisioning" ? "bg-blue-400 animate-pulse" :
+                  deptStatus === "working" ? "bg-flag-strength animate-pulse" :
+                  deptStatus === "ready" ? "bg-flag-strength" :
+                  "bg-text-secondary/30"
+                }`} title={deptStatus} />
+              </div>
               <span className="block text-[10px] mt-0.5 opacity-60">
                 {activeCount}/{totalCount} agents active
               </span>
@@ -297,12 +357,17 @@ export default function ProjectDetailPage() {
       {/* Main area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {view === "dashboard" && (
-          <TaskQueue projectId={project.id} wsEvent={taskWsEvent} />
+          <>
+            <h2 className="text-2xl font-semibold mb-1">Task Queue</h2>
+            <p className="text-sm text-text-secondary mb-6">Monitor and manage your agents&apos; work</p>
+            <TaskQueue projectId={project.id} wsEvent={taskWsEvent} />
+          </>
         )}
         {view === "department" && selectedDept && !selectedAgent && (
           <DepartmentView
             dept={selectedDept}
             projectId={project.id}
+            deptStatus={getDeptStatus(selectedDept)}
             onSelectAgent={(agent) => {
               setSelectedAgent(agent);
               setView("agent");

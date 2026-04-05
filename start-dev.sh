@@ -41,7 +41,7 @@ cd ..
 
 echo -e "${Y}Starting Celery worker...${NC}"
 cd backend
-./venv/bin/celery -A config worker --loglevel=info &
+./venv/bin/celery -A config worker --loglevel=debug -E &
 CELERY_PID=$!
 cd ..
 

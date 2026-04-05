@@ -1,30 +1,13 @@
 import uuid
 
 from django.db import models
-from jsonschema import validate, ValidationError as JsonSchemaError
-
+from jsonschema import ValidationError as JsonSchemaError
+from jsonschema import validate
 
 # JSON Schema for project-level config. Used for validation and frontend form generation.
 PROJECT_CONFIG_SCHEMA = {
     "type": "object",
-    "properties": {
-        "google_email": {
-            "type": "string",
-            "format": "email",
-            "description": "Gmail address agents act on behalf of",
-        },
-        "google_credentials": {
-            "type": "object",
-            "description": "Google OAuth tokens (access_token, refresh_token, etc.)",
-            "properties": {
-                "access_token": {"type": "string"},
-                "refresh_token": {"type": "string"},
-                "token_uri": {"type": "string"},
-                "client_id": {"type": "string"},
-                "client_secret": {"type": "string"},
-            },
-        },
-    },
+    "properties": {},
     "additionalProperties": False,
 }
 
@@ -57,6 +40,7 @@ class ProjectConfig(models.Model):
         errors = self.validate_config()
         if errors:
             from django.core.exceptions import ValidationError
+
             raise ValidationError({"config": errors})
 
     def validate_config(self) -> list[str]:

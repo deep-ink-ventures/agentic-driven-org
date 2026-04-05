@@ -147,17 +147,18 @@ class BootstrapApproveView(APIView):
                 if any(c in selected_types for c in controls_list) and m["agent_type"] not in selected_types:
                     selected_types.add(m["agent_type"])
 
-            # Create agents immediately with basic instructions + provisioning status
+            # Create agents immediately — active unless they have required config
             for agent_type in selected_types:
                 if agent_type not in available_workforce:
                     continue
                 bp = available_workforce[agent_type]
+                needs_config = any(s.get("required") for s in bp.config_schema.values())
                 Agent.objects.create(
                     name=names_by_type.get(agent_type) or bp.name,
                     agent_type=agent_type,
                     department=department,
                     is_leader=False,
-                    status=Agent.Status.PROVISIONING,
+                    status=Agent.Status.PROVISIONING if needs_config else Agent.Status.ACTIVE,
                     instructions=instructions_by_type.get(agent_type, ""),
                 )
 

@@ -120,6 +120,10 @@ class CharacterAnalystBlueprint(WorkforceBlueprint):
         return (
             f"Output language: {locale}\n\n"
             "Analyze this material using the full character methodology:\n"
+            "0. Pitch fidelity check — read the creator's original pitch in <project_goal>. "
+            "Flag any characters, family structures, or conflicts that were NOT in the pitch "
+            "but appear to be borrowed from reference shows. If the pitch says 'three brothers' "
+            "but the output has 'a patriarch and his children', flag as 🔴 CRITICAL.\n"
             "1. Consistency audit — check each character's actions against their established traits scene by scene.\n"
             "2. Arc progression — track where each principal character starts vs ends, flag flat or regressive arcs.\n"
             "3. Ensemble balance — assess screen time / page time equity across the cast, flag imbalances.\n"

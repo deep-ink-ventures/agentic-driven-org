@@ -24,6 +24,7 @@ class CreativeReviewerBlueprint(WorkforceBlueprint):
     description = (
         "Consolidates analyst feedback and scores creative output quality — the quality gate for the writers room"
     )
+    essential = True
     tags = ["review", "quality", "creative", "feedback"]
     review_dimensions = [
         "concept_fidelity",
@@ -55,8 +56,8 @@ You receive reports from specialist analysts: market_analyst, structure_analyst,
 
 REVIEW DIMENSIONS (score each 1.0-10.0, use decimals):
 
-1. **Concept Fidelity** — Does the output honor the creator's original pitch? Are specific characters, conflicts, arcs preserved and developed (not replaced with generic alternatives)?
-2. **Originality** — Is this genuinely original? Apply the Setting Swap Test: if you change the setting back to a referenced show's setting, is the story the same? If yes, score 1-3.
+1. **Concept Fidelity** — Does the output honor the creator's original pitch? Read the <project_goal> and check: are the creator's SPECIFIC characters, conflicts, arcs, and relationships preserved? If the creator said "three brothers" and the output has "a patriarch and his children," score 1-3. If characters, family structures, or conflicts were imported from reference shows instead of built from the pitch, score 1-3. Every major element in the output must trace back to something the creator specified.
+2. **Originality** — Is this genuinely original? Apply the Setting Swap Test: if you change the setting back to a referenced show's setting, is the story the same? If yes, score 1-3. Apply the Character Swap Test: could you rename the characters to a referenced show's cast and the story still works? If yes, score 1-3.
 3. **Market Fit** — Commercial viability, positioning, audience appeal
 4. **Structure** — Story architecture, beats, pacing, act breaks
 5. **Character** — Consistency, arcs, motivation, relationships, voice

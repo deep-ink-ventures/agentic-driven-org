@@ -213,6 +213,12 @@ export const api = {
       `/api/projects/${projectId}/departments/${deptId}/available-agents/`,
     ),
 
+  updateDepartmentConfig: (deptId: string, config: Record<string, unknown>) =>
+    request<{ config: Record<string, unknown> }>(
+      `/api/departments/${deptId}/config/`,
+      { method: "PATCH", body: JSON.stringify(config) },
+    ),
+
   getProjectConfig: (slug: string) =>
     request<{ config: Record<string, unknown>; schema: Record<string, unknown> }>(
       `/api/projects/${slug}/config/`,
@@ -249,40 +255,4 @@ export const api = {
   getOutput: (projectId: string, outputId: string) =>
     request<import("./types").Output>(`/api/projects/${projectId}/outputs/${outputId}/`),
 
-  listBriefings: (projectId: string, params?: { status?: string; department?: string }) => {
-    const sp = new URLSearchParams();
-    if (params?.status) sp.set("status", params.status);
-    if (params?.department) sp.set("department", params.department);
-    const qs = sp.toString();
-    return request<import("./types").Briefing[]>(
-      `/api/projects/${projectId}/briefings/${qs ? `?${qs}` : ""}`,
-    );
-  },
-
-  createBriefing: (
-    projectId: string,
-    data: { content: string; title?: string; department?: string | null },
-  ) =>
-    request<import("./types").Briefing>(`/api/projects/${projectId}/briefings/`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  updateBriefing: (projectId: string, briefingId: string, data: { status: string }) =>
-    request<import("./types").Briefing>(`/api/projects/${projectId}/briefings/${briefingId}/`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }),
-
-  uploadBriefingFile: (projectId: string, briefingId: string, file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    return request<import("./types").BriefingAttachment>(
-      `/api/projects/${projectId}/briefings/${briefingId}/files/`,
-      {
-        method: "POST",
-        body: formData,
-      },
-    );
-  },
 };

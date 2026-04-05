@@ -151,8 +151,8 @@ class TestIdeationCreativeTaskFraming:
         bp = WritersRoomLeaderBlueprint()
         mock_agent = MagicMock()
         mock_agent.department.agents.filter.return_value.values_list.return_value = [
-            ("Researcher", "story_researcher"),
-            ("Architect", "story_architect"),
+            "story_researcher",
+            "story_architect",
         ]
         mock_agent.internal_state = {"stage_status": {}}
         mock_agent.get_config_value.return_value = None
@@ -172,9 +172,9 @@ class TestIdeationCreativeTaskFraming:
         bp = WritersRoomLeaderBlueprint()
         mock_agent = MagicMock()
         mock_agent.department.agents.filter.return_value.values_list.return_value = [
-            ("Researcher", "story_researcher"),
-            ("Architect", "story_architect"),
-            ("Character", "character_designer"),
+            "story_researcher",
+            "story_architect",
+            "character_designer",
         ]
         mock_agent.internal_state = {"stage_status": {}}
         mock_agent.get_config_value.return_value = None
@@ -194,8 +194,8 @@ class TestIdeationCreativeTaskFraming:
         bp = WritersRoomLeaderBlueprint()
         mock_agent = MagicMock()
         mock_agent.department.agents.filter.return_value.values_list.return_value = [
-            ("Researcher", "story_researcher"),
-            ("Writer", "dialog_writer"),
+            "story_researcher",
+            "dialog_writer",
         ]
         mock_agent.internal_state = {"stage_status": {}}
         mock_agent.get_config_value.return_value = None

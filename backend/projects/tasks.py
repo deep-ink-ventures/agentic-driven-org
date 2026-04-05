@@ -545,8 +545,8 @@ Write comprehensive leader instructions for this department. The leader uses the
             )
             _broadcast_agent(project.id, department.id, leader.id, leader.status)
 
-        # 4. Fan out per-agent provisioning tasks
-        provisioning_agents = department.agents.filter(is_leader=False, status=Agent.Status.PROVISIONING)
+        # 4. Fan out per-agent provisioning tasks (includes ACTIVE agents needing instructions)
+        provisioning_agents = department.agents.filter(is_leader=False).exclude(status=Agent.Status.FAILED)
         for agent in provisioning_agents:
             provision_single_agent.delay(str(agent.id))
 
@@ -825,9 +825,12 @@ Respond with JSON only, no markdown fences:
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e) from e
         logger.exception("Failed to provision agent %s after %d retries", agent_id, self.max_retries)
-        agent.status = Agent.Status.FAILED
-        agent.save(update_fields=["status", "updated_at"])
-        _broadcast_agent(project.id, department.id, agent_id, "failed", str(e)[:200])
+        # Only mark FAILED if agent was PROVISIONING (has required config).
+        # Agents already ACTIVE stay active — instruction generation is best-effort.
+        if agent.status == Agent.Status.PROVISIONING:
+            agent.status = Agent.Status.FAILED
+            agent.save(update_fields=["status", "updated_at"])
+            _broadcast_agent(project.id, department.id, agent_id, "failed", str(e)[:200])
 
 
 @shared_task

@@ -301,7 +301,7 @@ def create_next_leader_task(leader_agent_id: str):
                 if depends_on_previous and previous_task:
                     initial_status = AgentTask.Status.AWAITING_DEPENDENCIES
                     blocked_by = previous_task
-                elif command_name and target_agent.is_action_enabled(command_name):
+                elif command_name and target_agent.is_action_enabled(command_name) or target_agent.auto_approve:
                     initial_status = AgentTask.Status.QUEUED
                     blocked_by = None
                 else:

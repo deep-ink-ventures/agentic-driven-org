@@ -43,4 +43,5 @@ urlpatterns = [
         views.AvailableAgentsView.as_view(),
         name="available-agents",
     ),
+    path("departments/<uuid:pk>/config/", views.DepartmentConfigView.as_view(), name="department-config"),
 ]

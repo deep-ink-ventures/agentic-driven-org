@@ -173,25 +173,3 @@ export interface Output {
   created_at: string;
   updated_at: string;
 }
-
-export interface BriefingAttachment {
-  id: string;
-  original_filename: string;
-  file_format: string;
-  file_size: number;
-  word_count: number;
-}
-
-export interface Briefing {
-  id: string;
-  project: string;
-  department: string | null;
-  title: string;
-  content: string;
-  status: "active" | "archived";
-  attachments: BriefingAttachment[];
-  task_count: number;
-  created_by_email: string;
-  created_at: string;
-  updated_at: string;
-}

@@ -183,9 +183,9 @@ function TaskCard({
           {task.report && (
             <div>
               <p className="text-xs text-text-secondary mb-1">Report</p>
-              <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
-                {task.report}
-              </pre>
+              <div className="text-xs text-text-primary bg-bg-input rounded-lg p-3 border border-border prose prose-invert prose-xs max-w-none prose-headings:text-text-primary prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:bg-bg-surface prose-pre:border prose-pre:border-border">
+                <ReactMarkdown>{task.report}</ReactMarkdown>
+              </div>
             </div>
           )}
           {task.error_message && (
@@ -509,8 +509,6 @@ export function TaskQueue({
 }) {
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-1">Task Queue</h2>
-      <p className="text-sm text-text-secondary mb-6">Monitor and manage your agents&apos; work</p>
 
       {/* Two lanes side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

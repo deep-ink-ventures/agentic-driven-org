@@ -286,39 +286,6 @@ class BaseBlueprint(ABC):
             if rp:
                 own_text += f"\n    Report: {rp[:200]}"
 
-        # Active briefings for this department (department-specific + project-level)
-        from django.db.models import Q
-        from django.utils import timezone as tz
-
-        from projects.models import Briefing
-
-        briefings = list(
-            Briefing.objects.filter(
-                project=project,
-                status="active",
-            )
-            .filter(Q(department=department) | Q(department__isnull=True))
-            .prefetch_related("attachments")
-            .order_by("-created_at")
-        )
-        briefings_text = ""
-        if briefings:
-            for b in briefings:
-                age = tz.now() - b.created_at
-                if age.days > 0:
-                    age_str = f"{age.days}d ago"
-                else:
-                    hours = age.seconds // 3600
-                    age_str = f"{hours}h ago" if hours > 0 else "just now"
-                scope = "department-level" if b.department else "project-level"
-                briefings_text += f'\n\n## "{b.title}" ({scope}, created {age_str})\nContent: {b.content}'
-                attachments = list(b.attachments.all())
-                if attachments:
-                    briefings_text += "\nAttachments:"
-                    for att in attachments:
-                        snippet = att.extracted_text[:500] if att.extracted_text else "(not yet extracted)"
-                        briefings_text += f"\n- {att.original_filename}: {snippet}"
-
         return {
             "project_name": project.name,
             "project_goal": project.goal,
@@ -327,7 +294,6 @@ class BaseBlueprint(ABC):
             "sibling_agents": sibling_text,
             "own_recent_tasks": own_text,
             "agent_instructions": agent.instructions,
-            "active_briefings": briefings_text,
         }
 
     def build_system_prompt(self, agent: Agent) -> str:
@@ -345,18 +311,17 @@ class BaseBlueprint(ABC):
         ctx = self.get_context(agent)
         # All user-controlled content wrapped in XML tags to mitigate prompt injection.
         # Claude is trained to treat content inside XML tags as data rather than instructions.
-        briefings_section = ""
-        if ctx.get("active_briefings"):
-            briefings_section = f"""
-
-### Active Briefings
-<briefings>
-{ctx["active_briefings"]}
-</briefings>"""
-
         return f"""# Context
 
 ## Project: {ctx["project_name"]}
+
+### CREATOR'S ORIGINAL PITCH — PRIMARY CREATIVE DIRECTIVE
+The following is the creator's own pitch. Every specific element they mention — characters,
+conflicts, settings, arcs, relationships, references, tone — is a BINDING creative directive.
+Your job is to BUILD ON these specifics, not replace them with generic alternatives or elements
+borrowed from reference shows. When the creator references existing shows, they mean
+"play in this league of quality and ambition" — NOT "copy their plot, characters, or structure."
+
 <project_goal>
 {ctx["project_goal"]}
 </project_goal>
@@ -366,7 +331,7 @@ class BaseBlueprint(ABC):
 ### Department Documents
 <documents>
 {ctx["department_documents"] or "No documents yet."}
-</documents>{briefings_section}
+</documents>
 
 ### Other Agents in Department
 <sibling_activity>

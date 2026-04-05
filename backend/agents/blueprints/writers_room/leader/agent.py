@@ -104,14 +104,7 @@ class WritersRoomLeaderBlueprint(LeaderBlueprint):
     slug = "leader"
     description = "Writers Room showrunner — orchestrates creative/feedback ping-pong loop across stages from logline to revised draft"
     tags = ["leadership", "writers-room", "orchestration", "screenplay", "novel", "creative-writing"]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "label": "Language",
-            "description": "Output language code: en, de, fr, es, etc. (default: en)",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:
@@ -397,7 +390,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         ).exists()
 
         if not has_voice_profile:
-            # Check if there is source material (documents or briefings with attachments)
+            # Check if there is source material (documents)
             has_source_material = (
                 Document.objects.filter(
                     department=agent.department,
@@ -406,18 +399,6 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 .exclude(doc_type="voice_profile")
                 .exists()
             )
-            if not has_source_material:
-                # Also check for project-level briefings with attachments
-                from projects.models import Briefing
-
-                has_source_material = (
-                    Briefing.objects.filter(
-                        project=agent.department.project,
-                        status="active",
-                    )
-                    .exclude(content="")
-                    .exists()
-                )
             if has_source_material:
                 locale = config.get("locale", "en")
                 internal_state = agent.internal_state or {}
@@ -442,7 +423,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                                 "VOICE DNA profile. This profile will be used as an INVIOLABLE "
                                 "constraint by all creative agents. The original author's voice is "
                                 "sacred -- it must be preserved through all rewrites.\n\n"
-                                "Consult department documents and briefing attachments for the "
+                                "Consult department documents for the "
                                 "source material."
                             ),
                             "depends_on_previous": False,
@@ -451,7 +432,26 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     "on_completion": {"set_status": "not_started", "stage": stage},
                 }
 
-        creative_agents = CREATIVE_MATRIX.get(stage, [])
+        # Filter to only active agents in this department
+        active_types = set(
+            agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
+        )
+        creative_agents = [a for a in CREATIVE_MATRIX.get(stage, []) if a in active_types]
+
+        if not creative_agents:
+            logger.warning("Writers Room: no active creative agents for stage '%s' — skipping", stage)
+            # Advance past this stage since there's nobody to write
+            internal_state = agent.internal_state or {}
+            stage_status = internal_state.get("stage_status", {})
+            stage_status[stage] = {"status": "passed", "iterations": 0}
+            internal_state["stage_status"] = stage_status
+            next_stg = _next_stage(stage)
+            if next_stg:
+                internal_state["current_stage"] = next_stg
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            return self._propose_creative_tasks(agent, next_stg, config) if next_stg else None
+
         locale = config.get("locale", "en")
         target_format = config.get("target_format", "")
         target_platform = config.get("target_platform", "")
@@ -482,7 +482,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                         "4. Zeitgeist hooks — what cultural currents can this project ride?\n"
                         "5. Audience demographics — who watches this, and what do they want?\n\n"
                         "Ground everything in the project goal and source materials. "
-                        "Consult department documents and briefings for context."
+                        "Consult department documents for context."
                     ),
                 },
                 "story_architect": {
@@ -545,37 +545,318 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
             },
+            "logline": {
+                "story_researcher": {
+                    "command_name": "research",
+                    "exec_summary": "Analyze comparable loglines and distill what makes them sell",
+                    "step_plan": (
+                        "Research loglines of comparable projects in this genre/format space:\n"
+                        "1. Collect 10-15 loglines from successful comparable titles — greenlit shows, sold specs\n"
+                        "2. Analyze the anatomy: what structural patterns work? (irony, stakes, hook, world)\n"
+                        "3. Identify the 'package pitch' elements — what makes a buyer read past the logline?\n"
+                        "4. Distill the project's unique selling proposition vs. the competitive landscape\n"
+                        "5. Flag positioning risks — what sounds too similar to existing titles?\n\n"
+                        "Output a brief (1-2 pages) with your findings, specific examples, and a recommendation "
+                        "for what this project's logline MUST accomplish to stand out. "
+                        "Consult department documents for concept and character work."
+                    ),
+                },
+                "dialog_writer": {
+                    "command_name": "write",
+                    "exec_summary": "Craft 3-5 logline variants — tight, hooky, sellable",
+                    "step_plan": (
+                        "Using the concept, characters, and the researcher's logline analysis, "
+                        "write 3-5 logline variants for this project. Each logline must:\n"
+                        "1. Be ONE sentence, max two — under 50 words\n"
+                        "2. Contain: protagonist + flaw, inciting incident, central conflict, stakes\n"
+                        "3. Convey tone and genre without naming them\n"
+                        "4. Create irony or a compelling contradiction\n"
+                        "5. Make the reader ask 'what happens next?'\n\n"
+                        "After the variants, write a brief rationale for each — why this angle, what it emphasizes, "
+                        "what it sacrifices. Recommend your top pick. "
+                        "Consult department documents for concept, characters, and research."
+                    ),
+                },
+            },
+            "expose": {
+                "story_researcher": {
+                    "command_name": "research",
+                    "exec_summary": "Research story world details and thematic depth for the exposé",
+                    "step_plan": (
+                        "Deepen the research foundation for the exposé stage:\n"
+                        "1. Verify and expand world-building details — are locations, institutions, power structures specific enough?\n"
+                        "2. Research thematic parallels — real-world events, social dynamics that mirror the story's themes\n"
+                        "3. Identify narrative opportunities from real research — surprising facts, contradictions, ironies\n"
+                        "4. Check character backstories against real-world plausibility\n"
+                        "5. Surface details that will make the exposé feel grounded and authoritative\n\n"
+                        "Consult department documents for all prior stage outputs."
+                    ),
+                },
+                "story_architect": {
+                    "command_name": "write",
+                    "exec_summary": "Write the exposé — 3-5 page narrative overview of the entire project",
+                    "step_plan": (
+                        "Write the exposé (Exposé) — a 3-5 page compelling narrative summary:\n"
+                        "1. Opening hook — drop us into the world and protagonist's situation\n"
+                        "2. Act structure — setup, escalation, climax, resolution (broad strokes)\n"
+                        "3. Character arcs — how do the main characters change?\n"
+                        "4. World and tone — make the reader FEEL the show, not just understand it\n"
+                        "5. The promise of the series — why does this sustain multiple seasons?\n"
+                        "6. Emotional throughline — what's the journey the AUDIENCE goes on?\n\n"
+                        "This is a SELLING document. It must read like a page-turner, not a summary. "
+                        "Every paragraph should make the reader want the next one. "
+                        "Consult department documents for concept, characters, logline, and research."
+                    ),
+                },
+                "dialog_writer": {
+                    "command_name": "write",
+                    "exec_summary": "Write 2-3 key dialogue samples that establish voice and tone",
+                    "step_plan": (
+                        "Write 2-3 short dialogue scenes (each 1-2 pages) that showcase this project's voice:\n"
+                        "1. A scene that establishes the protagonist's voice and worldview\n"
+                        "2. A scene of conflict between two central characters — the core dynamic\n"
+                        "3. (Optional) A scene that demonstrates the show's tonal range — humor within drama, or vice versa\n\n"
+                        "These are PROOF-OF-CONCEPT scenes, not plot-advancing. They answer: 'What does this show SOUND like?'\n"
+                        "Each character must have a distinct speech pattern, vocabulary, rhythm. "
+                        "Consult department documents for characters, concept, and tone references."
+                    ),
+                },
+            },
+            "treatment": {
+                "story_researcher": {
+                    "command_name": "research",
+                    "exec_summary": "Fact-check and deepen research for treatment-level detail",
+                    "step_plan": (
+                        "Provide treatment-level research support:\n"
+                        "1. Verify all real-world references in the exposé — locations, institutions, cultural details\n"
+                        "2. Research episode-level story opportunities — real events, seasonal rhythms, milieu specifics\n"
+                        "3. Identify potential plot engines from real-world dynamics (legal, financial, political)\n"
+                        "4. Provide texture for B-plots — what subcultures, side worlds, parallel stories exist?\n"
+                        "5. Flag any research gaps that would undermine credibility at treatment level\n\n"
+                        "Consult department documents for all prior outputs."
+                    ),
+                },
+                "story_architect": {
+                    "command_name": "write",
+                    "exec_summary": "Write the treatment — episode-by-episode story architecture",
+                    "step_plan": (
+                        "Write the treatment — a detailed narrative breakdown of the season:\n"
+                        "1. Season arc — the macro story from premiere to finale\n"
+                        "2. Episode-by-episode breakdown (1-2 paragraphs each) — what happens, what changes, what's at stake\n"
+                        "3. A/B/C plot weaving — how storylines intersect and build on each other\n"
+                        "4. Act breaks and cliffhangers — what pulls viewers into the next episode?\n"
+                        "5. Midseason shift — what reversal or revelation redefines the show at the midpoint?\n"
+                        "6. Finale setup — how does everything converge?\n\n"
+                        "This must read as a story, not a list. Each episode summary should feel inevitable yet surprising. "
+                        "Consult department documents for exposé, characters, and research."
+                    ),
+                },
+                "character_designer": {
+                    "command_name": "write",
+                    "exec_summary": "Write detailed character arcs mapped to the episode structure",
+                    "step_plan": (
+                        "Map each major character's arc across the treatment's episode structure:\n"
+                        "1. Per character: emotional state at premiere, key turning points, state at finale\n"
+                        "2. Relationship evolution — how do key dynamics shift episode by episode?\n"
+                        "3. Character reveals — when does the audience learn key backstory? When do characters learn about each other?\n"
+                        "4. Internal vs. external conflict — how do they diverge and reconnect?\n"
+                        "5. Supporting cast arcs — who rises, who falls, who surprises?\n\n"
+                        "Integrate tightly with the story architect's episode breakdown. "
+                        "Consult department documents for treatment, exposé, and prior character work."
+                    ),
+                },
+                "dialog_writer": {
+                    "command_name": "write",
+                    "exec_summary": "Write signature dialogue moments for key treatment beats",
+                    "step_plan": (
+                        "Write dialogue for 4-6 pivotal moments identified in the treatment:\n"
+                        "1. The pilot's hook scene — first impression of protagonist and world\n"
+                        "2. The central relationship's defining confrontation\n"
+                        "3. The midseason revelation/reversal — the scene where everything changes\n"
+                        "4. A quiet character moment — vulnerability, humor, or intimacy\n"
+                        "5-6. Key scenes that showcase tonal range and secondary characters\n\n"
+                        "Each scene should be 1-3 pages. Focus on subtext — what's NOT said matters as much as what is. "
+                        "Consult department documents for treatment, characters, and voice profile."
+                    ),
+                },
+            },
+            "step_outline": {
+                "story_architect": {
+                    "command_name": "write",
+                    "exec_summary": "Write the step outline — scene-by-scene breakdown of the pilot",
+                    "step_plan": (
+                        "Write the step outline (Szenenplan) for the pilot episode:\n"
+                        "1. Scene-by-scene breakdown — each scene gets: location, characters present, what happens, what changes\n"
+                        "2. Scene purpose — every scene must advance plot, reveal character, or build world (ideally two of three)\n"
+                        "3. Act structure — clear act breaks with escalating tension\n"
+                        "4. Pacing — vary scene length, intensity, and type (dialogue, action, montage)\n"
+                        "5. The cold open — what image/moment hooks the audience before titles?\n"
+                        "6. The final scene — what question does the pilot leave ringing?\n\n"
+                        "Be specific about blocking and visual storytelling, not just dialogue beats. "
+                        "Consult department documents for treatment, characters, and research."
+                    ),
+                },
+                "character_designer": {
+                    "command_name": "write",
+                    "exec_summary": "Detail character behavior and dynamics for each pilot scene",
+                    "step_plan": (
+                        "For each scene in the step outline, specify character dynamics:\n"
+                        "1. What does each character WANT in this scene? What are they hiding?\n"
+                        "2. Power dynamics — who has leverage, who's performing, who's authentic?\n"
+                        "3. Body language and behavioral tells — how does each character's physicality express their state?\n"
+                        "4. Introduction moments — how does the audience MEET each character for the first time?\n"
+                        "5. Relationship signals — what do scenes between characters establish about their history?\n\n"
+                        "This is the bridge between character bibles and actual screenplay behavior. "
+                        "Consult department documents for step outline, characters, and treatment."
+                    ),
+                },
+                "dialog_writer": {
+                    "command_name": "write",
+                    "exec_summary": "Write dialogue sketches for every scene in the step outline",
+                    "step_plan": (
+                        "Write dialogue sketches for each scene in the step outline:\n"
+                        "1. Key lines — the lines that DEFINE each scene (not full dialogue, but the crucial exchanges)\n"
+                        "2. Voice consistency — ensure each character sounds distinct and consistent with their profile\n"
+                        "3. Subtext notes — what's the unspoken tension beneath the dialogue?\n"
+                        "4. Exposition management — where does necessary information land naturally?\n"
+                        "5. Scene endings — the last line of each scene should propel into the next\n\n"
+                        "These are sketches, not final dialogue — but they should capture the MUSIC of each scene. "
+                        "Consult department documents for step outline, characters, and voice profile."
+                    ),
+                },
+            },
+            "first_draft": {
+                "story_architect": {
+                    "command_name": "write",
+                    "exec_summary": "Write the first draft screenplay — full pilot script",
+                    "step_plan": (
+                        "Write the complete first draft of the pilot screenplay:\n"
+                        "1. Professional screenplay format — slug lines, action, dialogue, parentheticals\n"
+                        "2. Follow the step outline's scene structure — but improve where inspiration strikes\n"
+                        "3. Action lines — visual, cinematic, economical. Show don't tell.\n"
+                        "4. Dialogue — integrate the dialog writer's sketches but make them flow as real conversation\n"
+                        "5. Pacing — the read should move. If a scene feels slow, cut or compress.\n"
+                        "6. Target length — 45-60 pages for a drama pilot\n\n"
+                        "This is a WRITER'S draft — prioritize voice, energy, and specificity over polish. "
+                        "Consult department documents for step outline, dialogue sketches, and all prior work."
+                    ),
+                },
+                "character_designer": {
+                    "command_name": "write",
+                    "exec_summary": "Review and enhance character consistency across the full draft",
+                    "step_plan": (
+                        "Review the first draft for character integrity:\n"
+                        "1. Voice audit — does each character sound distinct throughout? Flag any blending.\n"
+                        "2. Motivation check — does every character action follow from established wants/needs?\n"
+                        "3. Arc tracking — are the pilot's character arcs landing? Where do they stall?\n"
+                        "4. Introduction effectiveness — do characters make strong first impressions?\n"
+                        "5. Write enhanced versions of any scenes where characters feel generic or inconsistent\n\n"
+                        "Output: specific scene rewrites and notes, not general feedback. "
+                        "Consult department documents for the first draft, character profiles, and step outline."
+                    ),
+                },
+                "dialog_writer": {
+                    "command_name": "write",
+                    "exec_summary": "Dialogue polish pass — sharpen every exchange in the first draft",
+                    "step_plan": (
+                        "Do a full dialogue polish pass on the first draft:\n"
+                        "1. Cut flab — remove any line that doesn't earn its place\n"
+                        "2. Sharpen wit — punch up where the tone allows it\n"
+                        "3. Deepen subtext — where are characters saying exactly what they mean? Fix that.\n"
+                        "4. Rhythm — vary sentence length, use fragments, interruptions, overlaps\n"
+                        "5. Signature lines — does the pilot have 3-5 lines people would quote?\n"
+                        "6. Exposition surgery — is backstory delivered naturally or in clunky speeches?\n\n"
+                        "Output the full dialogue-polished draft. Mark changes from the original. "
+                        "Consult department documents for the first draft, voice profile, and characters."
+                    ),
+                },
+            },
+            "revised_draft": {
+                "story_architect": {
+                    "command_name": "write",
+                    "exec_summary": "Structural revision — tighten the pilot's architecture",
+                    "step_plan": (
+                        "Revise the draft focusing on structural integrity:\n"
+                        "1. Does the cold open hook within 2 pages? If not, restructure.\n"
+                        "2. Act breaks — are they landing with sufficient impact? Rewrite weak ones.\n"
+                        "3. Pacing analysis — where does the script drag? Cut or compress ruthlessly.\n"
+                        "4. Scene necessity — does every scene pass the 'what happens if I cut this?' test?\n"
+                        "5. Setup/payoff — are all planted elements paying off? Are payoffs properly set up?\n"
+                        "6. Ending — does the final scene leave the audience NEEDING episode 2?\n\n"
+                        "Output the structurally revised full draft. "
+                        "Consult department documents for the first draft, all feedback, and review notes."
+                    ),
+                },
+                "character_designer": {
+                    "command_name": "write",
+                    "exec_summary": "Final character pass — ensure arcs and voices are airtight",
+                    "step_plan": (
+                        "Final character integrity pass on the revised draft:\n"
+                        "1. Arc completion — does every major character's pilot arc resolve satisfyingly?\n"
+                        "2. Ensemble balance — does any character dominate or disappear? Adjust.\n"
+                        "3. Relationship clarity — is the central dynamic undeniably compelling?\n"
+                        "4. Backstory integration — is character history revealed through action, not exposition?\n"
+                        "5. Consistency — scan for any contradictions with established character profiles\n\n"
+                        "Output specific rewrites for any scenes that need character work. "
+                        "Consult department documents for revised draft, all character work, and feedback."
+                    ),
+                },
+                "dialog_writer": {
+                    "command_name": "write",
+                    "exec_summary": "Final dialogue pass — production-ready polish",
+                    "step_plan": (
+                        "Final dialogue polish for the revised draft:\n"
+                        "1. Read every line aloud (mentally) — does it sound like a human being talking?\n"
+                        "2. Character voice final check — cover the character names, can you tell who's speaking?\n"
+                        "3. Trim ruthlessly — if a scene works with fewer lines, use fewer lines\n"
+                        "4. Silence — are there moments where NO dialogue is more powerful? Mark them.\n"
+                        "5. The quotable test — does this script have moments that stick?\n"
+                        "6. Consistency with voice profile — does the dialogue honor the source material's DNA?\n\n"
+                        "Output the final polished draft. "
+                        "Consult department documents for revised draft, voice profile, and all feedback."
+                    ),
+                },
+            },
         }
 
         tasks = []
         previous_depends = False
         for agent_type in creative_agents:
             spec = TASK_SPECS.get(stage, {}).get(agent_type)
-            if spec:
-                task_data = {
-                    "target_agent_type": agent_type,
-                    "command_name": spec.get("command_name", ""),
-                    "exec_summary": spec["exec_summary"],
-                    "step_plan": (
-                        f"Locale: {locale}\n{format_context}\n"
-                        f"{spec['step_plan']}\n\n"
-                        f"Your output must be in {locale}. This is non-negotiable."
-                    ),
-                    "depends_on_previous": previous_depends,
-                }
-            else:
-                # Fallback for stages without specific specs
-                task_data = {
-                    "target_agent_type": agent_type,
-                    "exec_summary": f"Write {stage} content ({agent_type})",
-                    "step_plan": (
-                        f"Stage: {stage}\nLocale: {locale}\n{format_context}\n"
-                        f"Write your contribution for the '{stage}' stage of this project. "
-                        f"Consult department documents for existing material and briefings for the project brief.\n\n"
-                        f"Your output must be in {locale}. This is non-negotiable."
-                    ),
-                    "depends_on_previous": previous_depends,
-                }
+            if not spec:
+                raise ValueError(
+                    f"No TASK_SPECS entry for stage '{stage}', agent '{agent_type}'. "
+                    f"Every CREATIVE_MATRIX entry must have a corresponding TASK_SPECS entry."
+                )
+            pitch_preamble = (
+                "STEP 0 — PITCH EXTRACTION (mandatory before any creative work):\n"
+                "Read the CREATOR'S ORIGINAL PITCH in <project_goal> above. List the specific "
+                "elements the creator provided: their characters, their conflicts, their world, "
+                "their arcs, their side plots, their tone direction. These are YOUR raw material.\n"
+                "Referenced shows (e.g. 'like Succession', 'Industry-style') are QUALITY "
+                "benchmarks — they tell you the league, NOT the plot. Do NOT borrow characters, "
+                "family structures, premises, or dramatic engines from referenced shows.\n"
+                "If the creator said 'three brothers', you write three brothers — not a patriarch "
+                "with sons and daughters. If they described a specific conflict, that IS the "
+                "central conflict — do not substitute a more conventional one.\n\n"
+            )
+            task_data = {
+                "target_agent_type": agent_type,
+                "command_name": spec.get("command_name", ""),
+                "exec_summary": spec["exec_summary"],
+                "step_plan": (
+                    f"Locale: {locale}\n{format_context}\n"
+                    f"{pitch_preamble}"
+                    f"{spec['step_plan']}\n\n"
+                    f"FIDELITY CHECK (before submitting): Re-read the creator's pitch. "
+                    f"Does your output preserve EVERY specific element they provided? "
+                    f"If you introduced characters, conflicts, or structures the creator "
+                    f"did NOT mention, ask yourself: did I copy this from a reference show? "
+                    f"If yes, delete it and build from the creator's actual material instead.\n\n"
+                    f"Your output must be in {locale}. This is non-negotiable."
+                ),
+                "depends_on_previous": previous_depends,
+            }
 
             tasks.append(task_data)
             if agent_type == "story_researcher":
@@ -600,12 +881,45 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     # ── Feedback task proposal ──────────────────────────────────────────
 
     def _propose_feedback_tasks(self, agent: Agent, stage: str, config: dict) -> dict:
-        """Create feedback/analysis tasks per the depth matrix."""
+        """Create feedback/analysis tasks per the depth matrix.
+
+        Skips feedback agents that are inactive, or whose controlled creative
+        agent is inactive (no point reviewing work that wasn't produced).
+        """
+        from agents.blueprints import get_workforce_for_department
+
         feedback_agents = FEEDBACK_MATRIX.get(stage, [])
         locale = config.get("locale", "en")
 
+        # Active agents in this department
+        active_types = set(
+            agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
+        )
+
+        # Build controls map: feedback_agent_type → creative_agent_type it reviews
+        workforce = get_workforce_for_department(agent.department.department_type)
+        controls_map: dict[str, str | None] = {}
+        for slug, bp in workforce.items():
+            ctrl = getattr(bp, "controls", None)
+            if ctrl:
+                controls_map[slug] = ctrl if isinstance(ctrl, str) else ctrl[0]
+
         tasks = []
         for agent_type, depth in feedback_agents:
+            # Skip if the feedback agent itself is inactive
+            if agent_type not in active_types:
+                logger.info("Writers Room: skipping inactive feedback agent '%s'", agent_type)
+                continue
+            # Skip if the creative agent this reviewer controls is inactive
+            controlled = controls_map.get(agent_type)
+            if controlled and controlled not in active_types:
+                logger.info(
+                    "Writers Room: skipping feedback agent '%s' — its target '%s' is inactive",
+                    agent_type,
+                    controlled,
+                )
+                continue
+
             tasks.append(
                 {
                     "target_agent_type": agent_type,
@@ -626,6 +940,25 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     "depends_on_previous": False,  # Feedback agents run in parallel
                 }
             )
+
+        if not tasks:
+            # All feedback agents skipped — pass the stage without review
+            logger.warning("Writers Room: no active feedback agents for stage '%s' — passing without review", stage)
+            internal_state = agent.internal_state or {}
+            stage_status = internal_state.get("stage_status", {})
+            current_info = stage_status.get(stage, {"iterations": 0})
+            current_info["status"] = "passed"
+            stage_status[stage] = current_info
+            internal_state["stage_status"] = stage_status
+            next_stg = _next_stage(stage)
+            target_stage = config.get("target_stage", "revised_draft")
+            if next_stg and STAGES.index(stage) < STAGES.index(target_stage):
+                internal_state["current_stage"] = next_stg
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            if next_stg and STAGES.index(stage) < STAGES.index(target_stage):
+                return self._propose_creative_tasks(agent, next_stg, config)
+            return None
 
         # Update stage status
         internal_state = agent.internal_state or {}

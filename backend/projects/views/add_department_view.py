@@ -150,12 +150,13 @@ class AddDepartmentView(APIView):
                 if agent_type not in available_workforce:
                     continue
                 bp = available_workforce[agent_type]
+                needs_config = any(s.get("required") for s in bp.config_schema.values())
                 Agent.objects.create(
                     name=bp.name,
                     agent_type=agent_type,
                     department=dept,
                     is_leader=False,
-                    status=Agent.Status.PROVISIONING,
+                    status=Agent.Status.PROVISIONING if needs_config else Agent.Status.ACTIVE,
                     instructions="",
                 )
 
