@@ -21,14 +21,34 @@ class RedditBlueprint(WorkforceBlueprint):
     tags = ["social-media", "reddit", "placement", "brand-visibility"]
     skills = [
         {
-            "name": "Strategic Placement",
-            "description": "Add one well-crafted post on trending content that angles toward the project goal",
+            "name": "Community-Native Value Posting",
+            "description": (
+                "Crafts subreddit-native comments and posts that provide genuine value — detailed "
+                "answers, data-backed insights, personal experience stories — while naturally "
+                "referencing the project when relevant. Respects each subreddit's culture, rules, "
+                "and self-promotion norms (typically <10% self-promotional). Uses a 4-hour minimum "
+                "cooldown per subreddit to avoid spam detection. Never posts low-effort 'check out "
+                "our product' comments."
+            ),
         },
         {
-            "name": "Find Trending Posts",
-            "description": "Identify high-performing posts in relevant subreddits for strategic placement",
+            "name": "Subreddit Trend Analysis",
+            "description": (
+                "Identifies high-engagement posts (rising, hot) in target subreddits where the "
+                "project can contribute authentic expertise. Evaluates post velocity, comment "
+                "sentiment, and topic alignment. Prioritizes threads where a knowledgeable comment "
+                "would be welcomed by the community rather than perceived as marketing."
+            ),
         },
-        {"name": "Monitor Mentions", "description": "Search Reddit for brand, project, or keyword mentions"},
+        {
+            "name": "Brand Mention Monitoring",
+            "description": (
+                "Searches Reddit for brand, product, and keyword mentions across relevant "
+                "subreddits. Classifies mentions by sentiment (positive, neutral, negative, "
+                "question) and recommends response strategy: acknowledge praise, address concerns, "
+                "answer questions with helpful detail, or flag negative sentiment for escalation."
+            ),
+        },
     ]
     config_schema = {
         "reddit_username": {

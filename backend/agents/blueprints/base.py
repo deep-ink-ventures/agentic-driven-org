@@ -505,6 +505,13 @@ class LeaderBlueprint(BaseBlueprint):
         agent.save(update_fields=["internal_state"])
 
         if round_num > MAX_REVIEW_ROUNDS:
+            logger.warning(
+                "REVIEW_ESCALATION dept=%s rounds=%d max=%d task=%s",
+                agent.department.name,
+                round_num,
+                MAX_REVIEW_ROUNDS,
+                creator_task.exec_summary[:60],
+            )
             return {
                 "exec_summary": f"Escalation: {round_num} review rounds on {creator_task.exec_summary[:60]}",
                 "tasks": [
@@ -571,8 +578,11 @@ class LeaderBlueprint(BaseBlueprint):
             polish_count += 1
             polish_attempts_map[stage_key] = polish_count
 
+        dept_name = agent.department.name if hasattr(agent, "department") else "?"
         logger.info(
-            "Quality gate: score %.1f/10, round %d, polish %d/%d (key=%s)",
+            "REVIEW_DECISION dept=%s agent=%s score=%.1f/10 round=%d polish=%d/%d key=%s",
+            dept_name,
+            agent.name,
             score,
             round_num,
             polish_count,
@@ -583,19 +593,30 @@ class LeaderBlueprint(BaseBlueprint):
         accepted = should_accept_review(score, round_num, polish_count)
 
         if accepted:
+            reason = "excellence" if score >= EXCELLENCE_THRESHOLD else f"diminishing_returns (polish={polish_count})"
+            logger.info(
+                "REVIEW_ACCEPTED dept=%s score=%.1f/10 reason=%s key=%s",
+                dept_name,
+                score,
+                reason,
+                stage_key,
+            )
             # Clear tracking for this key
             review_rounds.pop(stage_key, None)
             polish_attempts_map.pop(stage_key, None)
             internal_state["review_rounds"] = review_rounds
             internal_state["polish_attempts"] = polish_attempts_map
             internal_state.pop("active_review_key", None)
-            if score < EXCELLENCE_THRESHOLD:
-                logger.info(
-                    "Accepting score %.1f/10 after %d polish attempts (diminishing returns)",
-                    score,
-                    polish_count,
-                )
         else:
+            gap = EXCELLENCE_THRESHOLD - score
+            logger.info(
+                "REVIEW_REJECTED dept=%s score=%.1f/10 gap=%.1f round=%d key=%s",
+                dept_name,
+                score,
+                gap,
+                round_num,
+                stage_key,
+            )
             # Persist polish tracking
             internal_state["polish_attempts"] = polish_attempts_map
 
@@ -721,6 +742,12 @@ class LeaderBlueprint(BaseBlueprint):
 
         # Creator just finished → propose review chain
         if last_type in creator_types:
+            logger.info(
+                "REVIEW_TRIGGER dept=%s creator=%s task=%s",
+                agent.department.name,
+                last_type,
+                last_completed.exec_summary[:60],
+            )
             review_proposal = self._propose_review_chain(agent, last_completed, workforce_types)
             if review_proposal:
                 return review_proposal

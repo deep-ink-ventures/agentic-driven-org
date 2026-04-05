@@ -702,11 +702,21 @@ VERDICT LINE (REQUIRED — must be the last line):
 VERDICT: APPROVED (score: N.N/10)
 VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
 
-        response, _usage = call_claude(
+        response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=msg,
             model=self.get_model(agent, command_name="check-progress"),
         )
+        if usage:
+            logger.info(
+                "TOKEN_USAGE dept=%s agent=%s stage=%s input=%d output=%d cost=$%.4f",
+                agent.department.name,
+                agent.name,
+                stage,
+                usage.get("input_tokens", 0),
+                usage.get("output_tokens", 0),
+                usage.get("cost_usd", 0),
+            )
 
         data = parse_json_response(response)
         if not data:

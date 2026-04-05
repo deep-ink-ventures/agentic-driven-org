@@ -21,16 +21,35 @@ class TwitterBlueprint(WorkforceBlueprint):
     tags = ["social-media", "twitter", "placement", "content-creation"]
     skills = [
         {
-            "name": "Strategic Placement",
-            "description": "Add one strategic reply or quote tweet on trending content that angles toward the project",
+            "name": "Conversation Hijacking",
+            "description": (
+                "Identifies high-engagement tweets in the project's niche (1000+ impressions, "
+                "active reply threads) and crafts a single reply or quote tweet that adds genuine "
+                "value to the conversation while naturally angling toward the project. Never "
+                "self-promotes directly — contributes insight, data, or a perspective that makes "
+                "readers curious enough to click through. Times placement within the tweet's "
+                "engagement peak window (first 2-4 hours)."
+            ),
         },
         {
-            "name": "Post Original Content",
-            "description": "Create and post an original tweet aligned with project goals and optimal timing",
+            "name": "Hook-First Content Creation",
+            "description": (
+                "Creates original tweets using proven engagement patterns: contrarian takes with "
+                "evidence, 'most people don't know' reveals, before/after transformations, numbered "
+                "lists of actionable insights, strong opinion + reasoning. First line must stop the "
+                "scroll — never starts with 'We' or the brand name. Posts during optimal windows "
+                "(8-10am ET or 5-7pm ET) with maximum 3 posts/day to avoid feed fatigue."
+            ),
         },
         {
-            "name": "Find Trending Tweets",
-            "description": "Identify high-performing tweets in the project's niche for strategic placement",
+            "name": "Trend Signal Detection",
+            "description": (
+                "Monitors niche-relevant trending topics, viral threads, and high-velocity "
+                "conversations. Distinguishes genuine engagement trends from bot amplification. "
+                "Evaluates each trend for brand alignment, audience overlap, and placement "
+                "opportunity — only recommends trends where the project can add authentic value, "
+                "not forced relevance."
+            ),
         },
     ]
     config_schema = {

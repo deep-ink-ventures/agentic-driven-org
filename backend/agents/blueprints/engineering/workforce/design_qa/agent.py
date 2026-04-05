@@ -155,6 +155,78 @@ class DesignQaBlueprint(WorkforceBlueprint):
     )
     tags = ["engineering", "qa", "design", "ux", "accessibility", "review"]
     config_schema = {}
+    review_dimensions = [
+        "heuristics",
+        "accessibility",
+        "cognitive_load",
+        "visual_quality",
+        "responsiveness",
+        "consistency",
+    ]
+    skills = [
+        {
+            "name": "Nielsen's 10 Heuristics Scoring",
+            "description": (
+                "Scores implementations against all 10 usability heuristics on a 0-4 severity scale "
+                "(0=no problem, 1=cosmetic, 2=minor, 3=major, 4=catastrophe). Produces a total "
+                "score out of 40 with letter grade. Every score includes specific evidence from the "
+                "implementation and a concrete fix instruction."
+            ),
+        },
+        {
+            "name": "AI Slop Detection",
+            "description": (
+                "Binary pass/fail test detecting the fingerprints of generic AI-generated design: "
+                "gratuitous gradients, card-heavy layouts, decorative icons without function, "
+                "excessive border-radius, identical card grids, dashboard-itis, animated transitions "
+                "that slow task completion, and color used decoratively rather than meaningfully. "
+                "Rejection triggers a redesign, not a polish pass."
+            ),
+        },
+        {
+            "name": "Cognitive Load Assessment",
+            "description": (
+                "Evaluates three types of cognitive load: intrinsic (inherent task complexity — "
+                "managed, not reduced), extraneous (poor design complexity — must eliminate), and "
+                "germane (productive mental model building — should support). Uses 8-item checklist: "
+                "task completion without instructions, 5-second hierarchy clarity, grouping, choice "
+                "count (max 5-7), defaults, progressive disclosure, cross-screen memory, reversibility."
+            ),
+        },
+        {
+            "name": "5-Persona Walkthrough Testing",
+            "description": (
+                "Tests every flow with 5 archetypes: Alex (power user — needs keyboard shortcuts, "
+                "bulk actions, high density), Jordan (new user — needs onboarding, clear next steps), "
+                "Sam (accessibility-dependent — screen reader, keyboard-only, high contrast, reduced "
+                "motion), Riley (stressed/rushing — scanning not reading, needs clear CTAs and "
+                "forgiving errors), Casey (non-native speaker — needs simple language, consistent "
+                "terminology, no idioms). Each persona produces specific friction points."
+            ),
+        },
+        {
+            "name": "Impeccable Style Compliance Audit",
+            "description": (
+                "Verifies implementation against the full Impeccable Style DO/DON'T checklist: "
+                "semantic HTML, visible focus indicators, consistent spacing from design system, "
+                "44x44px touch targets, color reinforcing meaning, loading skeletons matching content "
+                "shape, actionable error messages, progressive disclosure, visible form labels, real "
+                "content testing. Flags violations of the OKLCH color system, 4pt grid, typography "
+                "rules, and motion design principles."
+            ),
+        },
+        {
+            "name": "P0-P3 Severity Triage",
+            "description": (
+                "Classifies every finding into actionable severity: P0 (blocks ship — broken "
+                "functionality, accessibility failure preventing use, data loss, security), P1 (fix "
+                "before next release — significant usability problem, major inconsistency), P2 (fix "
+                "soon — minor usability issue, cosmetic inconsistency), P3 (nice to have — polish, "
+                "edge case, minor enhancement). Every finding includes exact location, which "
+                "principle it violates, user impact, and specific fix instruction."
+            ),
+        },
+    ]
 
     @property
     def system_prompt(self) -> str:

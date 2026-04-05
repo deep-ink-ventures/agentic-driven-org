@@ -29,6 +29,81 @@ class UxDesignerBlueprint(WorkforceBlueprint):
     tags = ["engineering", "design", "ux", "ui", "frontend", "accessibility"]
     config_schema = {}
     controls = "frontend_engineer"
+    skills = [
+        {
+            "name": "Anti-Slop Typography",
+            "description": (
+                "Selects fonts with character (Sohne, Geist, Satoshi, Cabinet Grotesk, Fraunces — "
+                "never Inter/Roboto/Open Sans), builds modular type scales with specific ratios "
+                "(minor third 1.2, major third 1.25, perfect fourth 1.333), implements fluid sizing "
+                "via clamp(), establishes vertical rhythm with baseline grid alignment, and specifies "
+                "letter-spacing, font-variant-numeric, and optical sizing. Pairs fonts on contrast "
+                "axes (serif+sans, geometric+humanist) — never two similar faces."
+            ),
+        },
+        {
+            "name": "OKLCH Color Systems",
+            "description": (
+                "Builds color systems in OKLCH color space with tinted neutrals (never pure gray — "
+                "every neutral carries a hint of the brand hue at 0.005-0.01 chroma). Applies the "
+                "60-30-10 distribution rule, creates depth through layered lightness values, ensures "
+                "WCAG contrast ratios (4.5:1 text, 3:1 UI), and designs dark mode by reducing chroma "
+                "rather than inverting colors. Never uses pure black (#000) or pure white (#fff)."
+            ),
+        },
+        {
+            "name": "Spatial Rhythm & 4pt Grid",
+            "description": (
+                "Designs on a 4pt spacing grid with intentional variation — tight within groups "
+                "(8-12px), breathing room between groups (24-48px), generous between sections "
+                "(48-96px). Uses CSS Grid for page layout with named template areas, container "
+                "queries for component-level responsiveness, and intentional asymmetry (2/3+1/3 "
+                "splits over 50/50). Specifies content-driven breakpoints, not device-driven."
+            ),
+        },
+        {
+            "name": "Motion Design (3-Tier System)",
+            "description": (
+                "Specifies motion using three timing tiers: micro (100ms, color/opacity), standard "
+                "(300ms, enter/exit/layout), dramatic (500ms, page transitions). Only animates "
+                "transform and opacity (GPU-accelerated). Uses exponential easing curves — never "
+                "bounce or elastic for professional interfaces. Staggers list animations at 50-80ms "
+                "offsets. Always provides prefers-reduced-motion fallbacks."
+            ),
+        },
+        {
+            "name": "8-State Interaction Design",
+            "description": (
+                "Designs ALL interactive states: default, hover, focus-visible (2px accent ring "
+                "with 2px offset), active/pressed (scale 0.98), disabled (with explanation), "
+                "loading (skeleton shimmer matching layout), error (with recovery action), and "
+                "empty (as onboarding opportunity). Specifies keyboard navigation (Tab, Enter, "
+                "Space, Escape, Arrow keys), ARIA roles/labels, touch targets (44x44px minimum), "
+                "and cursor styles per element type."
+            ),
+        },
+        {
+            "name": "AI Slop Detection & Prevention",
+            "description": (
+                "Runs the AI Slop Test checklist against every design: rejects identical card grids, "
+                "uniform spacing, generic hero layouts, gratuitous gradients, cards-in-cards, "
+                "centered-everything layouts, glassmorphism-as-decoration, and the default AI color "
+                "palette (cyan-on-dark, purple-to-blue gradients). Every design must have ONE "
+                "distinctive memorable element that makes someone ask 'how was this made?' rather "
+                "than 'which AI made this?'"
+            ),
+        },
+        {
+            "name": "UX Writing & Content Design",
+            "description": (
+                "Writes UI copy following Impeccable Style rules: verb-first button labels ('Save "
+                "changes' not 'Submit'), three-part error messages (what happened, why, what to do), "
+                "empty states as onboarding opportunities, sentence case throughout, specific labels "
+                "('Email address' not 'Email'), example placeholders ('jane@company.com' not 'Enter "
+                "your email'). Never uses 'Click here', technical jargon, or excessive 'Please'."
+            ),
+        },
+    ]
 
     # Register commands
     design_component = design_component
