@@ -27,6 +27,14 @@ _workforce_imports = {
         "agents.blueprints.engineering.workforce.accessibility_engineer",
         "AccessibilityEngineerBlueprint",
     ),
+    "ux_designer": (
+        "agents.blueprints.engineering.workforce.ux_designer",
+        "UxDesignerBlueprint",
+    ),
+    "design_qa": (
+        "agents.blueprints.engineering.workforce.design_qa",
+        "DesignQaBlueprint",
+    ),
 }
 for _slug, (_mod_path, _cls_name) in _workforce_imports.items():
     try:
@@ -106,6 +114,39 @@ DEPARTMENTS["engineering"] = {
     "workforce": _engineering_workforce,
     "config_schema": _engineering_leader.config_schema,
 }
+
+# ── Sales ───────────────────────────────────────────────────────────────────
+
+try:
+    from agents.blueprints.sales.leader import SalesLeaderBlueprint
+except ImportError:
+    SalesLeaderBlueprint = None
+
+_sales_workforce = {}
+_sales_imports = {
+    "prospector": ("agents.blueprints.sales.workforce.prospector", "ProspectorBlueprint"),
+    "prospect_analyst": ("agents.blueprints.sales.workforce.prospect_analyst", "ProspectAnalystBlueprint"),
+    "outreach_writer": ("agents.blueprints.sales.workforce.outreach_writer", "OutreachWriterBlueprint"),
+    "outreach_reviewer": ("agents.blueprints.sales.workforce.outreach_reviewer", "OutreachReviewerBlueprint"),
+}
+for _slug, (_mod_path, _cls_name) in _sales_imports.items():
+    try:
+        _mod = importlib.import_module(_mod_path)
+        _sales_workforce[_slug] = getattr(_mod, _cls_name)()
+    except (ImportError, AttributeError):
+        pass
+
+if SalesLeaderBlueprint is not None:
+    _sales_leader = SalesLeaderBlueprint()
+    DEPARTMENTS["sales"] = {
+        "name": "Sales",
+        "description": "Outbound prospecting and outreach — target research, qualification, personalized outreach with quality review loops",
+        "execution_mode": "scheduled",
+        "min_delay_seconds": 0,
+        "leader": _sales_leader,
+        "workforce": _sales_workforce,
+        "config_schema": _sales_leader.config_schema,
+    }
 
 DEPARTMENT_TYPE_CHOICES = [(slug, dept["name"]) for slug, dept in DEPARTMENTS.items()]
 
