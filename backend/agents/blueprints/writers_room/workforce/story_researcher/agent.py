@@ -45,6 +45,7 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             "description": "Cross-references language, technology, and social norms against the story's time period.",
         },
     ]
+    outputs = ["document"]
     config_schema = {
         "locale": {
             "type": "str",

@@ -28,6 +28,7 @@ class WebResearcherBlueprint(WorkforceBlueprint):
             "description": "Synthesize raw research findings into strategic recommendations with suggested angles",
         },
     ]
+    outputs = ["document"]
     config_schema = {}
 
     @property

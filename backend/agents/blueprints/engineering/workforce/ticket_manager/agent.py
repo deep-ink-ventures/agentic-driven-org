@@ -81,6 +81,7 @@ class TicketManagerBlueprint(WorkforceBlueprint):
             "description": "Cross-references related issues and notes blocking relationships between tickets",
         },
     ]
+    outputs = ["github_issue"]
     config_schema = {}
 
     @property

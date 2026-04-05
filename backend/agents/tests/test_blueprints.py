@@ -552,3 +552,31 @@ class TestApplyQualityGate:
         leader_agent.refresh_from_db()
         assert "test_key" not in leader_agent.internal_state.get("review_rounds", {})
         assert "test_key" not in leader_agent.internal_state.get("polish_attempts", {})
+
+
+# ── Output declarations ────────────────────────────────────────────────────
+
+
+class TestOutputDeclarations:
+    def test_outputs_set_on_expected_agents(self):
+        """Agents that produce persistent artifacts declare their outputs."""
+        cases = {
+            ("web_researcher", "marketing"): ["document"],
+            ("story_researcher", "writers_room"): ["document"],
+            ("ticket_manager", "engineering"): ["github_issue"],
+        }
+        for (agent_type, dept), expected in cases.items():
+            bp = get_blueprint(agent_type, dept)
+            assert bp.outputs == expected, f"{dept}/{agent_type} outputs mismatch: {bp.outputs}"
+
+    def test_default_outputs_empty(self):
+        """Agents without artifact production have empty outputs."""
+        bp = get_blueprint("twitter", "marketing")
+        assert bp.outputs == []
+
+    def test_outputs_field_exists_on_base(self):
+        """The outputs field is defined on BaseBlueprint."""
+        from agents.blueprints.base import BaseBlueprint
+
+        assert hasattr(BaseBlueprint, "outputs")
+        assert BaseBlueprint.outputs == []
