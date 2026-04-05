@@ -45,7 +45,7 @@ export default function Waitlist() {
   }
 
   return (
-    <section id="waitlist" ref={ref} className="py-24 md:py-40 px-6 md:px-12 bg-navy-mid">
+    <section id="waitlist" ref={ref} className="py-24 md:py-40 px-6 md:px-12 bg-navy-mid scroll-mt-14">
       <div
         className={`max-w-2xl mx-auto ${
           visible ? "animate-fade-up" : "opacity-0"

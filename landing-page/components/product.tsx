@@ -18,7 +18,7 @@ export default function Product() {
   }, []);
 
   return (
-    <section ref={ref} className="py-24 md:py-40 px-6 md:px-12 bg-navy-mid">
+    <section id="product" ref={ref} className="py-24 md:py-40 px-6 md:px-12 bg-navy-mid scroll-mt-14">
       <div className="max-w-6xl mx-auto">
         <div
           className={`grid md:grid-cols-[1fr_1.2fr] gap-16 md:gap-24 items-start ${

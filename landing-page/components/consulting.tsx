@@ -18,7 +18,7 @@ export default function Consulting() {
   }, []);
 
   return (
-    <section ref={ref} className="py-24 md:py-40 px-6 md:px-12">
+    <section id="consulting" ref={ref} className="py-24 md:py-40 px-6 md:px-12 scroll-mt-14">
       <div className="max-w-6xl mx-auto">
         <div
           className={`max-w-2xl ${visible ? "animate-fade-up" : "opacity-0"}`}
