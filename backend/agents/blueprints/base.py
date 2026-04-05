@@ -966,7 +966,7 @@ Respond with JSON:
         workforce = AgentModel.objects.filter(
             department=department,
             is_leader=False,
-            status=Agent.Status.ACTIVE,
+            status=AgentModel.Status.ACTIVE,
         )
         if not workforce.exists():
             return None
@@ -999,6 +999,10 @@ Respond with JSON:
             if report:
                 entry += f"\n  Result: {report[:300]}"
             completed_text.append(entry)
+
+        # Write a progress document if there are completed tasks to capture
+        if completed_tasks:
+            self._write_sprint_progress_document(department, sprint, completed_tasks)
 
         from projects.models import Document
 
@@ -1101,3 +1105,57 @@ What is the next step to advance this sprint toward completion?"""
         except Exception as e:
             logger.exception("Leader %s: sprint proposal failed: %s", agent.name, e)
             return None
+
+    def _write_sprint_progress_document(self, department, sprint, completed_tasks):
+        """Write a sprint progress document capturing completed task results."""
+        from projects.models import Document
+
+        batch_num = (
+            Document.objects.filter(
+                department=department,
+                sprint=sprint,
+                document_type="sprint_progress",
+            ).count()
+            + 1
+        )
+
+        last_progress = (
+            Document.objects.filter(
+                department=department,
+                sprint=sprint,
+                document_type="sprint_progress",
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+        if last_progress:
+            new_tasks = [(summary, report) for summary, report in completed_tasks if report]
+            existing_task_count = sum(
+                1 for line in (last_progress.content or "").split("\n") if line.startswith("## Task:")
+            )
+            if len(new_tasks) <= existing_task_count:
+                return
+
+        content_parts = [f"# Sprint Progress — Batch {batch_num}\n"]
+        content_parts.append(f"**Sprint:** {sprint.text}\n")
+
+        from django.utils import timezone
+
+        content_parts.append(f"**Date:** {timezone.now().strftime('%Y-%m-%d %H:%M')}\n")
+
+        for summary, report in completed_tasks:
+            content_parts.append(f"\n## Task: {summary}\n")
+            if report:
+                content_parts.append(f"{report}\n")
+            else:
+                content_parts.append("*No report provided.*\n")
+
+        Document.objects.create(
+            title=f"Sprint Progress — {sprint.text[:50]} — Batch {batch_num}",
+            content="\n".join(content_parts),
+            department=department,
+            document_type="sprint_progress",
+            doc_type=Document.DocType.GENERAL,
+            sprint=sprint,
+        )

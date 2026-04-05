@@ -332,6 +332,137 @@ class TestGetWorkforceMetadata:
         assert metadata == []
 
 
+# ── Leader document creation ─────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeaderDocumentCreation:
+    def test_leader_writes_progress_doc_before_planning(self, department, user):
+        from unittest.mock import patch
+
+        from agents.blueprints.base import LeaderBlueprint
+        from agents.models import Agent, AgentTask
+        from projects.models import Document, Sprint
+
+        class ConcreteLeaderBlueprint(LeaderBlueprint):
+            name = "Test Leader"
+            description = "A test leader"
+            system_prompt = "You are a test leader."
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Write pilot episode",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        leader = Agent.objects.create(
+            name="Test Leader",
+            agent_type="leader",
+            department=department,
+            is_leader=True,
+            status="active",
+        )
+
+        # Add a workforce agent so generate_task_proposal doesn't bail early
+        Agent.objects.create(
+            name="Twitter Guy",
+            agent_type="twitter",
+            department=department,
+            is_leader=False,
+            status="active",
+        )
+
+        AgentTask.objects.create(
+            agent=leader,
+            sprint=sprint,
+            status=AgentTask.Status.DONE,
+            exec_summary="Analyze characters",
+            report="Found three strong protagonist candidates with distinct arcs.",
+        )
+        AgentTask.objects.create(
+            agent=leader,
+            sprint=sprint,
+            status=AgentTask.Status.DONE,
+            exec_summary="Draft outline",
+            report="Three-act structure with dual timelines established.",
+        )
+
+        with patch("agents.ai.claude_client.call_claude") as mock_claude:
+            mock_claude.return_value = (
+                '{"sprint_done": false, "exec_summary": "Next task", '
+                '"tasks": [{"target_agent_type": "twitter", '
+                '"command_name": "post-content", "exec_summary": "Post content", '
+                '"step_plan": "Post to Twitter.", "depends_on_previous": false}]}',
+                {"input_tokens": 100, "output_tokens": 50},
+            )
+
+            blueprint = ConcreteLeaderBlueprint()
+            blueprint.generate_task_proposal(leader)
+
+        progress_docs = Document.objects.filter(
+            department=department,
+            document_type="sprint_progress",
+            sprint=sprint,
+        )
+        assert progress_docs.count() == 1
+        doc = progress_docs.first()
+        assert "Analyze characters" in doc.content or "protagonist" in doc.content
+        assert doc.is_archived is False
+
+    def test_no_progress_doc_when_no_completed_tasks(self, department, user):
+        from unittest.mock import patch
+
+        from agents.blueprints.base import LeaderBlueprint
+        from agents.models import Agent
+        from projects.models import Document, Sprint
+
+        class ConcreteLeaderBlueprint(LeaderBlueprint):
+            name = "Test Leader"
+            description = "A test leader"
+            system_prompt = "You are a test leader."
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Fresh sprint",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        leader = Agent.objects.create(
+            name="Test Leader",
+            agent_type="leader",
+            department=department,
+            is_leader=True,
+            status="active",
+        )
+
+        # Add a workforce agent so generate_task_proposal doesn't bail early
+        Agent.objects.create(
+            name="Twitter Guy",
+            agent_type="twitter",
+            department=department,
+            is_leader=False,
+            status="active",
+        )
+
+        count_before = Document.objects.filter(department=department).count()
+
+        with patch("agents.ai.claude_client.call_claude") as mock_claude:
+            mock_claude.return_value = (
+                '{"sprint_done": false, "exec_summary": "First task", '
+                '"tasks": [{"target_agent_type": "twitter", '
+                '"command_name": "post-content", "exec_summary": "Start writing", '
+                '"step_plan": "Begin.", "depends_on_previous": false}]}',
+                {"input_tokens": 100, "output_tokens": 50},
+            )
+
+            blueprint = ConcreteLeaderBlueprint()
+            blueprint.generate_task_proposal(leader)
+
+        assert Document.objects.filter(department=department).count() == count_before
+
+
 # ── WorkforceBlueprint default execute_task ────────────────────────────────
 
 
