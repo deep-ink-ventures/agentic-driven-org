@@ -48,6 +48,13 @@ class AgentTask(models.Model):
         related_name="dependents",
         help_text="This task can't run until the blocker completes.",
     )
+    sprint = models.ForeignKey(
+        "projects.Sprint",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+    )
     exec_summary = models.TextField(blank=True, help_text="Short description of what to do")
     step_plan = models.TextField(blank=True, help_text="Detailed step-by-step plan")
     proposed_exec_at = models.DateTimeField(

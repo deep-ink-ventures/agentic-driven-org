@@ -40,6 +40,13 @@ class Source(models.Model):
         null=True,
         blank=True,
     )
+    sprint = models.ForeignKey(
+        "projects.Sprint",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sources",
+    )
     raw_content = models.TextField(
         blank=True,
         help_text="For text sources: the raw text. For files: unprocessed extracted text.",
