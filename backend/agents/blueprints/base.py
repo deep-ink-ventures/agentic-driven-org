@@ -47,6 +47,7 @@ def parse_review_verdict(report: str) -> tuple[str, float]:
     if match:
         return match.group(1), float(match.group(2))
     # Fallback: keyword detection
+    logger.warning("VERDICT_REGEX_MISS — falling back to keyword detection")
     lower = report.lower()
     if "approved" in lower and "changes_requested" not in lower:
         return "APPROVED", EXCELLENCE_THRESHOLD
@@ -424,20 +425,53 @@ class WorkforceBlueprint(BaseBlueprint):
         """Execute a task by calling Claude and returning the response.
 
         This default handles the common pattern used by ~20 agents.
+        Reviewer agents (with review_dimensions) get VERDICT_TOOL injected.
         Override only for agents with external integrations (Playwright,
         GitHub, SendGrid) or command-dispatch logic.
         """
-        from agents.ai.claude_client import call_claude
-
         suffix = self.get_task_suffix(agent, task)
         task_msg = self.build_task_message(agent, task, suffix=suffix)
+        model = self.get_model(agent, task.command_name)
+        max_tokens = self.get_max_tokens(agent, task)
+
+        if self.review_dimensions:
+            from agents.ai.claude_client import call_claude_with_tools
+
+            kwargs = {
+                "system_prompt": self.build_system_prompt(agent),
+                "user_message": task_msg,
+                "tools": [VERDICT_TOOL],
+                "model": model,
+            }
+            if max_tokens:
+                kwargs["max_tokens"] = max_tokens
+
+            response, tool_input, usage = call_claude_with_tools(**kwargs)
+            task.token_usage = usage
+
+            if tool_input and "verdict" in tool_input and "score" in tool_input:
+                task.review_verdict = tool_input["verdict"]
+                task.review_score = tool_input["score"]
+            else:
+                logger.warning(
+                    "VERDICT_TOOL_FALLBACK agent=%s task=%s — Claude did not call submit_verdict",
+                    agent.name,
+                    task.id,
+                )
+                verdict, score = parse_review_verdict(response)
+                task.review_verdict = verdict
+                task.review_score = score
+
+            task.save(update_fields=["token_usage", "review_verdict", "review_score"])
+            return response
+
+        from agents.ai.claude_client import call_claude
 
         kwargs = {
             "system_prompt": self.build_system_prompt(agent),
             "user_message": task_msg,
-            "model": self.get_model(agent, task.command_name),
+            "model": model,
         }
-        max_tokens = self.get_max_tokens(agent, task)
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
 
@@ -564,9 +598,7 @@ class LeaderBlueprint(BaseBlueprint):
                         f"Content to review:\n{report_snippet}\n\n"
                         f"Score each dimension 1.0-10.0 (use decimals): {dims_text}.\n"
                         f"Overall score = MINIMUM of all dimensions.\n\n"
-                        f"End with exactly one of:\n"
-                        f"VERDICT: APPROVED (score: N.N/10)\n"
-                        f"VERDICT: CHANGES_REQUESTED (score: N.N/10)"
+                        f"After your review, call the submit_verdict tool with your verdict and score."
                     ),
                     "depends_on_previous": False,
                 }
@@ -650,8 +682,17 @@ class LeaderBlueprint(BaseBlueprint):
         - score >= 9.0 and polish_attempts >= 3 → accept (diminishing returns)
         - otherwise → create fix task back to the original creator
         """
-        report = review_task.report or ""
-        verdict, score = parse_review_verdict(report)
+        if review_task.review_verdict and review_task.review_score is not None:
+            verdict = review_task.review_verdict
+            score = review_task.review_score
+        else:
+            report = review_task.report or ""
+            verdict, score = parse_review_verdict(report)
+            logger.warning(
+                "VERDICT_FROM_TEXT agent=%s task=%s — no structured verdict, parsed from report text",
+                review_task.agent.name,
+                review_task.id,
+            )
 
         # Find the task key: use stored active_review_key (set when review chain starts)
         internal_state = agent.internal_state or {}

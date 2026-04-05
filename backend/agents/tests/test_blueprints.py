@@ -6,6 +6,7 @@ from agents.blueprints import (
     get_blueprint,
 )
 from agents.blueprints.base import (
+    VERDICT_TOOL,
     LeaderBlueprint,
     WorkforceBlueprint,
     command,
@@ -580,3 +581,105 @@ class TestOutputDeclarations:
 
         assert hasattr(BaseBlueprint, "outputs")
         assert BaseBlueprint.outputs == []
+
+
+# ── Verdict tool injection ─────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestVerdictToolInjection:
+    """Test that reviewer agents get VERDICT_TOOL injected in execute_task."""
+
+    def test_reviewer_gets_verdict_tool(self, department):
+        """Reviewer agents use call_claude_with_tools and get VERDICT_TOOL."""
+        from unittest.mock import patch
+
+        from agents.blueprints.marketing.workforce.content_reviewer.agent import ContentReviewerBlueprint
+
+        agent = Agent.objects.create(
+            name="Content Reviewer",
+            agent_type="content_reviewer",
+            department=department,
+            status="active",
+        )
+        task = AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Review tweet draft",
+            step_plan="Review the content",
+        )
+
+        tool_input = {"verdict": "APPROVED", "score": 9.6}
+        with patch(
+            "agents.ai.claude_client.call_claude_with_tools",
+            return_value=("Great content!", tool_input, {"input_tokens": 100, "output_tokens": 200}),
+        ) as mock_call:
+            bp = ContentReviewerBlueprint()
+            result = bp.execute_task(agent, task)
+
+            assert mock_call.called
+            # Verify tools kwarg contains VERDICT_TOOL
+            call_kwargs = mock_call.call_args.kwargs
+            assert VERDICT_TOOL in call_kwargs["tools"]
+            # Verify task fields are set from tool response
+            task.refresh_from_db()
+            assert task.review_verdict == "APPROVED"
+            assert task.review_score == 9.6
+            assert result == "Great content!"
+
+    def test_non_reviewer_uses_regular_call(self, twitter_agent):
+        """Non-reviewer agents use regular call_claude without tools."""
+        from unittest.mock import patch
+
+        task = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Research prospects",
+            step_plan="Find leads",
+        )
+
+        with patch(
+            "agents.ai.claude_client.call_claude",
+            return_value=("Here are some leads!", {"input_tokens": 50, "output_tokens": 100}),
+        ) as mock_call:
+            bp = get_blueprint("prospector", "sales")
+            result = bp.execute_task(twitter_agent, task)
+
+            assert mock_call.called
+            task.refresh_from_db()
+            assert task.review_verdict == ""
+            assert task.review_score is None
+            assert result == "Here are some leads!"
+
+    def test_fallback_when_tool_not_called(self, department):
+        """When Claude doesn't call the tool, fallback parsing sets verdict fields."""
+        from unittest.mock import patch
+
+        from agents.blueprints.marketing.workforce.content_reviewer.agent import ContentReviewerBlueprint
+
+        agent = Agent.objects.create(
+            name="Content Reviewer",
+            agent_type="content_reviewer",
+            department=department,
+            status="active",
+        )
+        task = AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Review tweet draft",
+            step_plan="Review the content",
+        )
+
+        # tool_input is None — Claude didn't call the tool, but text has VERDICT line
+        response_text = "Good content.\nVERDICT: APPROVED (score: 9.5/10)"
+        with patch(
+            "agents.ai.claude_client.call_claude_with_tools",
+            return_value=(response_text, None, {"input_tokens": 100, "output_tokens": 200}),
+        ):
+            bp = ContentReviewerBlueprint()
+            result = bp.execute_task(agent, task)
+
+            task.refresh_from_db()
+            assert task.review_verdict == "APPROVED"
+            assert task.review_score == 9.5
+            assert result == response_text
