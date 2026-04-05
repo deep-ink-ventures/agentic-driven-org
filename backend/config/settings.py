@@ -146,6 +146,8 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 1800}
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
 CELERY_BEAT_SCHEDULE = {
     "recover-stuck-proposals": {
         "task": "projects.tasks.recover_stuck_proposals",
@@ -153,6 +155,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "recover-stuck-tasks": {
         "task": "agents.tasks.recover_stuck_tasks",
+        "schedule": 900,  # every 15 minutes
+    },
+    "recover-stuck-provisioning": {
+        "task": "projects.tasks.recover_stuck_provisioning",
         "schedule": 900,  # every 15 minutes
     },
     "run-hourly-actions": {

@@ -417,51 +417,24 @@ You MUST respond with valid JSON. No markdown, no explanation outside the JSON.
 
 
 def get_department_recommendations(project) -> dict:
-    """Call Claude to get department and agent recommendations for a project."""
-    from agents.ai.claude_client import call_claude, parse_json_response
-    from agents.blueprints import DEPARTMENTS, get_workforce_metadata
+    """Return all departments and all agents as recommended.
 
-    sources_summary = get_sources_context(project)
+    Departments are granular enough that all agents should be provisioned.
+    """
+    from agents.blueprints import DEPARTMENTS, get_workforce_metadata
 
     installed = set(project.departments.values_list("department_type", flat=True))
 
-    available_text = ""
-    for slug, dept in DEPARTMENTS.items():
+    departments = []
+    agents = {}
+    for slug, _dept in DEPARTMENTS.items():
         if slug in installed:
             continue
+        departments.append(slug)
         metadata = get_workforce_metadata(slug)
-        agents_text = "\n".join(f"  - **{m['agent_type']}** ({m['name']}): {m['description']}" for m in metadata)
-        available_text += f"\n### {slug} — {dept['name']}\n{dept['description']}\n{agents_text}\n"
+        agents[slug] = [m["agent_type"] for m in metadata]
 
-    if not available_text:
-        return {"departments": [], "agents": {}}
-
-    user_message = f"""# Project: {project.name}
-
-<project_goal>
-{project.goal or "No goal set."}
-</project_goal>
-
-## Sources Summary
-<sources>
-{sources_summary or "No sources available."}
-</sources>
-
-## Available Departments and Agents
-{available_text}
-
-Recommend which departments and agents to activate. Respond with JSON only."""
-
-    response, _usage = call_claude(
-        system_prompt=RECOMMEND_DEPARTMENTS_SYSTEM_PROMPT,
-        user_message=user_message,
-        max_tokens=2048,
-    )
-
-    result = parse_json_response(response)
-    if result is None:
-        return {"departments": [], "agents": {}}
-    return result
+    return {"departments": departments, "agents": agents}
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=10)
@@ -557,7 +530,7 @@ Write comprehensive leader instructions for this department. The leader uses the
         if leader:
             if leader_instructions:
                 leader.instructions = leader_instructions
-            leader.status = Agent.Status.INACTIVE
+            leader.status = Agent.Status.ACTIVE
             leader.save(update_fields=["instructions", "status", "updated_at"])
             _broadcast_agent(project.id, department.id, leader.id, leader.status)
         else:
@@ -566,7 +539,7 @@ Write comprehensive leader instructions for this department. The leader uses the
                 agent_type="leader",
                 department=department,
                 is_leader=True,
-                status=Agent.Status.INACTIVE,
+                status=Agent.Status.ACTIVE,
                 instructions=leader_instructions
                 or f"Lead the {department.name} department for project: {project.name}.",
             )
@@ -841,11 +814,11 @@ Respond with JSON only, no markdown fences:
             if result.get("name"):
                 agent.name = result["name"]
 
-        agent.status = Agent.Status.INACTIVE
+        agent.status = Agent.Status.ACTIVE
         agent.save(update_fields=["instructions", "name", "status", "updated_at"])
 
         _broadcast_agent(project.id, department.id, agent_id, agent.status)
-        logger.info("Agent %s provisioned for department %s", agent.name, department.name)
+        logger.info("Agent %s provisioned and activated for department %s", agent.name, department.name)
 
     except Exception as e:
         logger.warning("provision_single_agent attempt %d failed for %s: %s", self.request.retries + 1, agent_id, e)
@@ -855,3 +828,31 @@ Respond with JSON only, no markdown fences:
         agent.status = Agent.Status.FAILED
         agent.save(update_fields=["status", "updated_at"])
         _broadcast_agent(project.id, department.id, agent_id, "failed", str(e)[:200])
+
+
+@shared_task
+def recover_stuck_provisioning():
+    """
+    Self-healing: re-dispatch agents stuck in provisioning for >15 minutes.
+    Runs every 15 minutes via celery beat.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from agents.models import Agent
+
+    cutoff = timezone.now() - timedelta(minutes=15)
+    stuck = Agent.objects.filter(
+        status=Agent.Status.PROVISIONING,
+        updated_at__lt=cutoff,
+    ).select_related("department")
+
+    for agent in stuck:
+        logger.warning(
+            "Recovering stuck provisioning for agent %s (%s) in %s",
+            agent.name,
+            agent.agent_type,
+            agent.department.name,
+        )
+        provision_single_agent.delay(str(agent.id))
