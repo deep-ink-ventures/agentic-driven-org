@@ -290,6 +290,7 @@ interface LaneConfig {
   title: string;
   statuses: string;
   collapsible?: boolean;
+  pulse?: boolean;
 }
 
 function TaskLane({
@@ -422,7 +423,7 @@ function TaskLane({
               : <ChevronDown className="h-4 w-4 text-text-secondary" />
           )}
           <h3 className="text-sm font-medium text-text-heading">{config.title}</h3>
-          <span className="text-xs px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
+          <span className={`text-xs px-1.5 py-0.5 rounded-full border text-text-secondary ${config.pulse && totalCount > 0 ? "bg-blue-500/15 border-blue-500/30 text-blue-400 animate-pulse" : "bg-bg-input border-border"}`}>
             {totalCount}
           </span>
         </button>
@@ -511,17 +512,10 @@ export function TaskQueue({
       <h2 className="text-2xl font-semibold mb-1">Task Queue</h2>
       <p className="text-sm text-text-secondary mb-6">Monitor and manage your agents&apos; work</p>
 
-      {/* Two lanes side by side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      {/* In Progress at the top */}
+      <div className="mb-8">
         <TaskLane
-          config={{ title: "Needs Attention", statuses: "awaiting_approval,queued,failed" }}
-          projectId={projectId}
-          department={department}
-          agent={agent}
-          wsEvent={wsEvent}
-        />
-        <TaskLane
-          config={{ title: "In Progress", statuses: "processing,awaiting_dependencies" }}
+          config={{ title: "In Progress", statuses: "queued,processing,awaiting_dependencies,planned", pulse: true }}
           projectId={projectId}
           department={department}
           agent={agent}
@@ -529,14 +523,23 @@ export function TaskQueue({
         />
       </div>
 
-      {/* Collapsed completed stack */}
-      <TaskLane
-        config={{ title: "Completed", statuses: "done", collapsible: true }}
-        projectId={projectId}
-        department={department}
-        agent={agent}
-        wsEvent={wsEvent}
-      />
+      {/* Two lanes side by side below */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TaskLane
+          config={{ title: "Needs Attention", statuses: "awaiting_approval,failed" }}
+          projectId={projectId}
+          department={department}
+          agent={agent}
+          wsEvent={wsEvent}
+        />
+        <TaskLane
+          config={{ title: "Completed", statuses: "done", collapsible: true }}
+          projectId={projectId}
+          department={department}
+          agent={agent}
+          wsEvent={wsEvent}
+        />
+      </div>
     </div>
   );
 }
