@@ -13,6 +13,7 @@ import {
   Pencil,
   Clock,
   Filter,
+  RefreshCw,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,16 @@ function TaskCard({
     setActing(true);
     try {
       const updated = await api.rejectTask(projectId, task.id);
+      onUpdate(updated);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleRetry() {
+    setActing(true);
+    try {
+      const updated = await api.retryTask(projectId, task.id);
       onUpdate(updated);
     } finally {
       setActing(false);
@@ -163,9 +174,21 @@ function TaskCard({
             </div>
           )}
           {task.error_message && (
-            <div className="flex items-start gap-2 text-flag-critical text-xs p-2 rounded-lg bg-flag-critical/10">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              {task.error_message}
+            <div className="flex items-start justify-between gap-2 text-flag-critical text-xs p-2 rounded-lg bg-flag-critical/10">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>{task.error_message}</span>
+              </div>
+              {task.status === "failed" && (
+                <Button
+                  size="sm"
+                  onClick={handleRetry}
+                  disabled={acting}
+                  className="shrink-0 bg-accent-gold text-bg-primary hover:bg-accent-gold-hover text-xs h-6 px-2"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" /> Retry
+                </Button>
+              )}
             </div>
           )}
           {task.token_usage && (

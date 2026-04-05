@@ -201,6 +201,9 @@ export const api = {
   rejectTask: (projectId: string, taskId: string) =>
     request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/reject/`, { method: "POST" }),
 
+  retryTask: (projectId: string, taskId: string) =>
+    request<import("./types").AgentTask>(`/api/projects/${projectId}/tasks/${taskId}/retry/`, { method: "POST" }),
+
   updateAgent: (
     agentId: string,
     data: {
