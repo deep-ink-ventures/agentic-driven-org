@@ -228,6 +228,25 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         """
         from agents.models import AgentTask
 
+        # Gate on running sprints — no sprints, no work
+        from projects.models import Sprint
+
+        running_sprints = Sprint.objects.filter(
+            departments=agent.department,
+            status=Sprint.Status.RUNNING,
+        )
+        if not running_sprints.exists():
+            return None
+
+        # Use the least recently touched sprint for context
+        sprint = running_sprints.order_by("updated_at").first()
+
+        def _tag_sprint(result):
+            """Tag proposal with sprint ID for task creation."""
+            if result and isinstance(result, dict):
+                result["_sprint_id"] = str(sprint.id)
+            return result
+
         internal_state = agent.internal_state or {}
         config = _get_merged_config(agent)
         target_stage = config.get("target_stage", "revised_draft")
@@ -295,27 +314,29 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 current_stage,
                 MAX_REVIEW_ROUNDS,
             )
-            return {
-                "exec_summary": f"ESCALATION: Stage '{current_stage}' reached {MAX_REVIEW_ROUNDS} iterations without passing",
-                "tasks": [
-                    {
-                        "target_agent_type": "leader",
-                        "exec_summary": f"Stage '{current_stage}' has iterated {MAX_REVIEW_ROUNDS} times without passing quality gates. Review feedback history and decide next steps.",
-                        "step_plan": "Review the feedback history for this stage. Determine if the quality threshold should be adjusted, the approach needs to change, or human intervention is needed.",
-                    }
-                ],
-            }
+            return _tag_sprint(
+                {
+                    "exec_summary": f"ESCALATION: Stage '{current_stage}' reached {MAX_REVIEW_ROUNDS} iterations without passing",
+                    "tasks": [
+                        {
+                            "target_agent_type": "leader",
+                            "exec_summary": f"Stage '{current_stage}' has iterated {MAX_REVIEW_ROUNDS} times without passing quality gates. Review feedback history and decide next steps.",
+                            "step_plan": "Review the feedback history for this stage. Determine if the quality threshold should be adjusted, the approach needs to change, or human intervention is needed.",
+                        }
+                    ],
+                }
+            )
 
         # Check for review cycle triggers first (universal from base class)
         review_result = self._check_review_trigger(agent)
         if review_result:
-            return review_result
+            return _tag_sprint(review_result)
 
         # ── State machine ───────────────────────────────────────────────
 
         if status == "not_started":
             # Step 1: Assign creative agents to write
-            return self._propose_creative_tasks(agent, current_stage, config)
+            return _tag_sprint(self._propose_creative_tasks(agent, current_stage, config))
 
         if status == "writing_in_progress":
             # All creative tasks completed (no active tasks remain) -> advance
@@ -324,11 +345,11 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             internal_state["stage_status"] = stage_status
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
-            return self._propose_feedback_tasks(agent, current_stage, config)
+            return _tag_sprint(self._propose_feedback_tasks(agent, current_stage, config))
 
         if status == "writing_done":
             # Step 3: Assign feedback agents to analyze
-            return self._propose_feedback_tasks(agent, current_stage, config)
+            return _tag_sprint(self._propose_feedback_tasks(agent, current_stage, config))
 
         if status == "feedback_in_progress":
             # All feedback tasks completed -> dispatch creative_reviewer to consolidate
@@ -337,11 +358,11 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             internal_state["stage_status"] = stage_status
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
-            return self._propose_review_task(agent, current_stage, config)
+            return _tag_sprint(self._propose_review_task(agent, current_stage, config))
 
         if status == "feedback_done":
             # Dispatch creative_reviewer to consolidate analyst feedback
-            return self._propose_review_task(agent, current_stage, config)
+            return _tag_sprint(self._propose_review_task(agent, current_stage, config))
 
         if status == "review_in_progress":
             # creative_reviewer completed and _check_review_trigger accepted it
@@ -358,7 +379,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 logger.info("Writers Room: stage '%s' PASSED — advancing to '%s'", current_stage, next_stg)
                 agent.internal_state = internal_state
                 agent.save(update_fields=["internal_state"])
-                return self._propose_creative_tasks(agent, next_stg, config)
+                return _tag_sprint(self._propose_creative_tasks(agent, next_stg, config))
 
             logger.info("Writers Room: target stage '%s' PASSED — project complete", current_stage)
             agent.internal_state = internal_state
@@ -372,7 +393,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             internal_state["stage_status"] = stage_status
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
-            return self._propose_feedback_tasks(agent, current_stage, config)
+            return _tag_sprint(self._propose_feedback_tasks(agent, current_stage, config))
 
         # Fallback: if status is unknown, start fresh
         logger.warning("Writers Room: unknown stage status '%s' for '%s', resetting", status, current_stage)
@@ -380,7 +401,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         internal_state["stage_status"] = stage_status
         agent.internal_state = internal_state
         agent.save(update_fields=["internal_state"])
-        return self._propose_creative_tasks(agent, current_stage, config)
+        return _tag_sprint(self._propose_creative_tasks(agent, current_stage, config))
 
     # ── Creative task proposal ──────────────────────────────────────────
 
