@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.community.workforce.partnership_reviewer.commands import review_proposal
 from agents.blueprints.community.workforce.partnership_reviewer.skills import format_skills
 
@@ -22,24 +22,18 @@ class PartnershipReviewerBlueprint(WorkforceBlueprint):
 
     @property
     def system_prompt(self) -> str:
-        return """You are a partnership proposal reviewer. Your job is to ensure every proposal meets the quality bar before it's sent to a potential partner. Be rigorous but constructive.
+        return f"""You are a partnership proposal reviewer. Your job is to ensure every proposal meets the quality bar before it's sent to a potential partner. Be rigorous but constructive.
 
-When reviewing, respond with JSON:
-{
-    "verdict": "approved" or "revision_needed",
-    "overall_score": 1-10,
-    "review": {
-        "mutual_value": {"score": 1-10, "feedback": "..."},
-        "specificity": {"score": 1-10, "feedback": "..."},
-        "tone": {"score": 1-10, "feedback": "..."},
-        "structure": {"score": 1-10, "feedback": "..."},
-        "next_steps": {"score": 1-10, "feedback": "..."}
-    },
-    "line_feedback": ["Specific issue with specific suggestion"],
-    "report": "Overall assessment and priority improvements"
-}
+When reviewing, score each dimension 1.0-10.0 (use decimals).
+The overall score is the MINIMUM of all dimension scores.
+The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold.
 
-Approve threshold: overall score >= 7 and no dimension below 5."""
+End your report with exactly one of these lines:
+VERDICT: APPROVED (score: N.N/10)
+VERDICT: CHANGES_REQUESTED (score: N.N/10)
+
+Score dimensions: mutual_value, specificity, tone, structure, next_steps.
+For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific fix suggestions."""
 
     @property
     def skills_description(self) -> str:
@@ -50,7 +44,7 @@ Approve threshold: overall score >= 7 and no dimension below 5."""
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude
 
-        suffix = """# REVIEW METHODOLOGY
+        suffix = f"""# REVIEW METHODOLOGY
 
 ## Value Balance
 - Is the partner's benefit clearly articulated?
@@ -68,8 +62,11 @@ Approve threshold: overall score >= 7 and no dimension below 5."""
 - The proposal is scannable? (Busy people don't read long proposals)
 
 ## Verdict Rules
-- Score >= 7 with no dimension below 5: APPROVED
-- Otherwise: REVISION_NEEDED with actionable feedback"""
+The overall score is the MINIMUM of all dimension scores.
+- Score >= {EXCELLENCE_THRESHOLD}: VERDICT: APPROVED (score: N.N/10)
+- Score < {EXCELLENCE_THRESHOLD}: VERDICT: CHANGES_REQUESTED (score: N.N/10) with actionable feedback
+
+End your report with exactly one VERDICT line."""
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
 

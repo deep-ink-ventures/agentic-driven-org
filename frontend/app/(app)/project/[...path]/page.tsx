@@ -12,6 +12,7 @@ import type {
   AvailableAgent,
 } from "@/lib/types";
 import { AddDepartmentWizard } from "@/components/add-department-wizard";
+import Logomark from "@/components/logomark";
 import { TaskQueue } from "@/components/task-queue";
 import {
   Loader2,
@@ -29,6 +30,8 @@ import {
   Settings2,
   Plus,
   ListTodo,
+  Menu,
+  X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -191,9 +194,9 @@ function DepartmentView({
           </button>
         )}
       </div>
-      {dept.description && (
-        <p className="text-sm text-text-secondary mb-6">{dept.description}</p>
-      )}
+      <p className="text-sm text-text-secondary mb-6">
+        {dept.description || `${dept.agents.length} agent${dept.agents.length !== 1 ? "s" : ""} in this department`}
+      </p>
 
       {leader && (
         <div className="mb-6">
@@ -681,6 +684,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddDept, setShowAddDept] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [view, setView] = useState<"dashboard" | "department" | "agent" | "settings">(
     "dashboard",
   );
@@ -812,86 +816,123 @@ export default function ProjectDetailPage() {
     );
   }
 
-  return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
-      {/* Sidebar */}
-      <div className="w-56 border-r border-border bg-bg-surface shrink-0 flex flex-col">
+  const sidebarContent = (
+    <>
+      <button
+        onClick={() => {
+          setView("dashboard");
+          setSelectedDept(null);
+          setSelectedAgent(null);
+          setSidebarOpen(false);
+          router.push(`/project/${projectSlug}`);
+        }}
+        className={`flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
+          view === "dashboard"
+            ? "text-accent-gold bg-accent-gold/10"
+            : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
+        }`}
+      >
+        <LayoutDashboard className="h-4 w-4" />
+        Dashboard
+      </button>
+      <Separator />
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        <p className="text-[10px] uppercase text-text-secondary font-medium px-2 mb-2">
+          Departments
+        </p>
+        {project.departments.map((dept) => {
+          const activeCount = dept.agents.filter((a) => a.status === "active").length;
+          const totalCount = dept.agents.length;
+          return (
+            <button
+              key={dept.id}
+              onClick={() => {
+                setView("department");
+                setSelectedDept(dept);
+                setSelectedAgent(null);
+                setSidebarOpen(false);
+                router.push(`/project/${projectSlug}/${dept.department_type}`);
+              }}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                selectedDept?.id === dept.id && view !== "dashboard"
+                  ? "bg-accent-gold/10 text-accent-gold"
+                  : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
+              }`}
+            >
+              <span className="text-sm">{dept.display_name}</span>
+              <span className="block text-[10px] mt-0.5 opacity-60">
+                {activeCount}/{totalCount} agents active
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="px-2 py-2 border-t border-border space-y-1">
+        <button
+          onClick={() => { setShowAddDept(true); setSidebarOpen(false); }}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Department
+        </button>
         <button
           onClick={() => {
-            setView("dashboard");
+            setView("settings");
             setSelectedDept(null);
             setSelectedAgent(null);
-            router.push(`/project/${projectSlug}`);
+            setSidebarOpen(false);
+            router.push(`/project/${projectSlug}/settings`);
           }}
-          className={`flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
-            view === "dashboard"
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+            view === "settings"
               ? "text-accent-gold bg-accent-gold/10"
               : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
           }`}
         >
-          <LayoutDashboard className="h-4 w-4" />
-          Dashboard
+          <Settings2 className="h-4 w-4" />
+          Settings
         </button>
-        <Separator />
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          <p className="text-[10px] uppercase text-text-secondary font-medium px-2 mb-2">
-            Departments
-          </p>
-          {project.departments.map((dept) => {
-            const activeCount = dept.agents.filter((a) => a.status === "active").length;
-            const totalCount = dept.agents.length;
-            return (
-              <button
-                key={dept.id}
-                onClick={() => {
-                  setView("department");
-                  setSelectedDept(dept);
-                  setSelectedAgent(null);
-                  router.push(`/project/${projectSlug}/${dept.department_type}`);
-                }}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                  selectedDept?.id === dept.id && view !== "dashboard"
-                    ? "bg-accent-gold/10 text-accent-gold"
-                    : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
-                }`}
-              >
-                <span className="text-sm">{dept.display_name}</span>
-                <span className="block text-[10px] mt-0.5 opacity-60">
-                  {activeCount}/{totalCount} agents active
-                </span>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-[calc(100vh-3.5rem)]">
+      {/* Mobile sidebar toggle */}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="md:hidden fixed bottom-4 right-4 z-40 h-12 w-12 rounded-full bg-accent-gold text-bg-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+        aria-label="Open navigation"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
+          <div className="absolute left-0 top-0 bottom-0 w-64 bg-bg-surface border-r border-border flex flex-col animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="flex items-center gap-2 font-serif text-sm text-accent-gold font-bold">
+                <Logomark size={18} className="text-accent-gold" />
+                Navigation
+              </span>
+              <button onClick={() => setSidebarOpen(false)} className="text-text-secondary hover:text-text-primary">
+                <X className="h-4 w-4" />
               </button>
-            );
-          })}
+            </div>
+            {sidebarContent}
+          </div>
         </div>
-        <div className="px-2 py-2 border-t border-border space-y-1">
-          <button
-            onClick={() => setShowAddDept(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Department
-          </button>
-          <button
-            onClick={() => {
-              setView("settings");
-              setSelectedDept(null);
-              setSelectedAgent(null);
-              router.push(`/project/${projectSlug}/settings`);
-            }}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-              view === "settings"
-                ? "text-accent-gold bg-accent-gold/10"
-                : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
-            }`}
-          >
-            <Settings2 className="h-4 w-4" />
-            Settings
-          </button>
-        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex w-56 border-r border-border bg-bg-surface shrink-0 flex-col">
+        {sidebarContent}
       </div>
 
       {/* Main area */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {view === "dashboard" && (
           <TaskQueue projectId={project.id} />
         )}

@@ -146,43 +146,94 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         if task.command_name == "fix_characters":
             return self._execute_fix_characters(agent, task)
+        if task.command_name == "build_character_profile":
+            return self._execute_build_character_profile(agent, task)
+        if task.command_name == "design_character_voice":
+            return self._execute_design_character_voice(agent, task)
         return self._execute_write_characters(agent, task)
 
+    # ------------------------------------------------------------------
+    # write_characters
+    # ------------------------------------------------------------------
+
     def _execute_write_characters(self, agent: Agent, task: AgentTask) -> str:
-        """Design the character ensemble based on stage, material, and structure."""
+        """Design the full character ensemble as a character bible."""
         from agents.ai.claude_client import call_claude
 
         locale = agent.get_config_value("locale") or "en"
 
         suffix = (
             f"OUTPUT LANGUAGE: {locale}\n\n"
-            "Design the character ensemble for this project at its current stage. "
+            "Design the character ensemble for this project at its current stage.\n"
             "The task plan above specifies the stage, provides the project material, "
             "story structure (from the Story Architect), and research brief "
             "(from the Story Researcher).\n\n"
-            "Your output must include (depth scales with stage):\n\n"
-            "**Character Profiles** -- for each character:\n"
-            "- Name and role in the ensemble\n"
-            "- Want (external goal driving the plot)\n"
-            "- Need (internal truth they must learn)\n"
-            "- Wound (past damage shaping their worldview)\n"
-            "- Arc (transformation trajectory: positive/negative/flat/disillusionment)\n"
-            "- Defining trait and contradiction\n"
-            "- Fear and blind spot\n\n"
-            "**Relationship Map:**\n"
-            "- Key relationships with power dynamics\n"
-            "- Alliances, rivalries, dependencies\n"
-            "- How relationships evolve across the arc\n\n"
-            "**Voice Profiles** (at treatment stage and beyond):\n"
-            "- Speech patterns and vocabulary level\n"
-            "- Sentence rhythm (short/clipped vs. flowing/verbose)\n"
-            "- Verbal tics, pet phrases, what they avoid saying\n"
-            "- How their voice changes under pressure\n\n"
-            "**Motivation Maps** (at step_outline and beyond):\n"
-            "- Scene-by-scene character goals\n"
-            "- What each character wants in each scene and what prevents it\n\n"
-            "Scale depth to the stage. At logline, focus only on the protagonist. "
-            "At first_draft, deliver the full toolkit."
+            "## Methodology\n\n"
+            "### 1. Ensemble Architecture\n"
+            "Before writing any individual character, map the ensemble roles:\n"
+            "- Identify the protagonist, antagonist, mirror character, mentor, catalyst, "
+            "and trickster (or the project's equivalent archetypes).\n"
+            "- Every role must earn its place -- if a character can be merged or cut, say so.\n"
+            "- Note thematic pairings: which characters embody opposing sides of the "
+            "central argument?\n\n"
+            "### 2. Character Bible -- for EACH character deliver:\n\n"
+            "**A. Background & Biography**\n"
+            "- Formative backstory (the 2-3 defining events that made them who they are)\n"
+            "- Social context: class, education, culture, family structure\n"
+            "- What they do for a living and how they feel about it\n\n"
+            "**B. Psychological Profile**\n"
+            "- WANT: the conscious, external goal driving their plot line\n"
+            "- NEED: the unconscious internal truth they must learn (or refuse to learn)\n"
+            "- The gap between want and need IS the character's journey\n"
+            "- WOUND: the past damage that created their blind spot\n"
+            "- FATAL FLAW: the behavioral pattern that will destroy them if unchecked\n"
+            "- DEFINING CONTRADICTION: the paradox that makes them feel real "
+            "(e.g. a violent person who is gentle with animals)\n"
+            "- Fear and what they do to avoid confronting it\n\n"
+            "**C. Speech Patterns & Verbal Identity**\n"
+            "- Vocabulary register (street / educated / technical / poetic)\n"
+            "- Sentence rhythm: short and blunt vs. winding and evasive\n"
+            "- Verbal tics, pet phrases, filler words\n"
+            "- What they NEVER say -- the topics or words they avoid\n"
+            "- How their speech changes under pressure, intimacy, or authority\n\n"
+            "**D. Relationship Dynamics**\n"
+            "- For every other main character: describe the specific power dynamic, "
+            "the unspoken tension, the history, and how it evolves across the arc\n"
+            "- Note which relationships are engines (they cause scenes) vs. "
+            "which are anchors (they provide stability)\n"
+            "- Identify the single most volatile relationship for this character\n\n"
+            "**E. Arc Trajectory**\n"
+            "- Arc type: positive change / negative change / flat-testing / disillusionment\n"
+            "- Catalytic incident: the event that forces them out of stasis\n"
+            "- Point of no return: when they commit to the new path\n"
+            "- Dark night / lowest point: when the flaw wins and all seems lost\n"
+            "- Transformation moment (or refusal): how the arc resolves\n"
+            "- What specific PRESSURE forces each turning point -- no arc beat happens "
+            "because the plot needs it; it happens because the character is squeezed\n\n"
+            "**F. Scene Suggestions**\n"
+            "- 2-3 specific scene ideas that would ESTABLISH this character for the audience\n"
+            "- For each scene: what it reveals, what it conceals, and why this scene "
+            "is more effective than exposition\n\n"
+            "### 3. Relationship Map\n"
+            "After all individual profiles, produce a summary relationship map:\n"
+            "- Every significant pairing with its core tension in one sentence\n"
+            "- Alliances, rivalries, dependencies, unrequited connections\n"
+            "- How the relationship map shifts between beginning, midpoint, and climax\n\n"
+            "### 4. Knowledge Tracking (step_outline and beyond)\n"
+            "- Who knows what, and when -- secrets, reveals, information asymmetry\n"
+            "- Dramatic irony opportunities: where the audience knows more than a character\n\n"
+            "### 5. Motivation Maps (step_outline and beyond)\n"
+            "- Scene-by-scene: what each character wants entering the scene, "
+            "what prevents it, and what they walk away with\n\n"
+            "## Stage Scaling\n"
+            "- **Logline**: protagonist only -- want, obstacle, stakes, one-line arc\n"
+            "- **Expose**: protagonist + antagonist + 1-2 key relationships\n"
+            "- **Treatment**: full ensemble with sections A-E above + relationship map\n"
+            "- **Step Outline**: everything above + knowledge tracking + motivation maps\n"
+            "- **First Draft**: complete bible with scene suggestions, voice profiles at "
+            "maximum detail, beat-by-beat character decisions\n"
+            "- **Revised Draft**: consistency audit, arc refinement, voice polish, "
+            "scene-to-scene continuity check"
         )
 
         suffix += self._get_voice_constraint(agent)
@@ -199,6 +250,10 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
 
         return response
 
+    # ------------------------------------------------------------------
+    # fix_characters
+    # ------------------------------------------------------------------
+
     def _execute_fix_characters(self, agent: Agent, task: AgentTask) -> str:
         """Revise characters based on Character Analyst feedback flags."""
         from agents.ai.claude_client import call_claude
@@ -209,20 +264,38 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
             f"OUTPUT LANGUAGE: {locale}\n\n"
             "The Character Analyst has reviewed your character work and flagged issues. "
             "The flags are included in the task plan above.\n\n"
-            "Character Analyst flags cover:\n"
-            "- Want vs. Need clarity and tension\n"
-            "- Action plausibility (would this character really do this?)\n"
-            "- Consistency drift across scenes\n"
-            "- Relationship arc progression\n"
-            "- Secondary character function and distinctiveness\n"
-            "- Knowledge tracking errors (character knows something they shouldn't)\n\n"
-            "For each flag:\n"
-            "1. Acknowledge the specific concern\n"
-            "2. Explain your character reasoning for the revision\n"
-            "3. Rewrite the affected character elements\n\n"
-            "Preserve all character elements that were not flagged. Produce a complete, "
-            "standalone character document -- not a diff. Annotate what changed and why "
-            "at the top of the document."
+            "## Methodology\n\n"
+            "### 1. Triage the Flags\n"
+            "Read every flag and classify its severity:\n"
+            "- **Structural** (affects arc logic, want/need coherence, ensemble balance)\n"
+            "- **Behavioral** (action plausibility -- would this person really do this?)\n"
+            "- **Consistency** (character drifts between scenes -- voice, knowledge, attitude)\n"
+            "- **Relational** (relationship dynamics stall, contradict, or lack evolution)\n"
+            "- **Functional** (secondary character has no clear purpose or is redundant)\n"
+            "- **Knowledge** (character knows something they shouldn't, or forgets something "
+            "they should know)\n\n"
+            "### 2. For Each Flag -- Revise with Craft\n"
+            "For every flagged issue:\n"
+            "a) **Acknowledge** the specific concern and quote the problematic element\n"
+            "b) **Diagnose** the root cause -- a surface fix is not enough. If a character's "
+            "action is implausible, the problem may be in their wound or want, not the action\n"
+            "c) **Explain** your character reasoning for the revision -- what principle guides "
+            "the change (e.g. 'the fatal flaw must be present from the first scene so the "
+            "audience can track the arc')\n"
+            "d) **Rewrite** the affected character elements in full\n\n"
+            "### 3. Ripple Check\n"
+            "After addressing each flag, check for ripple effects:\n"
+            "- Does changing one character's wound affect their relationships?\n"
+            "- Does a revised arc trajectory break the scene suggestions?\n"
+            "- Does a voice change affect dialogue already written by the Dialog Writer?\n"
+            "Note any downstream impacts explicitly.\n\n"
+            "### 4. Output Format\n"
+            "- Start with a **Change Log** at the top: list every change, the flag it addresses, "
+            "and a one-sentence rationale\n"
+            "- Then produce the **complete, standalone character document** -- not a diff\n"
+            "- Preserve all character elements that were NOT flagged, verbatim\n"
+            "- Mark revised sections with a subtle annotation (e.g. [REVISED]) so the analyst "
+            "can quickly verify fixes"
         )
 
         suffix += self._get_voice_constraint(agent)
@@ -232,6 +305,177 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
             model=self.get_model(agent, "fix_characters"),
+            max_tokens=16384,
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response
+
+    # ------------------------------------------------------------------
+    # build_character_profile
+    # ------------------------------------------------------------------
+
+    def _execute_build_character_profile(self, agent: Agent, task: AgentTask) -> str:
+        """Expand a character concept sketch into a full psychological profile."""
+        from agents.ai.claude_client import call_claude
+
+        locale = agent.get_config_value("locale") or "en"
+
+        suffix = (
+            f"OUTPUT LANGUAGE: {locale}\n\n"
+            "You have been given a character concept sketch -- a rough idea, a name, "
+            "a role, maybe a sentence or two. Your job is to turn it into a living, "
+            "breathing human being on the page.\n\n"
+            "## Methodology\n\n"
+            "### 1. Biography & Formative Backstory\n"
+            "- Write the character's life before the story begins\n"
+            "- Identify the 2-3 formative events that shaped who they are today\n"
+            "- Social context: class, education, culture, family structure, geography\n"
+            "- What do they do for a living? How do they feel about it? What did they "
+            "WANT to do?\n"
+            "- Physical description only if it matters to character (a scar that tells a story, "
+            "a way of carrying themselves that reveals status)\n\n"
+            "### 2. The Wound-Want-Need Triangle\n"
+            "This is the engine of the character. Get it wrong and nothing else works.\n"
+            "- **WOUND**: the specific past event or pattern that created emotional damage. "
+            "Not a vague 'troubled childhood' -- name the moment, the betrayal, the loss\n"
+            "- **WANT**: the conscious external goal. What the character would tell you they "
+            "want if you asked them at a bar\n"
+            "- **NEED**: the unconscious internal truth. What they actually need to become whole "
+            "(or what they need to accept). They cannot articulate this -- if they could, "
+            "the story would be over\n"
+            "- Map how the wound created the want, and how the want masks the need\n\n"
+            "### 3. Fatal Flaw & Blind Spot\n"
+            "- The fatal flaw is the behavioral pattern the wound installed. It is the "
+            "character's default response to pressure, and it will destroy them if unchecked\n"
+            "- The blind spot is what the flaw prevents them from seeing. It is always "
+            "connected to the need\n"
+            "- Give a concrete example: 'When X happens, this character always does Y, "
+            "which prevents them from seeing Z'\n\n"
+            "### 4. Defining Contradiction\n"
+            "- Every real person contains contradictions. A cruel person who loves music. "
+            "A coward who is reckless with money. A liar who demands honesty from others\n"
+            "- The contradiction must feel SPECIFIC, not formulaic\n"
+            "- Explain how the contradiction connects to the wound\n\n"
+            "### 5. Behavioral Patterns Under Pressure\n"
+            "Characters reveal themselves under stress. Describe:\n"
+            "- How they behave when cornered (fight / flight / freeze / fawn)\n"
+            "- How they behave when they have power over someone\n"
+            "- How they behave when someone they love is threatened\n"
+            "- How they behave when they are alone and no one is watching\n"
+            "- Their tells: the physical or verbal habits that betray their inner state\n\n"
+            "### 6. Complete Arc Trajectory\n"
+            "- **Arc type**: positive change / negative change / flat-testing / disillusionment\n"
+            "- **Status quo**: who they are when we meet them (the flaw in full operation)\n"
+            "- **Catalytic incident**: the event that makes the old way of living impossible\n"
+            "- **Resistance**: how they try to solve the new problem with old tools (the flaw)\n"
+            "- **Point of no return**: when they commit to the new path, burning bridges\n"
+            "- **Rising pressure**: how the story escalates the stakes and squeezes the flaw\n"
+            "- **Dark night**: the lowest point, when the flaw wins and all seems lost\n"
+            "- **Transformation moment**: the specific scene where they choose the need over "
+            "the want (or refuse to -- in a negative arc)\n"
+            "- **New equilibrium**: who they are at the end, and what it cost them\n\n"
+            "### 7. Output Format\n"
+            "Deliver the profile as a structured document with clear section headers. "
+            "Write in confident, specific prose -- not bullet lists of adjectives. "
+            "Every claim about the character must be grounded in the backstory or wound. "
+            "If you cannot justify a trait from the biography, cut it."
+        )
+
+        suffix += self._get_voice_constraint(agent)
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent, "build_character_profile"),
+            max_tokens=16384,
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response
+
+    # ------------------------------------------------------------------
+    # design_character_voice
+    # ------------------------------------------------------------------
+
+    def _execute_design_character_voice(self, agent: Agent, task: AgentTask) -> str:
+        """Create a comprehensive voice guide for a single character."""
+        from agents.ai.claude_client import call_claude
+
+        locale = agent.get_config_value("locale") or "en"
+
+        suffix = (
+            f"OUTPUT LANGUAGE: {locale}\n\n"
+            "Create a voice guide that would allow any writer in the room to write "
+            "dialogue for this character and have it sound unmistakably like THEM. "
+            "Voice is identity. Two characters should never be interchangeable on the page.\n\n"
+            "## Methodology\n\n"
+            "### 1. Vocabulary & Register\n"
+            "- Education level reflected in word choice (not everyone uses four-syllable words)\n"
+            "- Professional jargon or domain-specific language they default to\n"
+            "- Class markers: slang, dialect, code-switching between registers\n"
+            "- Words they overuse (everyone has a verbal crutch)\n"
+            "- Words they would NEVER use -- and why (this reveals character)\n\n"
+            "### 2. Sentence Architecture\n"
+            "- Average sentence length: short and blunt? Winding and evasive? Mixed?\n"
+            "- Do they finish sentences? Interrupt themselves? Trail off?\n"
+            "- Syntax patterns: subject-verb-object directness vs. subordinate-clause tangents\n"
+            "- Do they ask questions or make statements? (Power dynamic in miniature)\n"
+            "- Paragraph rhythm when speaking at length: do they build to a point or "
+            "circle around it?\n\n"
+            "### 3. Verbal Tics & Pet Phrases\n"
+            "- Filler words: 'like', 'you know', 'I mean', 'right', 'look' -- or none\n"
+            "- Recurring phrases that reveal worldview ('that's just how it is', "
+            "'we'll figure it out', 'whatever')\n"
+            "- Hedging language vs. absolute language ('maybe we could' vs. 'we need to')\n"
+            "- Profanity level and style (creative, lazy, strategic, never)\n"
+            "- Humor: do they joke? What kind? Self-deprecating, cruel, dry, absurd?\n\n"
+            "### 4. Rhetorical Habits\n"
+            "- How do they argue? (Logic, emotion, authority, deflection, silence)\n"
+            "- How do they persuade? (Charm, facts, guilt, threats, vulnerability)\n"
+            "- How do they lie? (Omission, redirection, confident fabrication, bad lying)\n"
+            "- How do they apologize -- or avoid apologizing?\n"
+            "- Do they use metaphors? From what domain? (Sports, war, nature, business)\n\n"
+            "### 5. Voice Under Emotional States\n"
+            "Describe how the voice CHANGES in each state:\n"
+            "- **Anger**: do they get louder or quieter? Faster or slower? More precise "
+            "or more chaotic?\n"
+            "- **Fear**: do they over-talk or go silent? Do they try to control with words?\n"
+            "- **Intimacy**: do they become vulnerable or performative? Monosyllabic or poetic?\n"
+            "- **Authority**: when speaking to someone with power -- do they defer, challenge, "
+            "mirror, or freeze?\n"
+            "- **Grief**: the hardest one. How does this character sound when something "
+            "is truly broken?\n\n"
+            "### 6. What They Never Say\n"
+            "- The topics they avoid (these are connected to the wound)\n"
+            "- The emotions they refuse to name\n"
+            "- The person they never mention\n"
+            "- This is often more revealing than what they DO say\n\n"
+            "### 7. Sample Dialogue\n"
+            "Write 4-6 short dialogue samples (2-5 lines each) demonstrating this voice in "
+            "varied contexts:\n"
+            "- A casual conversation with a friend\n"
+            "- An argument with someone they love\n"
+            "- A professional interaction with a stranger\n"
+            "- A moment of vulnerability (if the character allows them)\n"
+            "- A moment under extreme pressure\n"
+            "- Optionally: a voiceover / internal monologue passage\n\n"
+            "### 8. The Voice Test\n"
+            "End with this acid test: if you covered the character name and read the dialogue "
+            "aloud, could a reader identify the speaker from voice alone? If not, the guide "
+            "needs more specificity."
+        )
+
+        suffix += self._get_voice_constraint(agent)
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent, "design_character_voice"),
             max_tokens=16384,
         )
         task.token_usage = usage

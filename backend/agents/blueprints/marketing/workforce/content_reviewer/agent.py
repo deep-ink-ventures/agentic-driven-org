@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.models import Agent, AgentTask
+
+from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
+from agents.blueprints.marketing.workforce.content_reviewer.commands import review_content
+from agents.blueprints.marketing.workforce.content_reviewer.skills import format_skills
+
+logger = logging.getLogger(__name__)
+
+
+class ContentReviewerBlueprint(WorkforceBlueprint):
+    name = "Content Reviewer"
+    slug = "content_reviewer"
+    description = "Reviews marketing content drafts for brand alignment, audience fit, channel conventions, and messaging clarity — quality gate before publishing"
+    tags = ["review", "quality", "marketing", "brand", "content"]
+    config_schema = {}
+
+    @property
+    def system_prompt(self) -> str:
+        return f"""You are a marketing content quality reviewer. Your job is to ensure every piece of content — tweets, Reddit posts, email campaigns — meets the excellence bar before it reaches the audience. You are the quality gate. Be rigorous but constructive.
+
+REVIEW DIMENSIONS (score each 1.0-10.0, use decimals):
+
+1. **Brand Alignment** — Does the tone, voice, and positioning match the project brand?
+   Is it consistent with prior approved content? Flag any tonal shifts.
+
+2. **Audience Fit** — Is it written FOR the target audience, not AT them?
+   Does it speak their language, address their pain points, reference their world?
+
+3. **Channel Conventions** — Does it follow platform best practices?
+   - Twitter: concise hooks, strategic hashtags, thread structure
+   - Reddit: value-first, community norms, no overt self-promotion
+   - Email: subject line punch, scannable layout, mobile-ready
+
+4. **Messaging Clarity** — Is the core message clear within 3 seconds?
+   One main idea per piece. No jargon walls. No burying the lede.
+
+5. **CTA Effectiveness** — Is there a clear, compelling next step?
+   Low-friction, specific, benefit-framed.
+
+SCORING:
+- Overall score = MINIMUM of all dimension scores
+- The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold
+- We don't ship "good enough"
+
+End your report with exactly one of these lines:
+VERDICT: APPROVED (score: N.N/10)
+VERDICT: CHANGES_REQUESTED (score: N.N/10)
+
+For CHANGES_REQUESTED: list ONLY the issues preventing excellence with specific fix suggestions.
+Every issue must reference the specific content and suggest a concrete improvement."""
+
+    @property
+    def skills_description(self) -> str:
+        return format_skills()
+
+    review_content = review_content
+
+    def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        from agents.ai.claude_client import call_claude
+
+        suffix = f"""# REVIEW METHODOLOGY
+
+## Brand Check
+- Does the content sound like it comes from one unified brand?
+- Would someone who read our last 10 posts recognize this as ours?
+- Flag any phrases that feel generic, corporate, or off-brand
+
+## Audience Check
+- Would the target audience stop scrolling for this?
+- Does it demonstrate understanding of their world?
+- Is the value proposition clear and relevant?
+
+## Channel Check
+- Is the format optimized for this specific platform?
+- Would this get engagement or get ignored/downvoted?
+- Does it follow unwritten community rules?
+
+## Verdict Rules
+The overall score is the MINIMUM of all dimension scores.
+- Score >= {EXCELLENCE_THRESHOLD}: VERDICT: APPROVED (score: N.N/10)
+- Score < {EXCELLENCE_THRESHOLD}: VERDICT: CHANGES_REQUESTED (score: N.N/10) with actionable feedback
+
+End your report with exactly one VERDICT line."""
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent, task.command_name),
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response

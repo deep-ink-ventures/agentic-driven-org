@@ -5,7 +5,13 @@ from agents.blueprints.base import command
 
 @command(
     name="review-pr",
-    description="Review a PR against team standards, post inline comments with severity levels, and track review rounds",
+    description=(
+        "Reviews a PR using structured criteria (correctness, tests, security, breaking changes, pattern consistency) "
+        "and posts severity-tagged comments (BLOCKER/SUGGESTION/QUESTION). Applies a judge filter that suppresses "
+        "low-signal noise: style nitpicks handled by linters, theoretical concerns, and comments on unchanged code -- "
+        "targeting >80% comment acceptance rate. Tracks review rounds per PR in internal_state (max 10); on re-review "
+        "focuses only on new changes since last round. Escalates to the leader if the iteration cap is reached."
+    ),
     schedule=None,
     model="claude-sonnet-4-6",
 )

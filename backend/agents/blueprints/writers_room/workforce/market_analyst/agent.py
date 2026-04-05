@@ -121,7 +121,16 @@ class MarketAnalystBlueprint(WorkforceBlueprint):
 
         locale = agent.get_config_value("locale") or "en"
 
-        suffix = f"Output language: {locale}\n\nAnalyze this material for market fit, comparable titles, competitive landscape, and strategic positioning."
+        suffix = (
+            f"Output language: {locale}\n\n"
+            "Analyze this material using the full market positioning framework:\n"
+            "1. Score each comparable title on a comp matrix — relevance, recency, commercial outcome, pitch leverage.\n"
+            "2. Assess platform/publisher fit against current commissioning and acquisition trends.\n"
+            "3. Check audience alignment — who is the core audience, is the material calibrated for them?\n"
+            "4. Score zeitgeist relevance — does the central theme connect to current cultural discourse?\n"
+            "5. Flag every finding with severity (critical/major/minor/strength) and a specific actionable fix.\n"
+            "Do NOT produce vague assessments. Every observation must be a concrete, pitchable insight."
+        )
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(

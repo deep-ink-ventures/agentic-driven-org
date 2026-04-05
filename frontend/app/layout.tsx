@@ -22,8 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentDriven",
-  description: "AI-powered marketing agents that work for your business.",
+  title: "Frontier — The Agent Driven Organization",
+  description: "Build and manage AI agent teams that work for your organization.",
 };
 
 export default function RootLayout({

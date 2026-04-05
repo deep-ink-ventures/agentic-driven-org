@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.marketing.workforce.web_researcher.commands import research_analyze, research_gather
 from agents.blueprints.marketing.workforce.web_researcher.skills import format_skills
-from agents.blueprints.marketing.workforce.web_researcher.commands import research_gather, research_analyze
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +60,23 @@ When executing tasks, respond with a JSON object:
 {json.dumps(search_results, default=str, indent=2) if search_results else 'No results found.'}
 </search_results>
 
-Organize these results. Extract key facts, URLs, and relevance. Return structured JSON:
+# GATHER METHODOLOGY
+
+## Source Diversity & Validation
+- Prioritize findings from diverse source types: news outlets, industry blogs, forums, official publications
+- Apply recency weighting: content from the last 7 days scores higher than older material
+- Validate all URLs — flag any that appear broken or paywalled
+- Discard low-quality sources (content farms, scraped aggregators, thin affiliate pages)
+
+## Finding Classification
+Classify each finding into one of: trend, competitor_move, opportunity, threat, or background_context.
+This classification drives how the analyze phase processes each finding.
+
+## Output Structure
+Return structured JSON with classification and source metadata:
 {{
     "findings": [
-        {{"title": "...", "url": "...", "relevance": "high|medium|low", "summary": "...", "raw_data": "..."}}
+        {{"title": "...", "url": "...", "relevance": "high|medium|low", "type": "trend|competitor_move|opportunity|threat|background_context", "source_type": "news|blog|forum|official", "published_date": "...", "summary": "...", "raw_data": "..."}}
     ]
 }}"""
 
@@ -79,6 +92,7 @@ Organize these results. Extract key facts, URLs, and relevance. Return structure
 
         # Create the analyze task as a dependent
         from agents.models import AgentTask as TaskModel
+
         TaskModel.objects.create(
             agent=agent,
             command_name="research-analyze",
@@ -107,11 +121,35 @@ Organize these results. Extract key facts, URLs, and relevance. Return structure
 {raw_findings or 'No raw findings available.'}
 </raw_research>
 
-Analyze these findings in the context of the project goal. Produce strategic recommendations.
+# ANALYSIS METHODOLOGY
+
+## Strategic Synthesis
+- Connect each finding to the project goal — discard anything that does not serve the strategy
+- Identify patterns across findings: emerging themes, converging signals, contradictions
+- Map the competitive landscape: who is doing what, where are the gaps
+
+## Competitive Intelligence Framework
+- Track competitor content strategies, messaging shifts, and audience engagement patterns
+- Identify positioning white space the project can own
+- Flag competitive threats that require immediate response
+
+## Opportunity Scoring
+Score each opportunity on two axes:
+- **Impact potential** (high/medium/low): how much would acting on this move the needle?
+- **Effort required** (high/medium/low): what resources are needed to capitalize?
+Priority = high impact + low effort first.
+
+## Actionable Recommendation Format
+For each recommendation, provide:
+- The specific action to take
+- Target audience for the action
+- Suggested timing window
+- Expected measurable outcome
+
 Return JSON:
 {{
     "findings": [
-        {{"title": "...", "url": "...", "relevance": "high|medium|low", "summary": "...", "suggested_angle": "..."}}
+        {{"title": "...", "url": "...", "relevance": "high|medium|low", "summary": "...", "suggested_angle": "...", "impact": "high|medium|low", "effort": "high|medium|low"}}
     ],
     "report": "Executive summary of the analysis with key takeaways and recommended actions"
 }}"""

@@ -8,6 +8,7 @@ Departments and their agents are defined by the folder structure:
 
 from agents.blueprints.engineering.leader import EngineeringLeaderBlueprint
 from agents.blueprints.marketing.leader import MarketingLeaderBlueprint
+from agents.blueprints.marketing.workforce.content_reviewer import ContentReviewerBlueprint
 from agents.blueprints.marketing.workforce.email_marketing import EmailMarketingBlueprint
 from agents.blueprints.marketing.workforce.luma_researcher import LumaResearcherBlueprint
 from agents.blueprints.marketing.workforce.reddit import RedditBlueprint
@@ -58,6 +59,7 @@ DEPARTMENTS = {
             "reddit": RedditBlueprint(),
             "twitter": TwitterBlueprint(),
             "email_marketing": EmailMarketingBlueprint(),
+            "content_reviewer": ContentReviewerBlueprint(),
         },
         "config_schema": {},
     },

@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 
 @command(
     name="check-progress",
-    description="Check pending runs, stalled tasks, clear stale file locks, report status",
+    description=(
+        "Hourly health check that monitors the engineering department's operational state. Detects timed-out "
+        "webhook runs (default 120 min), identifies stalled tasks running longer than 3 hours, clears file locks "
+        "for completed tasks, and checks review iteration counts against the cap (default 10 rounds). Produces a "
+        "status report with counts of pending runs, stalled tasks, queued work, and active file locks. Escalates "
+        "PRs that have exceeded the review round cap to the leader for human intervention."
+    ),
     schedule="hourly",
     model="claude-haiku-4-5",
 )

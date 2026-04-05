@@ -5,7 +5,14 @@ from agents.blueprints.base import command
 
 @command(
     name="implement",
-    description="Build a detailed implementation prompt and trigger the claude-implement workflow for backend code",
+    description=(
+        "Analyzes a task's requirements and acceptance criteria, then crafts a structured implementation prompt "
+        "targeting the Python/Django/DRF/Celery stack. The prompt follows a rigid template (TASK, CONTEXT, "
+        "REQUIREMENTS, CONSTRAINTS, TESTS with AAA pattern, DEFINITION OF DONE) with exact file paths, reference "
+        "patterns, and type-hint requirements. Enriches the prompt with prior context from internal_state to avoid "
+        "re-discovering codebase patterns. Dispatches the claude-implement.yml GitHub Actions workflow and tracks "
+        "the pending run for webhook-based completion notification."
+    ),
     schedule=None,
     model="claude-sonnet-4-6",
 )

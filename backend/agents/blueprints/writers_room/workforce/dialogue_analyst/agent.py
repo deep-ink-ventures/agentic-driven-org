@@ -175,7 +175,17 @@ class DialogueAnalystBlueprint(WorkforceBlueprint):
 
         locale = agent.get_config_value("locale") or "en"
 
-        suffix = f"Output language: {locale}\n\nAnalyze this material for dialogue quality, voice differentiation, scene construction, and pacing."
+        suffix = (
+            f"Output language: {locale}\n\n"
+            "Analyze this material using the full dialogue and scene methodology:\n"
+            "1. Voice distinction — strip attribution from 5+ dialogue samples and assess if speakers are identifiable.\n"
+            "2. Subtext quality — for key scenes, articulate what is said vs what is meant. Flag on-the-nose dialogue.\n"
+            "3. Power dynamic shifts — track who holds power in each scene and whether it shifts. Flag static scenes.\n"
+            "4. Exposition management — flag 'As You Know Bob' moments and information delivered unnaturally.\n"
+            "5. Scene rhythm and pacing — assess entry/exit points, scene length vs dramatic weight, energy flow.\n"
+            "6. AI voice detection — flag any passage that sounds AI-generated rather than human-written.\n"
+            "Every flag must quote the specific line or passage as evidence."
+        )
 
         suffix += self._get_voice_constraint(agent)
 

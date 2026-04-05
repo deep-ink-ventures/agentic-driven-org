@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 
 @command(
     name="bootstrap",
-    description="Push workflow files + CLAUDE.md to target repos, create GitHub Project board",
+    description=(
+        "One-time setup that pushes GitHub Actions workflow files (claude-implement.yml, claude-review.yml, "
+        "claude-security-review.yml, claude-a11y-audit.yml) and a generated CLAUDE.md to every configured "
+        "repository, then creates a GitHub Projects v2 board with standard columns (Backlog, In Progress, "
+        "In Review, Done). Records bootstrapped state in internal_state so this command is never re-executed. "
+        "Requires github_token with repo + workflow permissions and github_repos in department config."
+    ),
     schedule="once",
     model="claude-sonnet-4-6",
 )

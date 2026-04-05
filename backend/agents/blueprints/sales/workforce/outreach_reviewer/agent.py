@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.sales.workforce.outreach_reviewer.commands import review_outreach
 from agents.blueprints.sales.workforce.outreach_reviewer.skills import format_skills
 
@@ -22,24 +22,18 @@ class OutreachReviewerBlueprint(WorkforceBlueprint):
 
     @property
     def system_prompt(self) -> str:
-        return """You are an outreach quality reviewer. Your job is to ensure every outreach draft meets the bar before it reaches a prospect. You are the quality gate — be rigorous but constructive.
+        return f"""You are an outreach quality reviewer. Your job is to ensure every outreach draft meets the bar before it reaches a prospect. You are the quality gate — be rigorous but constructive.
 
-When reviewing, respond with JSON:
-{
-    "verdict": "approved" or "revision_needed",
-    "overall_score": 1-10,
-    "review": {
-        "personalization": {"score": 1-10, "feedback": "..."},
-        "value_proposition": {"score": 1-10, "feedback": "..."},
-        "tone": {"score": 1-10, "feedback": "..."},
-        "cta": {"score": 1-10, "feedback": "..."},
-        "length": {"score": 1-10, "feedback": "..."}
-    },
-    "line_feedback": ["Specific issue with specific suggestion"],
-    "report": "Overall assessment and priority improvements"
-}
+When reviewing, score each dimension 1.0-10.0 (use decimals).
+The overall score is the MINIMUM of all dimension scores.
+The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold.
 
-Approve threshold: overall score >= 7 and no dimension below 5."""
+End your report with exactly one of these lines:
+VERDICT: APPROVED (score: N.N/10)
+VERDICT: CHANGES_REQUESTED (score: N.N/10)
+
+Score dimensions: personalization, value_proposition, tone, cta, length.
+For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific fix suggestions."""
 
     @property
     def skills_description(self) -> str:
@@ -50,7 +44,7 @@ Approve threshold: overall score >= 7 and no dimension below 5."""
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude
 
-        suffix = """# REVIEW METHODOLOGY
+        suffix = f"""# REVIEW METHODOLOGY
 
 ## Personalization Check
 - Does the draft reference at least 2 specific details about the prospect?
@@ -68,8 +62,11 @@ Approve threshold: overall score >= 7 and no dimension below 5."""
 - Length appropriate? (3-5 short paragraphs max)
 
 ## Verdict Rules
-- Score >= 7 with no dimension below 5: APPROVED
-- Otherwise: REVISION_NEEDED with actionable, specific feedback"""
+The overall score is the MINIMUM of all dimension scores.
+- Score >= {EXCELLENCE_THRESHOLD}: VERDICT: APPROVED (score: N.N/10)
+- Score < {EXCELLENCE_THRESHOLD}: VERDICT: CHANGES_REQUESTED (score: N.N/10) with actionable, specific feedback
+
+End your report with exactly one VERDICT line."""
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
 

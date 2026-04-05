@@ -8,12 +8,12 @@ if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import WorkforceBlueprint
-from agents.blueprints.marketing.workforce.email_marketing.skills import format_skills
 from agents.blueprints.marketing.workforce.email_marketing.commands import (
     check_campaign_performance,
     draft_campaign,
     send_campaign,
 )
+from agents.blueprints.marketing.workforce.email_marketing.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,24 @@ class EmailMarketingBlueprint(WorkforceBlueprint):
     description = "Designs and sends email campaigns via SendGrid with strict approval gates"
     tags = ["email", "campaigns", "outreach", "nurture"]
     config_schema = {
-        "sendgrid_api_key": {"type": "str", "required": True, "label": "SendGrid API Key", "description": "Your SendGrid API key for sending emails"},
-        "default_from_email": {"type": "str", "required": True, "label": "Sender Email", "description": "Default sender email address for campaigns"},
-        "mailing_lists": {"type": "dict", "required": True, "label": "Mailing Lists", "description": "Mailing list name → SendGrid list ID mapping"},
+        "sendgrid_api_key": {
+            "type": "str",
+            "required": True,
+            "label": "SendGrid API Key",
+            "description": "Your SendGrid API key for sending emails",
+        },
+        "default_from_email": {
+            "type": "str",
+            "required": True,
+            "label": "Sender Email",
+            "description": "Default sender email address for campaigns",
+        },
+        "mailing_lists": {
+            "type": "dict",
+            "required": True,
+            "label": "Mailing Lists",
+            "description": "Mailing list name → SendGrid list ID mapping",
+        },
     }
 
     @property
@@ -83,10 +98,25 @@ When executing tasks, respond with a JSON object:
         # --- Draft tasks: generate email content via Claude ---
         if "draft" in task_summary or task.status == "awaiting_approval":
             suffix = (
-                "You are drafting an email campaign. Generate compelling content with "
-                "2-3 A/B subject line options, email body with unsubscribe link, and "
-                "recommended send time. This is a DRAFT — it will NOT be sent without "
-                "human approval.\n\n"
+                "# DRAFT METHODOLOGY\n\n"
+                "## Subject Line Strategy\n"
+                "Generate 2-3 A/B subject line options (40-60 characters each). Each must be "
+                "benefit-driven and use a distinct psychological angle: curiosity, urgency, or "
+                "social proof. Write complementary preview text for each that extends the hook "
+                "without repeating the subject line.\n\n"
+                "## Segmentation & Targeting\n"
+                "Select the optimal mailing list segment based on campaign goal. Justify your "
+                "segment choice. Never blast the entire list without a strategic reason.\n\n"
+                "## Body Content\n"
+                "- Mobile-first design: short paragraphs, bullet points, scannable layout\n"
+                "- One clear primary CTA above the fold, optional secondary CTA below\n"
+                "- Personalization via merge tags where appropriate\n"
+                "- Unsubscribe link is MANDATORY — CAN-SPAM / GDPR compliance\n\n"
+                "## Timing Recommendation\n"
+                "Recommend an optimal send window (prefer Tuesday/Thursday 10am local). "
+                "If data exists in internal_state about past campaign performance by day/time, "
+                "use it to refine the recommendation.\n\n"
+                "This is a DRAFT — it will NOT be sent without human approval.\n\n"
                 f"Available mailing lists: {json.dumps(config.get('mailing_lists', {}))}\n"
                 f"Default from email: {config.get('default_from_email', 'not configured')}"
             )
@@ -113,21 +143,23 @@ When executing tasks, respond with a JSON object:
 
         # --- Send tasks: execute approved campaign via SendGrid ---
         if "send" in task_summary:
-            from integrations.sendgrid.service import send_campaign as sg_send
-
             # Safety check: minimum 3-day gap
             import datetime
+
+            from integrations.sendgrid.service import send_campaign as sg_send
 
             last_sent = internal_state.get("last_campaign_sent_at")
             if last_sent:
                 last_dt = datetime.datetime.fromisoformat(last_sent)
-                now = datetime.datetime.now(tz=datetime.timezone.utc)
+                now = datetime.datetime.now(tz=datetime.UTC)
                 if (now - last_dt).days < 3:
-                    return json.dumps({
-                        "error": "Campaign blocked: minimum 3-day gap between campaigns not met",
-                        "last_sent": last_sent,
-                        "report": "Send blocked — last campaign was sent less than 3 days ago.",
-                    })
+                    return json.dumps(
+                        {
+                            "error": "Campaign blocked: minimum 3-day gap between campaigns not met",
+                            "last_sent": last_sent,
+                            "report": "Send blocked — last campaign was sent less than 3 days ago.",
+                        }
+                    )
 
             # Execute send
             result = sg_send(
@@ -137,20 +169,39 @@ When executing tasks, respond with a JSON object:
             )
 
             # Update internal_state timestamps
-            now_iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+            now_iso = datetime.datetime.now(tz=datetime.UTC).isoformat()
             internal_state["last_campaign_sent_at"] = now_iso
             internal_state["emails_sent_this_week"] = internal_state.get("emails_sent_this_week", 0) + 1
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
 
-            return json.dumps({
-                "campaign": result,
-                "report": f"Campaign sent successfully at {now_iso}.",
-            })
+            return json.dumps(
+                {
+                    "campaign": result,
+                    "report": f"Campaign sent successfully at {now_iso}.",
+                }
+            )
 
         # --- Default: performance check or general tasks via Claude ---
         suffix = (
-            "Analyze the email campaign data and provide actionable insights.\n\n"
+            "# PERFORMANCE ANALYSIS METHODOLOGY\n\n"
+            "## Benchmark Comparison Framework\n"
+            "Compare each campaign against industry benchmarks:\n"
+            "- Open rate: target >20% (good), >30% (excellent), <15% (needs attention)\n"
+            "- Click-through rate: target >2.5% (good), >5% (excellent), <1% (needs attention)\n"
+            "- Unsubscribe rate: target <0.5% (healthy), >1% (alarming)\n"
+            "- Bounce rate: target <2% (healthy), >5% (deliverability risk)\n\n"
+            "## Cohort Analysis\n"
+            "Break down performance by:\n"
+            "- Subject line variant (which A/B option won and why)\n"
+            "- Send time (morning vs afternoon, day of week)\n"
+            "- Audience segment (which list segments engaged most)\n\n"
+            "## Actionable Recommendations\n"
+            "For each insight, provide a specific next-step action:\n"
+            "- Subject line adjustments with example rewrites\n"
+            "- Timing shifts backed by open-rate data\n"
+            "- Segment refinements to improve relevance\n"
+            "- Content length or CTA placement changes\n\n"
             f"SendGrid API key configured: {'yes' if config.get('sendgrid_api_key') else 'no'}\n"
             f"Internal state: {json.dumps(internal_state)}"
         )

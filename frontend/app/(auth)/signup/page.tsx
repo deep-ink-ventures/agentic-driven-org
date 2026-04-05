@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { BrandHeading } from "@/components/brand";
+import { BrandHeading, BrandIcon } from "@/components/brand";
+import { Eye, EyeOff } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -28,6 +29,7 @@ function SignupContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const googleUrl = `${API_URL}/api/auth/google/login/?process=login`;
@@ -55,9 +57,10 @@ function SignupContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-bg-primary px-4">
-      <div className="mb-8 text-center">
-        <BrandHeading className="text-4xl" />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-bg-primary px-4 py-8">
+      <div className="mb-8 text-center flex flex-col items-center">
+        <BrandIcon size={40} className="mb-4" />
+        <BrandHeading className="text-3xl sm:text-4xl" />
       </div>
 
       <Card className="w-full max-w-md bg-bg-surface border-border">
@@ -78,12 +81,6 @@ function SignupContent() {
             </svg>
             Continue with Google
           </button>
-          {!termsAccepted && (
-            <p className="text-text-secondary/50 text-[10px] text-center -mt-2 mb-2">
-              Accept the terms below to continue
-            </p>
-          )}
-
           <div className="flex items-center gap-3 my-4">
             <Separator className="flex-1 bg-border" />
             <span className="text-text-secondary text-xs">or</span>
@@ -98,7 +95,12 @@ function SignupContent() {
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-text-primary">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} className="bg-bg-input border-border text-text-primary" />
+              <div className="relative">
+                <Input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} className="bg-bg-input border-border text-text-primary pr-10" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors" tabIndex={-1}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Separator className="bg-border" />

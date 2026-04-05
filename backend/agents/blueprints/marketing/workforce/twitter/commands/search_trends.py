@@ -1,7 +1,16 @@
 from agents.blueprints.base import command
 
 
-@command(name="search-trends", description="Search Twitter for trending topics in the project's niche", schedule=None)
+@command(
+    name="search-trends",
+    description=(
+        "Search Twitter for trending topics in the project's niche, classifying each trend by type "
+        "(hashtag, conversation thread, viral tweet) and scoring relevance against active campaign goals. "
+        "Produces a structured report with engagement velocity, audience overlap estimate, and placement "
+        "opportunity rating (high/medium/low) for each trend discovered."
+    ),
+    schedule=None,
+)
 def search_trends(self, agent) -> dict:
     return {
         "exec_summary": "Search Twitter for trending topics and conversations in the project's niche",

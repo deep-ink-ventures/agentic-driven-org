@@ -5,7 +5,22 @@ import { api } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { ProjectCard } from "@/components/project-card";
 import { CreateProjectWizard } from "@/components/create-project-wizard";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus } from "lucide-react";
+import Logomark from "@/components/logomark";
+
+function CardSkeleton() {
+  return (
+    <div className="rounded-xl border border-border bg-bg-surface p-4 animate-pulse">
+      <div className="h-5 w-2/3 bg-bg-surface-hover rounded mb-3" />
+      <div className="h-3 w-full bg-bg-surface-hover rounded mb-2" />
+      <div className="h-3 w-1/2 bg-bg-surface-hover rounded mb-6" />
+      <div className="flex justify-between">
+        <div className="h-3 w-20 bg-bg-surface-hover rounded" />
+        <div className="h-3 w-16 bg-bg-surface-hover rounded" />
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -47,28 +62,40 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-semibold">Projects</h1>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-semibold">Projects</h1>
+          <p className="text-sm text-text-secondary mt-1">Your agent-driven workspaces</p>
+        </div>
         <button
           onClick={openNewWizard}
           className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-accent-gold/50 transition-colors text-sm"
         >
           <Plus className="h-4 w-4" />
-          New Project
+          <span className="hidden sm:inline">New Project</span>
+          <span className="sm:hidden">New</span>
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 text-text-secondary animate-spin" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
         </div>
       ) : projects.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-text-secondary mb-4">No projects yet. Create your first one to get started.</p>
+        <div className="flex flex-col items-center justify-center py-20 px-4">
+          <div className="h-16 w-16 rounded-2xl bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-6">
+            <Logomark size={32} className="text-accent-gold" />
+          </div>
+          <h2 className="text-lg font-semibold text-text-heading mb-2">No projects yet</h2>
+          <p className="text-text-secondary text-sm text-center max-w-sm mb-6">
+            Create your first project to start building with AI agents. Add sources, configure departments, and let your agents get to work.
+          </p>
           <button
             onClick={openNewWizard}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-gold text-bg-primary hover:bg-accent-gold-hover font-medium text-sm transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent-gold text-bg-primary hover:bg-accent-gold-hover font-medium text-sm transition-colors"
           >
             <Plus className="h-4 w-4" />
             Create Project

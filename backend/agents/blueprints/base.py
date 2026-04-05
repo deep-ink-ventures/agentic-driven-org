@@ -1,12 +1,46 @@
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
+
+# ── Universal quality standards ─────────────────────────────────────────────
+# These apply to ALL departments. Quality is not configurable.
+
+EXCELLENCE_THRESHOLD = 9.5  # Score needed to pass review
+NEAR_EXCELLENCE_THRESHOLD = 9.0  # Score at which we start counting "polish" attempts
+MAX_POLISH_ATTEMPTS = 3  # After reaching 9.0, max attempts to reach 9.5 before accepting
+MAX_REVIEW_ROUNDS = 5  # Hard cap before human escalation
+
+
+def parse_review_verdict(report: str) -> tuple[str, float]:
+    """Parse a review report for VERDICT line. Returns (verdict, score)."""
+    match = re.search(r"VERDICT:\s*(APPROVED|CHANGES_REQUESTED)\s*\(score:\s*([\d.]+)/10\)", report)
+    if match:
+        return match.group(1), float(match.group(2))
+    # Fallback: keyword detection
+    lower = report.lower()
+    if "approved" in lower and "changes_requested" not in lower:
+        return "APPROVED", EXCELLENCE_THRESHOLD
+    return "CHANGES_REQUESTED", 0.0
+
+
+def should_accept_review(score: float, round_num: int, polish_attempts: int) -> bool:
+    """Decide whether to accept a review score.
+
+    - score >= 9.5 → always accept (excellence)
+    - score >= 9.0 and polish_attempts >= 3 → accept (diminishing returns)
+    - otherwise → another round
+    """
+    return score >= EXCELLENCE_THRESHOLD or (
+        score >= NEAR_EXCELLENCE_THRESHOLD and polish_attempts >= MAX_POLISH_ATTEMPTS
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +383,281 @@ class LeaderBlueprint(BaseBlueprint):
     @abstractmethod
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         """Execute a task. Returns the report text."""
+
+    # ── Declarative review ping-pong ────────────────────────────────────
+    #
+    # Subclasses define get_review_pairs() to declare creator→reviewer flows.
+    # The base class handles all review logic: triggering, scoring, looping, fixing.
+
+    def get_review_pairs(self) -> list[dict]:
+        """Define creator→reviewer ping-pong pairs.
+
+        Override in subclasses to enable automatic review loops.
+        Each pair describes one flow: when creator finishes, reviewer checks quality.
+
+        Returns list of dicts:
+        {
+            "creator": "agent_type",           # who creates content
+            "creator_fix_command": "cmd",       # command for revision tasks
+            "reviewer": "agent_type",           # who reviews (final quality gate)
+            "reviewer_command": "cmd",          # command for review tasks
+            "dimensions": ["dim1", "dim2"],     # scoring dimensions for the reviewer
+        }
+
+        For complex review chains (e.g. parallel reviewers → consolidator),
+        override _propose_review_chain() instead.
+        """
+        return []
+
+    def _get_creator_types(self) -> set[str]:
+        """Derive creator types from review pairs."""
+        return {p["creator"] for p in self.get_review_pairs()}
+
+    def _get_reviewer_types(self) -> set[str]:
+        """Derive reviewer types from review pairs."""
+        return {p["reviewer"] for p in self.get_review_pairs()}
+
+    def _get_pair_for_creator(self, creator_type: str) -> dict | None:
+        """Find the review pair for a given creator type."""
+        for pair in self.get_review_pairs():
+            if pair["creator"] == creator_type:
+                return pair
+        return None
+
+    def _get_pair_for_reviewer(self, reviewer_type: str) -> dict | None:
+        """Find the review pair for a given reviewer type."""
+        for pair in self.get_review_pairs():
+            if pair["reviewer"] == reviewer_type:
+                return pair
+        return None
+
+    def _propose_review_chain(self, agent: Agent, creator_task: AgentTask, workforce_types: set) -> dict | None:
+        """Build a review chain after a creator task completes.
+
+        Default implementation: simple 1:1 creator→reviewer from get_review_pairs().
+        Override for complex patterns (e.g., parallel reviewers → consolidator).
+        """
+        pair = self._get_pair_for_creator(creator_task.agent.agent_type)
+        if not pair or pair["reviewer"] not in workforce_types:
+            return None
+
+        # Track review round and active chain key
+        internal_state = agent.internal_state or {}
+        review_rounds = internal_state.get("review_rounds", {})
+        task_key = str(creator_task.id)
+        round_num = review_rounds.get(task_key, 0) + 1
+        review_rounds[task_key] = round_num
+        internal_state["review_rounds"] = review_rounds
+        internal_state["active_review_key"] = task_key  # so _evaluate_review_and_loop can find it
+        agent.internal_state = internal_state
+        agent.save(update_fields=["internal_state"])
+
+        if round_num > MAX_REVIEW_ROUNDS:
+            return {
+                "exec_summary": f"Escalation: {round_num} review rounds on {creator_task.exec_summary[:60]}",
+                "tasks": [
+                    {
+                        "target_agent_type": pair["creator"],
+                        "command_name": pair["creator_fix_command"],
+                        "exec_summary": f"Human review needed: exceeded {MAX_REVIEW_ROUNDS} rounds — {creator_task.exec_summary[:60]}",
+                        "step_plan": f"This task has gone through {round_num} review rounds without reaching quality threshold ({EXCELLENCE_THRESHOLD}/10). A human needs to step in.",
+                        "depends_on_previous": False,
+                    }
+                ],
+            }
+
+        report_snippet = (creator_task.report or "")[:3000]
+        dims_text = ", ".join(pair["dimensions"])
+
+        return {
+            "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary[:80]}",
+            "tasks": [
+                {
+                    "target_agent_type": pair["reviewer"],
+                    "command_name": pair["reviewer_command"],
+                    "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary[:80]}",
+                    "step_plan": (
+                        f"Review round {round_num}. Quality threshold: {EXCELLENCE_THRESHOLD}/10.\n\n"
+                        f"Content to review:\n{report_snippet}\n\n"
+                        f"Score each dimension 1.0-10.0 (use decimals): {dims_text}.\n"
+                        f"Overall score = MINIMUM of all dimensions.\n\n"
+                        f"End with exactly one of:\n"
+                        f"VERDICT: APPROVED (score: N.N/10)\n"
+                        f"VERDICT: CHANGES_REQUESTED (score: N.N/10)"
+                    ),
+                    "depends_on_previous": False,
+                }
+            ],
+        }
+
+    def _evaluate_review_and_loop(self, agent: Agent, review_task: AgentTask, workforce_types: set) -> dict | None:
+        """After a reviewer completes, evaluate score and loop back if needed.
+
+        Universal logic using shared quality constants:
+        - score >= 9.5 → always accept (excellence)
+        - score >= 9.0 and polish_attempts >= 3 → accept (diminishing returns)
+        - otherwise → create fix task back to the original creator
+        """
+        report = review_task.report or ""
+        verdict, score = parse_review_verdict(report)
+
+        # Track review rounds and polish attempts in internal_state
+        internal_state = agent.internal_state or {}
+        review_rounds = internal_state.get("review_rounds", {})
+        polish_attempts_map = internal_state.get("polish_attempts", {})
+
+        # Find the task key: use stored active_review_key (set when review chain starts)
+        task_key = internal_state.get("active_review_key")
+        if not task_key:
+            # Fallback: find any tracked review round (backwards compat)
+            for key in review_rounds:
+                task_key = key
+                break
+        if not task_key:
+            task_key = str(review_task.id)
+
+        round_num = review_rounds.get(task_key, 1)
+
+        # Update polish attempts counter (count attempts after reaching 9.0)
+        polish_count = polish_attempts_map.get(task_key, 0)
+        if score >= NEAR_EXCELLENCE_THRESHOLD:
+            polish_count += 1
+            polish_attempts_map[task_key] = polish_count
+
+        logger.info(
+            "Review verdict: %s (score: %.1f/10, round: %d, polish: %d/%d)",
+            verdict,
+            score,
+            round_num,
+            polish_count,
+            MAX_POLISH_ATTEMPTS,
+        )
+
+        # Use universal acceptance logic
+        if should_accept_review(score, round_num, polish_count):
+            # Clear review tracking
+            review_rounds.pop(task_key, None)
+            polish_attempts_map.pop(task_key, None)
+            internal_state["review_rounds"] = review_rounds
+            internal_state["polish_attempts"] = polish_attempts_map
+            internal_state.pop("active_review_key", None)
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            if score < EXCELLENCE_THRESHOLD:
+                logger.info(
+                    "Accepting score %.1f/10 after %d polish attempts (diminishing returns)",
+                    score,
+                    polish_count,
+                )
+            return None  # Approved — fall through to standard proposal
+
+        # Persist polish tracking
+        internal_state["polish_attempts"] = polish_attempts_map
+        agent.internal_state = internal_state
+        agent.save(update_fields=["internal_state"])
+
+        # Find the original creator and route fix back
+        return self._propose_fix_task(agent, review_task, score, round_num, polish_count)
+
+    def _propose_fix_task(
+        self, agent: Agent, review_task: AgentTask, score: float, round_num: int, polish_count: int
+    ) -> dict | None:
+        """Create a fix task routed back to the original creator agent.
+
+        Override in subclasses for custom fix routing (e.g., writers room routes
+        specific flags to specific creative agents).
+        """
+        from agents.models import AgentTask as TaskModel
+
+        creator_types = self._get_creator_types()
+        if not creator_types:
+            return None
+
+        # Find the most recent completed creator task
+        recent_creator = (
+            TaskModel.objects.filter(
+                agent__department=agent.department,
+                agent__agent_type__in=list(creator_types),
+                status=TaskModel.Status.DONE,
+            )
+            .order_by("-completed_at")
+            .first()
+        )
+        if not recent_creator:
+            return None
+
+        creator_type = recent_creator.agent.agent_type
+        pair = self._get_pair_for_creator(creator_type)
+        fix_command = pair["creator_fix_command"] if pair else "implement"
+
+        review_snippet = (review_task.report or "")[:3000]
+        polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
+
+        return {
+            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}: {recent_creator.exec_summary[:60]}",
+            "tasks": [
+                {
+                    "target_agent_type": creator_type,
+                    "command_name": fix_command,
+                    "exec_summary": f"Fix review issues (score {score}/10): {recent_creator.exec_summary[:60]}",
+                    "step_plan": (
+                        f"Current quality score: {score}/10. Target: {EXCELLENCE_THRESHOLD}/10.\n"
+                        f"Review round: {round_num}. Polish attempts: {polish_count}/{MAX_POLISH_ATTEMPTS}.\n\n"
+                        f"The reviewer has requested changes. Fix the issues below to reach "
+                        f"the quality threshold. Focus on the weakest dimensions first.\n\n"
+                        f"## Review Report\n{review_snippet}\n\n"
+                        f"Address every CHANGES_REQUESTED item. After fixing, the review chain "
+                        f"runs again automatically."
+                    ),
+                    "depends_on_previous": False,
+                }
+            ],
+        }
+
+    def _check_review_trigger(self, agent: Agent) -> dict | None:
+        """Check if the last completed task should trigger a review chain or loop.
+
+        Call this from generate_task_proposal() to handle review ping-pong.
+        Returns a task proposal dict, or None to proceed with normal proposal logic.
+        """
+        creator_types = self._get_creator_types()
+        reviewer_types = self._get_reviewer_types()
+        if not creator_types and not reviewer_types:
+            return None
+
+        from agents.models import AgentTask as TaskModel
+
+        workforce_types = set(
+            agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
+        )
+
+        last_completed = (
+            TaskModel.objects.filter(
+                agent__department=agent.department,
+                status=TaskModel.Status.DONE,
+            )
+            .order_by("-completed_at")
+            .select_related("agent", "created_by_agent")
+            .first()
+        )
+        if not last_completed:
+            return None
+
+        last_type = last_completed.agent.agent_type
+
+        # Creator just finished → propose review chain
+        if last_type in creator_types:
+            review_proposal = self._propose_review_chain(agent, last_completed, workforce_types)
+            if review_proposal:
+                return review_proposal
+
+        # Reviewer just finished → evaluate and maybe loop back
+        if last_type in reviewer_types and last_completed.report:
+            loop_proposal = self._evaluate_review_and_loop(agent, last_completed, workforce_types)
+            if loop_proposal:
+                return loop_proposal
+
+        return None
 
     def generate_task_proposal(self, agent: Agent) -> dict | None:
         """

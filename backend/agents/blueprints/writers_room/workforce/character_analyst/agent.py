@@ -109,7 +109,17 @@ class CharacterAnalystBlueprint(WorkforceBlueprint):
 
         locale = agent.get_config_value("locale") or "en"
 
-        suffix = f"Output language: {locale}\n\nAnalyze this material for character consistency, motivation, arcs, and logic."
+        suffix = (
+            f"Output language: {locale}\n\n"
+            "Analyze this material using the full character methodology:\n"
+            "1. Consistency audit — check each character's actions against their established traits scene by scene.\n"
+            "2. Arc progression — track where each principal character starts vs ends, flag flat or regressive arcs.\n"
+            "3. Ensemble balance — assess screen time / page time equity across the cast, flag imbalances.\n"
+            "4. Motivation clarity — for every significant action, can you trace it to a stated or inferred motivation?\n"
+            "5. Relationship dynamics — map how key relationships shift, flag arbitrary or unearned changes.\n"
+            "6. Voice distinction test — 'could you tell who is speaking without attribution?' Apply to 3+ dialogue samples.\n"
+            "Each flag must name the character and cite the specific scene or chapter."
+        )
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(

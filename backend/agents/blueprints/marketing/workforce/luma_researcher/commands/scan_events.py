@@ -1,7 +1,17 @@
 from agents.blueprints.base import command
 
 
-@command(name="scan-events", description="Scan Lu.ma calendars for upcoming relevant events", schedule="daily", model="claude-haiku-4-5")
+@command(
+    name="scan-events",
+    description=(
+        "Scan all configured Lu.ma calendar URLs for upcoming events, scoring each by relevance using "
+        "three dimensions: audience overlap with project target, timing feasibility, and topic alignment "
+        "with current campaign goals. Produces a prioritized digest with high/medium/low flags, key details "
+        "(date, speakers, expected attendance, topics), and a brief rationale for each relevance score."
+    ),
+    schedule="daily",
+    model="claude-haiku-4-5",
+)
 def scan_events(self, agent) -> dict:
     return {
         "exec_summary": "Scan configured Lu.ma calendars for upcoming events relevant to the project",

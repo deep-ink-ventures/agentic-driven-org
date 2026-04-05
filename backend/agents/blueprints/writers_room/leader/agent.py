@@ -8,7 +8,14 @@ if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.ai.claude_client import call_claude, parse_json_response
-from agents.blueprints.base import LeaderBlueprint
+from agents.blueprints.base import (
+    EXCELLENCE_THRESHOLD,
+    MAX_POLISH_ATTEMPTS,
+    MAX_REVIEW_ROUNDS,
+    NEAR_EXCELLENCE_THRESHOLD,
+    LeaderBlueprint,
+    should_accept_review,
+)
 from agents.blueprints.writers_room.leader.commands import check_progress, plan_room
 from agents.blueprints.writers_room.leader.skills import format_skills
 from projects.models import Document
@@ -136,12 +143,6 @@ class WritersRoomLeaderBlueprint(LeaderBlueprint):
             "label": "Language",
             "description": "Output language code: en, de, fr, es, etc. (default: en)",
         },
-        "quality_threshold": {
-            "type": "str",
-            "required": False,
-            "label": "Quality Threshold",
-            "description": "Max allowed \U0001f7e0 major flags per feedback agent to pass (default: 2). \U0001f534 critical always fails.",
-        },
     }
 
     @property
@@ -165,10 +166,12 @@ FEEDBACK TEAM (they analyze — mirrors professional script coverage):
 THE LOOP:
 1. Assign creative agents to write content for current stage
 2. When writing is done, assign feedback agents to analyze (per depth matrix)
-3. If feedback has \U0001f534 critical flags OR more than {quality_threshold} \U0001f7e0 major flags \u2192 route flags back to appropriate creative agent
-4. Creative agent rewrites addressing specific flags \u2192 feedback agent re-analyzes
-5. When all feedback passes \u2192 advance to next stage
-6. Repeat until target stage is reached with passing scores
+3. Feedback is scored 1-10 per dimension. Overall score = minimum dimension.
+4. Excellence threshold: 9.5/10. Below that → route specific flags to creative agents for fixes.
+5. After reaching 9.0, max 3 polish attempts to reach 9.5, then accept (diminishing returns).
+6. Creative agent rewrites addressing specific flags → feedback agents re-analyze
+7. When score meets threshold → advance to next stage
+8. Repeat until target stage is reached with passing scores
 
 DEPTH MATRIX (which feedback agents at which stage):
 - logline: market_analyst(full), production_analyst(lite)
@@ -214,15 +217,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         stage_status = internal_state.get("stage_status", {})
         current_stage = internal_state.get("current_stage", STAGES[0])
 
-        config = _get_merged_config(agent)
-        quality_threshold = int(config.get("quality_threshold", 2))
-
         delegation_suffix = f"""# Workforce Agents
 {workforce_desc}
 
 # Current Stage: {current_stage}
 # Stage Status: {json.dumps(stage_status, indent=2)}
-# Quality Threshold: no \U0001f534 critical, max {quality_threshold} \U0001f7e0 major per analyst
+# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (minimum dimension score)
 
 If this task involves delegating work to workforce agents, include delegated_tasks in your response.
 
@@ -311,7 +311,6 @@ Respond with JSON:
         internal_state = agent.internal_state or {}
         config = _get_merged_config(agent)
         target_stage = config.get("target_stage", "revised_draft")
-        quality_threshold = int(config.get("quality_threshold", 2))
 
         # Initialize stage state if needed
         current_stage = internal_state.get("current_stage")
@@ -328,13 +327,11 @@ Respond with JSON:
             internal_state["current_stage"] = current_stage
             internal_state["stage_status"] = {}
             internal_state["current_iteration"] = 0
-            internal_state["max_iterations"] = 10
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
 
         stage_status = internal_state.get("stage_status", {})
         current_info = stage_status.get(current_stage, {})
-        max_iterations = internal_state.get("max_iterations", 10)
 
         # Safety check: if we've completed target stage, we're done
         if current_info.get("status") == "passed":
@@ -371,19 +368,19 @@ Respond with JSON:
         status = current_info.get("status", "not_started")
         iteration = current_info.get("iterations", 0)
 
-        # Safety cap
-        if iteration >= max_iterations:
+        # Safety cap — uses universal MAX_REVIEW_ROUNDS
+        if iteration >= MAX_REVIEW_ROUNDS:
             logger.warning(
                 "Writers Room: stage '%s' hit max iterations (%d) — escalating",
                 current_stage,
-                max_iterations,
+                MAX_REVIEW_ROUNDS,
             )
             return {
-                "exec_summary": f"ESCALATION: Stage '{current_stage}' reached {max_iterations} iterations without passing",
+                "exec_summary": f"ESCALATION: Stage '{current_stage}' reached {MAX_REVIEW_ROUNDS} iterations without passing",
                 "tasks": [
                     {
                         "target_agent_type": "leader",
-                        "exec_summary": f"Stage '{current_stage}' has iterated {max_iterations} times without passing quality gates. Review feedback history and decide next steps.",
+                        "exec_summary": f"Stage '{current_stage}' has iterated {MAX_REVIEW_ROUNDS} times without passing quality gates. Review feedback history and decide next steps.",
                         "step_plan": "Review the feedback history for this stage. Determine if the quality threshold should be adjusted, the approach needs to change, or human intervention is needed.",
                     }
                 ],
@@ -401,7 +398,7 @@ Respond with JSON:
 
         if status == "feedback_done":
             # Step 4/5: Check feedback results and decide
-            return self._evaluate_feedback(agent, current_stage, config, quality_threshold)
+            return self._evaluate_feedback(agent, current_stage, config)
 
         if status == "fix_in_progress":
             # After fixes, re-run feedback
@@ -688,11 +685,15 @@ Respond with JSON:
         agent: Agent,
         stage: str,
         config: dict,
-        quality_threshold: int,
     ) -> dict | None:
         """
-        Parse recent feedback task reports, count flags, decide whether to
+        Parse recent feedback task reports, score quality, decide whether to
         pass the stage or route fixes back to creative agents.
+
+        Uses universal quality scoring:
+        - score >= 9.5 → pass (excellence)
+        - score >= 9.0 and polish_attempts >= 3 → pass (diminishing returns)
+        - otherwise → route fixes back
         """
         from agents.ai.claude_client import call_claude, parse_json_response
         from agents.models import AgentTask
@@ -721,52 +722,77 @@ Respond with JSON:
 
         # ── Special handling: ideation stage uses merge evaluation ──────
         if stage == "ideation":
-            return self._evaluate_ideation_feedback(agent, stage, config, quality_threshold, feedback_text)
+            return self._evaluate_ideation_feedback(agent, stage, config, feedback_text)
+
+        # Track polish attempts for this stage
+        internal_state = agent.internal_state or {}
+        stage_status = internal_state.get("stage_status", {})
+        current_info = stage_status.get(stage, {"iterations": 0})
+        polish_attempts = current_info.get("polish_attempts", 0)
+        iteration = current_info.get("iterations", 0)
 
         context_msg = self.build_context_message(agent)
         msg = f"""{context_msg}
 
 # Evaluate Feedback for Stage: {stage}
 
-## Quality Threshold
-- \U0001f534 CRITICAL flags: ANY = FAIL
-- \U0001f7e0 MAJOR flags: more than {quality_threshold} per analyst = FAIL
+## Quality Standard
+Excellence threshold: {EXCELLENCE_THRESHOLD}/10. The overall score is the MINIMUM of all dimension scores.
+An implementation is only as strong as its weakest dimension.
 
 ## Feedback Reports
 {feedback_text}
 
 # Task
-Parse each analyst's feedback. Count \U0001f534 and \U0001f7e0 flags per analyst.
+Evaluate the quality of the current stage output based on ALL analyst feedback.
 
-If ALL analysts pass:
-- Return {{"pass": true, "summary": "..."}}
+## Scoring (REQUIRED)
+Score each dimension 1.0-10.0 (use decimals — 8.5, 9.0, 9.5 etc.):
+- **Market fit**: Commercial viability, positioning, audience appeal
+- **Structure**: Story architecture, beats, pacing, act breaks
+- **Character**: Consistency, arcs, motivation, relationships, voice
+- **Dialogue**: Voice, subtext, scene construction, exposition balance
+- **Craft**: Format conventions, technical quality, polish
+- **Feasibility**: Budget, cast-ability, production practicality
 
-If ANY analyst fails:
-- Group the failing flags by which creative agent should fix them using these routing rules:
-  - market_analyst flags \u2192 story_researcher
-  - structure_analyst flags \u2192 story_architect
-  - character_analyst flags \u2192 character_designer
-  - dialogue_analyst flags \u2192 dialog_writer
-  - format_analyst flags \u2192 story_architect (structural issues) or dialog_writer (craft/dialogue issues)
-  - production_analyst flags \u2192 most relevant creative agent based on flag content
+Only score dimensions that were analyzed by feedback agents this round.
+Compute the **overall score** as the MINIMUM of all scored dimensions.
+
+## Fix routing (if score < {EXCELLENCE_THRESHOLD})
+Group issues by which creative agent should fix them:
+- market_analyst flags → story_researcher
+- structure_analyst flags → story_architect
+- character_analyst flags → character_designer
+- dialogue_analyst flags → dialog_writer
+- format_analyst flags → story_architect (structural) or dialog_writer (craft)
+- production_analyst flags → most relevant creative agent
 
 Respond with JSON:
 {{
-    "pass": false,
-    "summary": "Brief summary of what failed and why",
-    "flag_counts": {{
-        "analyst_type": {{"critical": 0, "major": 0}}
+    "scores": {{
+        "market_fit": 0.0,
+        "structure": 0.0,
+        "character": 0.0,
+        "dialogue": 0.0,
+        "craft": 0.0,
+        "feasibility": 0.0
     }},
+    "overall_score": 0.0,
+    "summary": "Brief evaluation summary",
     "fix_tasks": [
         {{
             "target_agent_type": "creative agent type",
             "flags_from": "feedback agent type",
-            "flags": ["list of specific flags to address"],
+            "flags": ["list of specific issues to address"],
             "exec_summary": "What to fix",
-            "step_plan": "Detailed fix instructions with the specific flags"
+            "step_plan": "Detailed fix instructions"
         }}
     ]
-}}"""
+}}
+
+VERDICT LINE (REQUIRED — must be the last line):
+VERDICT: APPROVED (score: N.N/10)
+VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
 
         response, _usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
@@ -779,13 +805,33 @@ Respond with JSON:
             logger.warning("Writers Room: failed to parse feedback evaluation: %s", response[:300])
             return None
 
-        internal_state = agent.internal_state or {}
-        stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(stage, {"iterations": 0})
+        score = float(data.get("overall_score", 0.0))
 
-        if data.get("pass"):
+        # Update polish attempts (count attempts after reaching 9.0)
+        if score >= NEAR_EXCELLENCE_THRESHOLD:
+            polish_attempts += 1
+
+        logger.info(
+            "Writers Room stage '%s': score %.1f/10, iteration %d, polish %d/%d",
+            stage,
+            score,
+            iteration,
+            polish_attempts,
+            MAX_POLISH_ATTEMPTS,
+        )
+
+        # Use universal acceptance logic
+        if should_accept_review(score, iteration, polish_attempts):
+            if score < EXCELLENCE_THRESHOLD:
+                logger.info(
+                    "Writers Room: accepting score %.1f/10 after %d polish attempts (diminishing returns)",
+                    score,
+                    polish_attempts,
+                )
+
             # Stage passed — mark and advance
             current_info["status"] = "passed"
+            current_info["polish_attempts"] = 0  # reset for next stage
             stage_status[stage] = current_info
             internal_state["stage_status"] = stage_status
 
@@ -795,9 +841,9 @@ Respond with JSON:
             if next_stage and STAGES.index(stage) < STAGES.index(target_stage):
                 internal_state["current_stage"] = next_stage
                 internal_state["current_iteration"] = 0
-                logger.info("Writers Room: stage '%s' PASSED — advancing to '%s'", stage, next_stage)
+                logger.info("Writers Room: stage '%s' PASSED (%.1f/10) — advancing to '%s'", stage, score, next_stage)
             else:
-                logger.info("Writers Room: target stage '%s' PASSED — project complete", stage)
+                logger.info("Writers Room: target stage '%s' PASSED (%.1f/10) — project complete", stage, score)
 
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
@@ -806,34 +852,39 @@ Respond with JSON:
                 return self._propose_creative_tasks(agent, next_stage, config)
             return None  # Done
 
-        # Stage failed — route fixes
+        # Score below threshold — route fixes
         fix_tasks = data.get("fix_tasks", [])
         if not fix_tasks:
-            logger.warning("Writers Room: feedback failed but no fix_tasks returned")
+            logger.warning("Writers Room: score %.1f below threshold but no fix_tasks returned", score)
             return None
 
         current_info["status"] = "fix_in_progress"
-        current_info["iterations"] = current_info.get("iterations", 0) + 1
+        current_info["iterations"] = iteration + 1
+        current_info["polish_attempts"] = polish_attempts
+        current_info["last_score"] = score
         stage_status[stage] = current_info
         internal_state["stage_status"] = stage_status
         agent.internal_state = internal_state
         agent.save(update_fields=["internal_state"])
 
         locale = config.get("locale", "en")
+        polish_msg = f" (polish {polish_attempts}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
         tasks = []
         for ft in fix_tasks:
             tasks.append(
                 {
                     "target_agent_type": ft["target_agent_type"],
-                    "exec_summary": ft.get("exec_summary", f"Fix flags from {ft.get('flags_from', 'analyst')}"),
+                    "exec_summary": ft.get("exec_summary", f"Fix issues from {ft.get('flags_from', 'analyst')}"),
                     "step_plan": (
                         f"Stage: {stage}\n"
                         f"Locale: {locale}\n"
-                        f"Flags from: {ft.get('flags_from', 'analyst')}\n\n"
-                        f"Address these specific flags:\n"
+                        f"Current score: {score}/10. Target: {EXCELLENCE_THRESHOLD}/10.\n"
+                        f"Issues from: {ft.get('flags_from', 'analyst')}\n\n"
+                        f"Address these specific issues:\n"
                         + "\n".join(f"- {flag}" for flag in ft.get("flags", []))
                         + f"\n\n{ft.get('step_plan', '')}\n\n"
                         f"Rewrite your contribution addressing ALL flagged issues. "
+                        f"Focus on the weakest dimensions first. "
                         f"Preserve everything that was not flagged. "
                         f"Output must be in {locale}."
                     ),
@@ -842,7 +893,7 @@ Respond with JSON:
             )
 
         return {
-            "exec_summary": f"Stage '{stage}': route flags to creative agents for fixes (iteration {current_info['iterations']})",
+            "exec_summary": f"Stage '{stage}': fix issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}",
             "tasks": tasks,
             "on_completion": {"set_status": "fix_in_progress", "stage": stage},
         }
@@ -852,7 +903,6 @@ Respond with JSON:
         agent: Agent,
         stage: str,
         config: dict,
-        quality_threshold: int,
         feedback_text: str,
     ) -> dict | None:
         """

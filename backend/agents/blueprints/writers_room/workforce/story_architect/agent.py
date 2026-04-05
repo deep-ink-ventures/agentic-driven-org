@@ -255,6 +255,167 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         return response
 
+    def _execute_outline_act_structure(self, agent: Agent, task: AgentTask) -> str:
+        """Decompose narrative into act-by-act architecture with turning points and tension map."""
+        from agents.ai.claude_client import call_claude
+
+        locale = agent.get_config_value("locale") or "en"
+
+        suffix = (
+            f"OUTPUT LANGUAGE: {locale}\n\n"
+            "Decompose this narrative into a precise act-by-act architecture. The task plan "
+            "above contains the project's current structural work, research brief, and "
+            "stage context.\n\n"
+            "## Methodology\n\n"
+            "### 1. Framework Selection\n"
+            "Choose the act structure that best serves this story and format:\n"
+            "- **Three-Act** for feature films, short novels, single-sitting stories\n"
+            "- **Five-Act** (Freytag) for theatrical works, prestige limited series, literary novels\n"
+            "- **Four-Act** (TV hour) for episodic television with commercial breaks\n"
+            "- **Eight-Sequence** (Frank Daniel) for complex features needing granular pacing\n"
+            "- **Hybrid** when the story demands it -- explain your reasoning\n\n"
+            "### 2. For Each Act, Provide\n"
+            "- **Dramatic Question**: The specific question this act poses to the audience\n"
+            "- **Opening State**: Where the protagonist and world stand at act start\n"
+            "- **Key Beats**: The 3-5 essential story events, each with:\n"
+            "  - What happens (action)\n"
+            "  - Why it matters (stakes)\n"
+            "  - What changes (irreversible consequence)\n"
+            "- **Turning Point / Act Break**: The moment that makes the next act inevitable\n"
+            "  - Apply McKee's gap: what did the character expect vs. what actually happened?\n"
+            "  - Why can't the character go back to the previous status quo?\n"
+            "- **Emotional Trajectory**: The dominant emotional movement (e.g., hope to dread, "
+            "confusion to clarity, intimacy to betrayal)\n"
+            "- **Pacing Notes**: Tempo relative to other acts (accelerating, breathing room, "
+            "relentless)\n\n"
+            "### 3. Structural Checkpoints\n"
+            "- **Inciting Incident**: Placement and strength -- does it disrupt equilibrium hard enough?\n"
+            "- **Midpoint**: Not a rest stop. Identify the point of no return or revelation that "
+            "reframes everything before it\n"
+            "- **Crisis / Dark Night**: The moment of maximum pressure before the climax\n"
+            "- **Climax**: Where the central dramatic question gets answered\n"
+            "- **Resolution**: What the new equilibrium looks like\n\n"
+            "### 4. Causality Validation\n"
+            "For every act transition, confirm:\n"
+            "- The turning point CAUSES the next act (not coincidence, not convenience)\n"
+            "- The protagonist's choices drive the story (not external events alone)\n"
+            "- Each act raises the stakes from the previous one\n\n"
+            "### 5. Tension Map\n"
+            "Produce a visual tension/energy map using a simple ASCII graph or markdown table "
+            "showing how dramatic intensity rises, dips, and peaks across the full arc. "
+            "Annotate key beats on the map.\n\n"
+            "### Output Format\n"
+            "Structure your output as:\n"
+            "1. Framework selection with rationale\n"
+            "2. Act-by-act breakdown (using the template above)\n"
+            "3. Causality chain summary (one sentence per transition)\n"
+            "4. Tension map\n"
+            "5. Structural risks and recommendations"
+        )
+
+        suffix += self._get_voice_constraint(agent)
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent, "outline_act_structure"),
+            max_tokens=16384,
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response
+
+    def _execute_map_subplot_threads(self, agent: Agent, task: AgentTask) -> str:
+        """Chart all subplot threads, their A-story intersections, and resolution timing."""
+        from agents.ai.claude_client import call_claude
+
+        locale = agent.get_config_value("locale") or "en"
+
+        suffix = (
+            f"OUTPUT LANGUAGE: {locale}\n\n"
+            "Map every subplot thread in this narrative and analyze how they weave with the "
+            "A-story. The task plan above contains the project's current structural work, "
+            "beat sheet, and stage context.\n\n"
+            "## Methodology\n\n"
+            "### 1. Thread Inventory\n"
+            "Identify every subplot thread currently in the narrative. For each thread:\n"
+            "- **Thread Name**: A clear label (e.g., 'B-Story: Elena's betrayal', "
+            "'C-Story: Father-son reconciliation')\n"
+            "- **Thread Type**: Classify as one of:\n"
+            "  - *Mirror* -- thematically parallels the A-story (same theme, different angle)\n"
+            "  - *Counterpoint* -- argues the opposite thematic position\n"
+            "  - *Complication* -- creates obstacles or pressure on the A-story\n"
+            "  - *Relief* -- provides tonal contrast (comic relief, romantic B-story)\n"
+            "  - *Setup* -- plants seeds for a future payoff (sequel bait, delayed revelation)\n"
+            "- **Thematic Function**: What argument does this thread make? How does it enrich "
+            "or complicate the controlling idea?\n"
+            "- **Characters Involved**: Who carries this thread\n\n"
+            "### 2. Thread Timeline\n"
+            "For each thread, map its lifecycle across the act structure:\n"
+            "- **Introduction Point**: Where and how the thread enters the narrative. "
+            "Is the introduction organic or forced?\n"
+            "- **Escalation Beats**: The 2-4 moments where this thread intensifies. "
+            "Each beat should raise internal stakes for the characters involved\n"
+            "- **A-Story Intersections**: Specific moments where this thread collides with, "
+            "complicates, or illuminates the main plot. These are the braiding points -- "
+            "the moments that make the narrative feel unified rather than episodic\n"
+            "- **Resolution Point**: Where and how the thread resolves. Timing relative "
+            "to the climax matters:\n"
+            "  - Subplots that resolve BEFORE the climax clear the deck for maximum focus\n"
+            "  - Subplots that resolve DURING the climax raise the stakes\n"
+            "  - Subplots that resolve AFTER the climax belong in denouement only if brief\n\n"
+            "### 3. Weave Analysis\n"
+            "Assess the overall subplot architecture:\n"
+            "- **Thread Density per Act**: Are any acts overcrowded with subplot activity? "
+            "Are any acts subplot-starved?\n"
+            "- **Braiding Pattern**: How frequently do threads intersect? A well-woven "
+            "narrative has subplot beats that land between A-story beats, creating rhythm\n"
+            "- **Thematic Redundancy Check**: Do any two subplots make the same argument? "
+            "If so, one should be cut or differentiated\n"
+            "- **Orphan Check**: Are there threads that were introduced but never resolved, "
+            "or that resolve without earning their resolution?\n"
+            "- **Weight Distribution**: Is the B-story strong enough to carry its screen time? "
+            "Are minor threads getting disproportionate attention?\n\n"
+            "### 4. Subplot Weave Diagram\n"
+            "Produce a timeline-style diagram (ASCII or markdown table) with acts/sequences "
+            "on the horizontal axis and threads on the vertical axis. Mark:\n"
+            "- Introduction points\n"
+            "- Escalation beats\n"
+            "- A-story intersection points (highlight these)\n"
+            "- Resolution points\n"
+            "This gives a visual picture of how threads braid across the narrative.\n\n"
+            "### 5. Recommendations\n"
+            "Based on the analysis:\n"
+            "- Threads to strengthen (under-developed)\n"
+            "- Threads to cut or merge (redundant or parasitic)\n"
+            "- Missing threads (thematic gaps the story needs)\n"
+            "- Resequencing suggestions (better braiding opportunities)\n"
+            "- Resolution timing adjustments\n\n"
+            "### Output Format\n"
+            "Structure your output as:\n"
+            "1. Thread inventory table\n"
+            "2. Thread-by-thread timeline analysis\n"
+            "3. Subplot weave diagram\n"
+            "4. Weave analysis (density, braiding, redundancy, orphans)\n"
+            "5. Actionable recommendations"
+        )
+
+        suffix += self._get_voice_constraint(agent)
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent, "map_subplot_threads"),
+            max_tokens=16384,
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response
+
     def _execute_generate_concepts(self, agent: Agent, task: AgentTask) -> str:
         """Generate 3-5 competing concept pitches for the ideation stage."""
         from agents.ai.claude_client import call_claude

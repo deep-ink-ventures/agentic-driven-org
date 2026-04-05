@@ -109,7 +109,16 @@ class FormatAnalystBlueprint(WorkforceBlueprint):
 
         locale = agent.get_config_value("locale") or "en"
 
-        suffix = f"Output language: {locale}\n\nAnalyze this material for formatting conventions, craft quality, and format-specific standards."
+        suffix = (
+            f"Output language: {locale}\n\n"
+            "Analyze this material using the full format and craft methodology:\n"
+            "1. Industry format compliance — check page count/word count against genre norms, margins, slug lines, "
+            "dialogue formatting, chapter conventions, or stage direction standards as appropriate.\n"
+            "2. Craft quality — assess show-don't-tell ratio (flag telling passages), prose density, white space balance.\n"
+            "3. Readability pacing — flag walls of text, overlong action blocks, chapters that outstay their welcome.\n"
+            "4. Format-specific conventions — run all applicable checks for the detected format.\n"
+            "Flag every deviation that a professional reader, script reader, or acquisitions editor would flag."
+        )
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(

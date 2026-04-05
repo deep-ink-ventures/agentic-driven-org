@@ -1,7 +1,16 @@
 from agents.blueprints.base import command
 
 
-@command(name="send-campaign", description="Execute a previously approved email campaign via SendGrid", schedule=None)
+@command(
+    name="send-campaign",
+    description=(
+        "Execute a previously approved email campaign via SendGrid after running a full safety checklist: "
+        "verify human approval, enforce the minimum 3-day gap between campaigns to the same list, confirm "
+        "weekly send limits are not exceeded, and validate the unsubscribe link is present. Monitors initial "
+        "deliverability signals post-send and updates internal_state with timestamps and send counts."
+    ),
+    schedule=None,
+)
 def send_campaign(self, agent) -> dict:
     return {
         "exec_summary": "Send an approved email campaign via SendGrid to the designated mailing list",

@@ -146,7 +146,16 @@ class StructureAnalystBlueprint(WorkforceBlueprint):
 
         locale = agent.get_config_value("locale") or "en"
 
-        suffix = f"Output language: {locale}\n\nAnalyze this material for narrative structure against the most appropriate frameworks."
+        suffix = (
+            f"Output language: {locale}\n\n"
+            "Analyze this material using the full structural methodology:\n"
+            "1. Select 2-3 best-fit frameworks and run beat-by-beat compliance analysis.\n"
+            "2. Map pacing rhythm scene-by-scene — energy level per scene, rising/falling patterns.\n"
+            "3. Verify the causality chain — does each scene cause the next? Flag arbitrary jumps.\n"
+            "4. Assess subplot integration — do subplots intersect with the main arc at meaningful points?\n"
+            "5. Evaluate midpoint reversal strength and climax payoff against setup.\n"
+            "Every beat must be assessed as confirmed, misplaced, absent, underdeveloped, or strength."
+        )
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(

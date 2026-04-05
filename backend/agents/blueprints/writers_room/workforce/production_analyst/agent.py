@@ -144,7 +144,19 @@ class ProductionAnalystBlueprint(WorkforceBlueprint):
 
         locale = agent.get_config_value("locale") or "en"
 
-        suffix = f"Output language: {locale}\n\nAnalyze this material for production/publishing feasibility, budget implications, and commercial potential."
+        suffix = (
+            f"Output language: {locale}\n\n"
+            "Analyze this material using the full production feasibility methodology:\n"
+            "1. Per-scene budget impact — scan every scene for VFX, stunts, locations, night shoots, crowds, animals, "
+            "period builds. Flag each with estimated cost tier.\n"
+            "2. Cast size and complexity — count speaking roles, assess name-talent requirements, flag rare skill needs.\n"
+            "3. Location feasibility — number of company moves, international locations, season dependencies.\n"
+            "4. VFX/practical breakdown — categorize effects as practical vs CGI, estimate complexity.\n"
+            "5. Schedule implications — parallel unit needs, child actor constraints, weather dependencies.\n"
+            "6. IP/rights considerations — franchise potential, adaptation value, merchandising.\n"
+            "7. Castability — star attachment potential, role attractiveness to A-list talent.\n"
+            "For novels/theatre, apply equivalent publishing feasibility and production scale checks."
+        )
 
         task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(

@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.marketing.workforce.luma_researcher.commands import find_opportunities, scan_events
 from agents.blueprints.marketing.workforce.luma_researcher.skills import format_skills
-from agents.blueprints.marketing.workforce.luma_researcher.commands import scan_events, find_opportunities
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,12 @@ class LumaResearcherBlueprint(WorkforceBlueprint):
     description = "Monitors Lu.ma event calendars for networking and speaking opportunities"
     tags = ["research", "events", "networking"]
     config_schema = {
-        "calendar_urls": {"type": "list", "required": True, "label": "Calendar URLs", "description": "Lu.ma calendar URLs to monitor for events"},
+        "calendar_urls": {
+            "type": "list",
+            "required": True,
+            "label": "Calendar URLs",
+            "description": "Lu.ma calendar URLs to monitor for events",
+        },
     }
 
     @property
@@ -55,6 +60,34 @@ When executing tasks, respond with a JSON object:
 <luma_events>
 {json.dumps(events, default=str, indent=2) if events else 'No events found.'}
 </luma_events>
+
+# EVENT ANALYSIS METHODOLOGY
+
+## Relevance Scoring (three dimensions)
+Score each event on:
+- **Audience overlap**: how well does the event's expected attendance match the project's target audience?
+- **Timing feasibility**: is there enough lead time to prepare and attend/participate?
+- **Topic alignment**: how closely do the event's themes match current campaign goals?
+
+Combine into an overall relevance rating: high (2+ dimensions strong), medium (1 strong), low (none strong).
+
+## Opportunity Classification
+For high-relevance events, classify the opportunity type:
+- **Networking**: who specifically should be met and why (name roles, not just "industry leaders")
+- **Speaking**: is there a CFP? What topic would position the project best?
+- **Sponsorship**: what visibility tiers are available? Estimated cost vs reach?
+
+## ROI Estimation
+For each opportunity, estimate:
+- Visibility reach (expected attendees, social amplification potential)
+- Lead potential (how many target-audience contacts could this generate)
+- Cost (time, money, materials needed)
+
+## Follow-Up Action Plan
+For each recommended event, specify:
+- Preparation requirements (pitch deck, speaker bio, booth materials, RSVP deadline)
+- Key contacts to connect with at the event
+- Post-event follow-up actions and timeline
 
 Respond with your events JSON and report."""
 

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import WorkforceBlueprint
-from agents.blueprints.marketing.workforce.twitter.skills import format_skills
 from agents.blueprints.marketing.workforce.twitter.commands import place_content, post_content, search_trends
+from agents.blueprints.marketing.workforce.twitter.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,12 @@ class TwitterBlueprint(WorkforceBlueprint):
     description = "Strategic brand placement on Twitter — finds trending tweets and adds value-driven content"
     tags = ["social-media", "twitter", "placement", "content-creation"]
     config_schema = {
-        "twitter_session": {"type": "str", "required": True, "label": "Twitter Session", "description": "Browser session cookies for Twitter authentication"},
+        "twitter_session": {
+            "type": "str",
+            "required": True,
+            "label": "Twitter Session",
+            "description": "Browser session cookies for Twitter authentication",
+        },
     }
 
     @property
@@ -72,7 +77,27 @@ When executing tasks, respond with a JSON object:
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude
 
-        task_msg = self.build_task_message(agent, task, suffix="Respond with your actions JSON and report.")
+        suffix = (
+            "# EXECUTION METHODOLOGY\n\n"
+            "## Strategy Alignment\n"
+            "Before composing any content, review department documents for active campaign messaging, "
+            "tone guidelines, and target audience. Every tweet must serve both the conversation AND the "
+            "campaign objective.\n\n"
+            "## Safety & Rate Limits\n"
+            "- Check internal_state.tweets_today — respect daily posting limits\n"
+            "- Check internal_state.optimal_posting_times — post within high-engagement windows when possible\n"
+            "- ONE post per trending item, then move on. No follow-up engagement.\n"
+            "- Never engage in discussions or answer questions on replies\n\n"
+            "## Audience Awareness\n"
+            "- Identify who is engaging with the target tweet (followers, influencers, bots)\n"
+            "- Match the register of the conversation — professional threads get professional replies\n"
+            "- Provide genuine value (insight, data, perspective) before angling toward the project\n\n"
+            "## Measurable Outcomes\n"
+            "Track and report: tweets posted (count), target tweet engagement level, "
+            "placement type (reply vs quote tweet), and alignment score with campaign goals.\n\n"
+            "Respond with your actions JSON and report."
+        )
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
 
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
@@ -89,6 +114,7 @@ When executing tasks, respond with a JSON object:
 
             for action in actions:
                 from integrations.playwright.service import run_action
+
                 run_action(
                     action_type=action.get("type", "unknown"),
                     params=action,
@@ -97,7 +123,7 @@ When executing tasks, respond with a JSON object:
 
             # Update internal_state with tweet count and timestamps
             state = agent.internal_state or {}
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            today = datetime.now(UTC).strftime("%Y-%m-%d")
             if state.get("tweets_today_date") != today:
                 state["tweets_today"] = 0
                 state["tweets_today_date"] = today
@@ -105,7 +131,7 @@ When executing tasks, respond with a JSON object:
             tweet_actions = [a for a in actions if a.get("type") in ("tweet", "reply", "quote_tweet")]
             if tweet_actions:
                 state["tweets_today"] = state.get("tweets_today", 0) + len(tweet_actions)
-                state["last_tweet_at"] = datetime.now(timezone.utc).isoformat()
+                state["last_tweet_at"] = datetime.now(UTC).isoformat()
                 agent.internal_state = state
                 agent.save(update_fields=["internal_state"])
 

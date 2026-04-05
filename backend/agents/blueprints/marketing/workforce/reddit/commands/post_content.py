@@ -1,7 +1,17 @@
 from agents.blueprints.base import command
 
 
-@command(name="post-content", description="Share one piece of valuable content in a relevant subreddit", schedule="daily")
+@command(
+    name="post-content",
+    description=(
+        "Create and share one piece of valuable content in a relevant subreddit, selecting the optimal "
+        "format (text post, link post, or image post) based on what performs best in that community. "
+        "Reads subreddit rules before posting to ensure full compliance with flair, formatting, and content "
+        "restrictions. Matches the community's tone and vocabulary while strategically connecting to the "
+        "project goal. Enforces 4-hour minimum cooldown per subreddit."
+    ),
+    schedule="daily",
+)
 def post_content(self, agent) -> dict:
     return {
         "exec_summary": "Create and share one piece of valuable content in a relevant subreddit aligned with the project goal",

@@ -5,7 +5,13 @@ from agents.blueprints.base import command
 
 @command(
     name="create-issues",
-    description="Create GitHub issues from the leader's story breakdown with labels, acceptance criteria, and dependency links",
+    description=(
+        "Parses the leader's story breakdown and creates structured GitHub issues using a standardized template "
+        "(Problem Statement, Acceptance Criteria as GIVEN/WHEN/THEN, Technical Notes, Out of Scope). Each issue "
+        "receives multi-dimensional labels (type: feature/bug/chore, component: api/frontend/auth/data/infra, "
+        "size: S/M/L, priority: P0-P3). Before creating any issue, performs duplicate detection via GitHub search "
+        "with >80% match threshold, and cross-references dependencies (Blocked by #X, Related to #X) across the batch."
+    ),
     schedule=None,
     model="claude-sonnet-4-6",
 )

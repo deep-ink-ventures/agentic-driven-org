@@ -15,7 +15,15 @@ logger = logging.getLogger(__name__)
 
 @command(
     name="plan-sprint",
-    description="Decompose project goal into epics -> stories -> tasks, route to specialist agents",
+    description=(
+        "Daily planning command that decomposes the project goal into a hierarchical sprint plan: 2-5 epics "
+        "(user-facing capabilities) each containing 3-8 stories with GIVEN/WHEN/THEN acceptance criteria, "
+        "each story containing 1-3 tasks scoped to 4-8 hours of junior engineer work. Routes each task to the "
+        "correct specialist agent by file-path analysis (.py -> backend_engineer, .tsx -> frontend_engineer, "
+        "test tasks -> test_engineer, auth/crypto -> security_auditor, UI components -> accessibility_engineer). "
+        "Checks file locks before assignment, maps dependencies for sequential execution, and maximizes "
+        "parallelism between backend and frontend work streams."
+    ),
     schedule="daily",
     model="claude-sonnet-4-6",
 )

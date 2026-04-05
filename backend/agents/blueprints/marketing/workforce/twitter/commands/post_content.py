@@ -1,7 +1,16 @@
 from agents.blueprints.base import command
 
 
-@command(name="post-content", description="Create and post one original tweet aligned with project goals", schedule="daily")
+@command(
+    name="post-content",
+    description=(
+        "Create and post one original tweet that aligns with the project's brand voice and current campaign "
+        "messaging from department documents. Checks internal_state for optimal_posting_times and tweets_today "
+        "count before composing. Content is crafted to provide standalone value while strategically angling "
+        "toward the project goal, using hooks and formats proven to drive engagement in the niche."
+    ),
+    schedule="daily",
+)
 def post_content(self, agent) -> dict:
     return {
         "exec_summary": "Create and post one original tweet aligned with project goals at optimal timing",

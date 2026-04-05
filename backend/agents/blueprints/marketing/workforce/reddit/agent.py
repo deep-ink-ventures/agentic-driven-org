@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
 from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.marketing.workforce.reddit.commands import monitor_mentions, place_content, post_content
 from agents.blueprints.marketing.workforce.reddit.skills import format_skills
-from agents.blueprints.marketing.workforce.reddit.commands import place_content, post_content, monitor_mentions
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,18 @@ class RedditBlueprint(WorkforceBlueprint):
     description = "Strategic brand placement on Reddit — finds trending posts and adds value-driven content"
     tags = ["social-media", "reddit", "placement", "brand-visibility"]
     config_schema = {
-        "reddit_username": {"type": "str", "required": True, "label": "Reddit Username", "description": "Your Reddit account username"},
-        "reddit_session": {"type": "str", "required": True, "label": "Reddit Session", "description": "Browser session cookies for Reddit authentication"},
+        "reddit_username": {
+            "type": "str",
+            "required": True,
+            "label": "Reddit Username",
+            "description": "Your Reddit account username",
+        },
+        "reddit_session": {
+            "type": "str",
+            "required": True,
+            "label": "Reddit Session",
+            "description": "Browser session cookies for Reddit authentication",
+        },
     }
 
     @property
@@ -72,7 +82,28 @@ When executing tasks, respond with a JSON object:
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude
 
-        task_msg = self.build_task_message(agent, task, suffix="Respond with your actions JSON and report.")
+        suffix = (
+            "# EXECUTION METHODOLOGY\n\n"
+            "## Strategy Alignment\n"
+            "Before composing any content, review department documents for active campaign messaging, "
+            "tone guidelines, and target audience. Every comment or post must serve both the subreddit "
+            "community AND the campaign objective.\n\n"
+            "## Safety & Cooldown Rules\n"
+            "- Check internal_state.last_post_at per subreddit — enforce 4-hour minimum between posts\n"
+            "- Read subreddit rules before posting — violations get accounts banned\n"
+            "- ONE comment per trending post, then move on. Never reply to replies.\n"
+            "- Never overtly promotional — provide value first, angle second\n\n"
+            "## Subreddit Culture Adaptation\n"
+            "- Study the top posts and comments in the target subreddit to match tone\n"
+            "- Use the community's vocabulary and formatting conventions naturally\n"
+            "- Lead with genuine insight, experience, or data before any project mention\n"
+            "- Respect the unwritten norms: lurk-to-post ratio, self-promotion limits, flair requirements\n\n"
+            "## Measurable Outcomes\n"
+            "Track and report: subreddits engaged, post/comment type, target thread engagement level, "
+            "cooldown status per subreddit, and alignment score with campaign goals.\n\n"
+            "Respond with your actions JSON and report."
+        )
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
 
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
@@ -89,6 +120,7 @@ When executing tasks, respond with a JSON object:
 
             for action in actions:
                 from integrations.playwright.service import run_action
+
                 run_action(
                     action_type=action.get("type", "unknown"),
                     params=action,
@@ -100,7 +132,7 @@ When executing tasks, respond with a JSON object:
                 if subreddit and action.get("type") in ("comment", "post"):
                     state = agent.internal_state or {}
                     last_post_at = state.get("last_post_at", {})
-                    last_post_at[subreddit] = datetime.now(timezone.utc).isoformat()
+                    last_post_at[subreddit] = datetime.now(UTC).isoformat()
                     state["last_post_at"] = last_post_at
                     agent.internal_state = state
                     agent.save(update_fields=["internal_state"])

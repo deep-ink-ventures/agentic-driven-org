@@ -24,6 +24,17 @@ class CommunityLeaderBlueprint(LeaderBlueprint):
     tags = ["leadership", "strategy", "community", "partnerships", "ecosystem"]
     config_schema = {}
 
+    def get_review_pairs(self):
+        return [
+            {
+                "creator": "partnership_writer",
+                "creator_fix_command": "revise-proposal",
+                "reviewer": "partnership_reviewer",
+                "reviewer_command": "review-proposal",
+                "dimensions": ["mutual_value", "specificity", "tone", "structure", "next_steps"],
+            },
+        ]
+
     @property
     def system_prompt(self) -> str:
         return """You are the community & partnerships director. You build ecosystem relationships by coordinating your workforce agents: Ecosystem Researcher, Ecosystem Analyst, Partnership Writer, and Partnership Reviewer.
@@ -36,11 +47,13 @@ Your core responsibilities:
 5. Route completed proposals to the Partnership Reviewer for quality check
 6. Manage the review ping-pong loop: if a reviewer sends work back, create a revision task with feedback
 
-Review loop rules:
-- When a writer task completes, create a review task for the paired reviewer
-- If the reviewer's verdict is "revision_needed", create a revision task back to the writer with the reviewer's feedback
-- If the reviewer's verdict is "approved", mark the relationship as ready for outreach
-- Maximum 3 review rounds — after that, escalate to human
+REVIEW CHAIN (AUTOMATIC — do not manually manage reviews):
+When a partnership_writer task completes, the system automatically:
+1. Routes the proposal to the partnership_reviewer for quality check
+2. If score < 9.5/10 → fix task auto-created for the writer with feedback
+3. After fix → reviewer runs again (ping-pong until approved or max rounds)
+4. After reaching 9.0, max 3 polish attempts to reach 9.5, then accept
+Do NOT manually create review tasks — the system handles the loop.
 
 Community building is slower than sales — weekly planning, daily checks. Focus on quality relationships over volume."""
 
@@ -151,4 +164,8 @@ Respond with JSON:
             return response
 
     def generate_task_proposal(self, agent: Agent) -> dict:
+        # Check for review cycle triggers first (universal from base class)
+        review_result = self._check_review_trigger(agent)
+        if review_result:
+            return review_result
         return self.plan_community(agent)

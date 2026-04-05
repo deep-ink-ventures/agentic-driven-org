@@ -1,10 +1,17 @@
 """Web researcher command: gather raw research data (cheap model)."""
+
 from agents.blueprints.base import command
 
 
 @command(
     name="research-gather",
-    description="Search the web and collect raw findings on a topic",
+    description=(
+        "Search the web using an expanding keyword strategy (core terms, synonyms, related concepts) to "
+        "collect raw findings with source diversity across news, blogs, forums, and official publications. "
+        "Applies recency weighting to prioritize fresh content and validates all URLs for accessibility. "
+        "Classifies each finding by type (trend, competitor move, opportunity, threat) and relevance tier "
+        "before passing structured data to the research-analyze phase."
+    ),
     schedule="hourly",
     model="claude-haiku-4-5",
 )

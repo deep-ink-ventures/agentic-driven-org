@@ -14,7 +14,7 @@ export function ProjectCard({ project, onSetup }: ProjectCardProps) {
   const isSetup = project.status === "setup";
 
   const card = (
-    <Card className="bg-bg-surface border-border hover:border-accent-gold/50 transition-colors cursor-pointer group h-48 flex flex-col">
+    <Card className="bg-bg-surface border-border hover:border-accent-gold/50 transition-colors cursor-pointer group flex flex-col">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-text-heading group-hover:text-accent-gold transition-colors truncate">
@@ -27,7 +27,7 @@ export function ProjectCard({ project, onSetup }: ProjectCardProps) {
           )}
         </div>
         {project.goal && (
-          <p className="text-text-secondary text-xs mt-1 line-clamp-2">
+          <p className="text-text-secondary text-xs mt-1 line-clamp-1">
             {project.goal}
           </p>
         )}

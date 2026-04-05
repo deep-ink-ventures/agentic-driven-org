@@ -34,6 +34,16 @@ const statusColors: Record<AgentTask["status"], string> = {
   failed: "bg-flag-critical/15 text-flag-critical border-flag-critical/30",
 };
 
+const statusLabels: Record<AgentTask["status"], string> = {
+  awaiting_approval: "needs approval",
+  awaiting_dependencies: "waiting",
+  planned: "planned",
+  queued: "queued",
+  processing: "processing",
+  done: "done",
+  failed: "failed",
+};
+
 /* ------------------------------------------------------------------ */
 /*  TaskCard (moved from page.tsx — unchanged)                        */
 /* ------------------------------------------------------------------ */
@@ -93,26 +103,31 @@ function TaskCard({
     <div className="border border-border rounded-lg bg-bg-surface">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+        className="w-full flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 text-left"
       >
-        <span
-          className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${statusColors[task.status]}`}
-        >
-          {task.status.replace("_", " ")}
-        </span>
-        <span className="text-xs text-text-secondary shrink-0">
-          {task.agent_name}
-        </span>
+        <div className="flex items-center gap-2 sm:contents">
+          <span
+            className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${statusColors[task.status]}`}
+          >
+            {statusLabels[task.status]}
+          </span>
+          <span className="text-xs text-text-secondary shrink-0">
+            {task.agent_name}
+          </span>
+          <span className="text-xs text-text-secondary shrink-0 ml-auto sm:hidden">
+            {new Date(task.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
         <span className="text-sm text-text-primary truncate flex-1">
           {editing ? editedSummary : task.exec_summary}
         </span>
-        <span className="text-xs text-text-secondary shrink-0">
+        <span className="text-xs text-text-secondary shrink-0 hidden sm:inline">
           {new Date(task.created_at).toLocaleTimeString()}
         </span>
         {expanded ? (
-          <ChevronUp className="h-3.5 w-3.5 text-text-secondary" />
+          <ChevronUp className="h-3.5 w-3.5 text-text-secondary hidden sm:block" />
         ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
+          <ChevronDown className="h-3.5 w-3.5 text-text-secondary hidden sm:block" />
         )}
       </button>
 
@@ -204,7 +219,7 @@ function TaskCard({
           {task.status === "awaiting_dependencies" && task.blocked_by_summary && (
             <div className="flex items-center gap-2 text-xs text-text-secondary p-2 rounded-lg bg-bg-input">
               <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>Waiting on: {task.blocked_by_summary}</span>
+              <span>Blocked by: {task.blocked_by_summary}</span>
             </div>
           )}
 
@@ -384,7 +399,7 @@ function TaskLane({
               <option value="">All</option>
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {s.replace("_", " ")}
+                  {statusLabels[s as AgentTask["status"]] || s.replace("_", " ")}
                 </option>
               ))}
             </select>
@@ -400,9 +415,11 @@ function TaskLane({
               <Loader2 className="h-4 w-4 text-text-secondary animate-spin" />
             </div>
           ) : tasks.length === 0 ? (
-            <p className="text-text-secondary text-xs py-4 text-center">
-              No tasks.
-            </p>
+            <div className="rounded-lg border border-dashed border-border py-6 px-4 text-center">
+              <p className="text-text-secondary text-xs">
+                No tasks yet — your agents will create tasks as they work.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
               {tasks.map((task) => (
@@ -449,7 +466,8 @@ export function TaskQueue({
 }) {
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-6">Task Queue</h2>
+      <h2 className="text-2xl font-semibold mb-1">Task Queue</h2>
+      <p className="text-sm text-text-secondary mb-6">Monitor and manage your agents&apos; work</p>
 
       {/* Two lanes side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

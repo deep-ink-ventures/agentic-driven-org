@@ -5,7 +5,14 @@ from agents.blueprints.base import command
 
 @command(
     name="a11y-audit",
-    description="Audit a frontend PR for WCAG 2.1 AA compliance using axe-core and manual checks",
+    description=(
+        "Audits a frontend PR for WCAG 2.1 AA compliance using a two-pronged approach: automated checks via "
+        "axe-core and Lighthouse (~57% of criteria covering contrast, ARIA roles, alt text) combined with "
+        "AI-driven manual checks (~43% covering heading hierarchy, focus management, screen reader announcements, "
+        "keyboard trap detection, meaningful link text, and skip navigation). Scopes the WCAG checklist to the "
+        "specific components changed in the PR and tags findings as BLOCKER (content inaccessible), MAJOR "
+        "(significantly impacts usability), or MINOR (sub-optimal but accessible)."
+    ),
     schedule=None,
     model="claude-sonnet-4-6",
 )

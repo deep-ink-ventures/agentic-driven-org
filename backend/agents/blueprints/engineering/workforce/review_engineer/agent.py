@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.engineering.workforce.review_engineer.commands import review_pr
 from agents.blueprints.engineering.workforce.review_engineer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
-MAX_REVIEW_ROUNDS = 10
+MAX_PR_REVIEW_ROUNDS = 10  # Per-PR internal cap (distinct from the leader-level MAX_PR_REVIEW_ROUNDS)
 
 REVIEW_CRITERIA = """\
 WHAT TO CHECK:
@@ -76,7 +76,7 @@ You produce high-signal code reviews that developers actually want to read. Your
 
 ## Review Process
 1. Read the PR diff and description
-2. Check review round count (max {MAX_REVIEW_ROUNDS})
+2. Check review round count (max {MAX_PR_REVIEW_ROUNDS})
 3. Apply structured review criteria
 4. Self-filter output (judge filter) before posting
 5. On re-review: focus only on new changes
@@ -89,7 +89,7 @@ You produce high-signal code reviews that developers actually want to read. Your
 
 ## Iteration Management
 - Track review rounds per PR in internal_state["review_rounds"][pr_number]
-- After {MAX_REVIEW_ROUNDS} rounds on the same PR: stop reviewing, create escalation task for leader
+- After {MAX_PR_REVIEW_ROUNDS} rounds on the same PR: stop reviewing, create escalation task for leader
 - On re-review: review only the new diff against prior findings
 
 When executing tasks, respond with a JSON object:
@@ -100,7 +100,17 @@ When executing tasks, respond with a JSON object:
     "is_rereview": false,
     "round_number": 1,
     "report": "Summary of review approach"
-}}"""
+}}
+
+## Quality Scoring (REQUIRED when consolidating reviews)
+When consolidating feedback from test_engineer, security_auditor, design_qa, and accessibility_engineer:
+- Score each dimension 1.0-10.0 (use decimals)
+- Overall score = MINIMUM of all dimension scores
+- The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold
+
+End your consolidated report with exactly one of:
+VERDICT: APPROVED (score: N.N/10)
+VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
 
     @property
     def skills_description(self) -> str:
@@ -171,7 +181,7 @@ Only post comments that are BLOCKER, high-value SUGGESTION, or genuine QUESTION.
         from integrations.github_dev import service as gh
 
         token, repos = self._get_github_config(agent)
-        max_rounds = agent.get_config_value("max_review_iterations") or MAX_REVIEW_ROUNDS
+        max_rounds = agent.get_config_value("max_review_iterations") or MAX_PR_REVIEW_ROUNDS
 
         suffix = """Analyze this task and produce structured review instructions for the claude-code-action.
 

@@ -1,7 +1,16 @@
 from agents.blueprints.base import command
 
 
-@command(name="place-content", description="Find one trending tweet and add one strategic reply or quote tweet", schedule="hourly")
+@command(
+    name="place-content",
+    description=(
+        "Identify one high-performing tweet in the project's niche by evaluating engagement velocity, "
+        "reply depth, and audience alignment, then craft exactly one strategic reply or quote tweet. "
+        "The placement must angle toward the project goal while providing genuine value to the conversation. "
+        "Follows strict one-and-done engagement rules: never reply to replies, never re-engage the same thread."
+    ),
+    schedule="hourly",
+)
 def place_content(self, agent) -> dict:
     return {
         "exec_summary": "Find ONE trending tweet in the project's niche and add ONE strategic reply or quote tweet",

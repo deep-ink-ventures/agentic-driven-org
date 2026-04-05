@@ -1,7 +1,17 @@
 from agents.blueprints.base import command
 
 
-@command(name="find-opportunities", description="Deep analysis to find networking, speaking, and sponsorship opportunities", schedule=None)
+@command(
+    name="find-opportunities",
+    description=(
+        "Perform deep analysis of upcoming events to classify opportunities into networking, speaking, and "
+        "sponsorship categories with an estimated ROI for each (visibility reach, lead potential, cost). "
+        "For each opportunity, outlines preparation requirements (pitch deck, speaker bio, booth materials), "
+        "application deadlines, and a concrete follow-up action plan with owner assignment suggestions. "
+        "Prioritizes by strategic impact relative to project goals."
+    ),
+    schedule=None,
+)
 def find_opportunities(self, agent) -> dict:
     return {
         "exec_summary": "Identify networking, speaking, and sponsorship opportunities from upcoming events",

@@ -1,19 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --color-navy: #0a0e1a;
-  --color-navy-light: #111827;
-  --color-navy-mid: #0f1629;
-  --color-navy-card: rgba(17, 24, 39, 0.5);
-  --color-violet: #7c6aef;
-  --color-violet-light: #a78bfa;
-  --color-violet-dim: rgba(124, 106, 239, 0.08);
-  --color-amber: #f59e0b;
-  --color-amber-hover: #d97706;
-  --color-silver: #94a3b8;
-  --color-silver-light: #cbd5e1;
+  /* Unified palette — matches app frontend */
+  --color-ink: #111110;
+  --color-ink-light: #1C1B18;
+  --color-ink-mid: #181714;
+  --color-ink-card: rgba(28, 27, 24, 0.6);
 
-  --font-display: "DM Sans", system-ui, sans-serif;
+  --color-gold: #E8B84B;
+  --color-gold-hover: #F0C85C;
+  --color-gold-muted: oklch(0.78 0.12 85 / 0.15);
+
+  --color-stone: #A8A290;
+  --color-stone-light: #F0ECE2;
+
+  --color-copper: #E8B84B;
+  --color-border: #332F28;
+
+  /* Legacy aliases — keeps old class names working during migration */
+  --color-navy: #111110;
+  --color-navy-light: #1C1B18;
+  --color-navy-mid: #181714;
+  --color-navy-card: rgba(28, 27, 24, 0.6);
+  --color-violet: #E8B84B;
+  --color-violet-light: #F0C85C;
+  --color-violet-dim: oklch(0.78 0.12 85 / 0.10);
+  --color-amber: #E8B84B;
+  --color-amber-hover: #F0C85C;
+  --color-silver: #A8A290;
+  --color-silver-light: #F0ECE2;
+
+  --font-display: "Source Serif 4", Georgia, serif;
   --font-body: "Inter", system-ui, sans-serif;
 
   --animate-gradient-shift: gradient-shift 12s ease infinite;
@@ -36,16 +53,15 @@ html {
 }
 
 body {
-  background-color: var(--color-navy);
-  color: #e2e8f0;
+  background-color: var(--color-ink);
+  color: var(--color-stone-light);
 }
 
 ::selection {
-  background-color: rgba(124, 106, 239, 0.35);
-  color: white;
+  background-color: oklch(0.78 0.12 85 / 0.35);
+  color: var(--color-ink);
 }
 
-/* Utility for display font */
 .font-display {
   font-family: var(--font-display);
 }

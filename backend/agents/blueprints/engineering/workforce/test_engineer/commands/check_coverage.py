@@ -5,7 +5,14 @@ from agents.blueprints.base import command
 
 @command(
     name="check-coverage",
-    description="Analyze PR diff for coverage gaps, write missing tests, and trigger workflow dispatch",
+    description=(
+        "Reads a PR diff to identify untested branches, edge cases, and error paths, then crafts a test-generation "
+        "prompt enforcing strict quality rules: every test must have meaningful assertions (no assert-no-exception), "
+        "use the AAA pattern (Arrange/Act/Assert), and avoid anti-patterns like flaky random data, order-dependent "
+        "tests, or asserting implementation details. Targets >80% differential branch coverage on changed lines. "
+        "Dispatches the claude-implement.yml workflow to write the tests and stores coverage gap metadata in "
+        "internal_state for the leader to track."
+    ),
     schedule=None,
     model="claude-sonnet-4-6",
 )

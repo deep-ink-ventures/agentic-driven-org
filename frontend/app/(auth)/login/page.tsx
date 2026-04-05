@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { BrandHeading } from "@/components/brand";
+import { BrandHeading, BrandIcon } from "@/components/brand";
+import { Eye, EyeOff } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -32,6 +33,7 @@ function LoginContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const googleUrl = `${API_URL}/api/auth/google/login/?process=login`;
 
@@ -46,9 +48,9 @@ function LoginContent() {
       const err = e as { message?: string };
       const msg = err?.message || "";
       if (msg.includes("Invalid credentials") || msg.includes("invalid")) {
-        setError("Invalid email or password.");
+        setError("Email or password doesn\u2019t match. Please check and try again.");
       } else {
-        setError("Something went wrong. Please try again.");
+        setError("Something went wrong. Please try again in a moment.");
       }
     } finally {
       setLoading(false);
@@ -56,10 +58,11 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-bg-primary px-4">
-      <div className="mb-8 text-center">
-        <BrandHeading className="text-4xl" />
-        <p className="text-text-secondary mt-2">Sign in to your account</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-bg-primary px-4 py-8">
+      <div className="mb-8 text-center flex flex-col items-center">
+        <BrandIcon size={40} className="mb-4" />
+        <BrandHeading className="text-3xl sm:text-4xl" />
+        <p className="text-text-secondary mt-2 text-sm">Sign in to your account</p>
       </div>
 
       {authError === "allowlist" && (
@@ -105,7 +108,12 @@ function LoginContent() {
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-text-primary">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-bg-input border-border text-text-primary" />
+              <div className="relative">
+                <Input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-bg-input border-border text-text-primary pr-10" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors" tabIndex={-1}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             {error && <p className="text-flag-critical text-sm">{error}</p>}
