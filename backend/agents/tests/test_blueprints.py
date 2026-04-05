@@ -332,6 +332,137 @@ class TestGetWorkforceMetadata:
         assert metadata == []
 
 
+# ── Leader document creation ─────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeaderDocumentCreation:
+    def test_leader_writes_progress_doc_before_planning(self, department, user):
+        from unittest.mock import patch
+
+        from agents.blueprints.base import LeaderBlueprint
+        from agents.models import Agent, AgentTask
+        from projects.models import Document, Sprint
+
+        class ConcreteLeaderBlueprint(LeaderBlueprint):
+            name = "Test Leader"
+            description = "A test leader"
+            system_prompt = "You are a test leader."
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Write pilot episode",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        leader = Agent.objects.create(
+            name="Test Leader",
+            agent_type="leader",
+            department=department,
+            is_leader=True,
+            status="active",
+        )
+
+        # Add a workforce agent so generate_task_proposal doesn't bail early
+        Agent.objects.create(
+            name="Twitter Guy",
+            agent_type="twitter",
+            department=department,
+            is_leader=False,
+            status="active",
+        )
+
+        AgentTask.objects.create(
+            agent=leader,
+            sprint=sprint,
+            status=AgentTask.Status.DONE,
+            exec_summary="Analyze characters",
+            report="Found three strong protagonist candidates with distinct arcs.",
+        )
+        AgentTask.objects.create(
+            agent=leader,
+            sprint=sprint,
+            status=AgentTask.Status.DONE,
+            exec_summary="Draft outline",
+            report="Three-act structure with dual timelines established.",
+        )
+
+        with patch("agents.ai.claude_client.call_claude") as mock_claude:
+            mock_claude.return_value = (
+                '{"sprint_done": false, "exec_summary": "Next task", '
+                '"tasks": [{"target_agent_type": "twitter", '
+                '"command_name": "post-content", "exec_summary": "Post content", '
+                '"step_plan": "Post to Twitter.", "depends_on_previous": false}]}',
+                {"input_tokens": 100, "output_tokens": 50},
+            )
+
+            blueprint = ConcreteLeaderBlueprint()
+            blueprint.generate_task_proposal(leader)
+
+        progress_docs = Document.objects.filter(
+            department=department,
+            document_type="sprint_progress",
+            sprint=sprint,
+        )
+        assert progress_docs.count() == 1
+        doc = progress_docs.first()
+        assert "Analyze characters" in doc.content or "protagonist" in doc.content
+        assert doc.is_archived is False
+
+    def test_no_progress_doc_when_no_completed_tasks(self, department, user):
+        from unittest.mock import patch
+
+        from agents.blueprints.base import LeaderBlueprint
+        from agents.models import Agent
+        from projects.models import Document, Sprint
+
+        class ConcreteLeaderBlueprint(LeaderBlueprint):
+            name = "Test Leader"
+            description = "A test leader"
+            system_prompt = "You are a test leader."
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Fresh sprint",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        leader = Agent.objects.create(
+            name="Test Leader",
+            agent_type="leader",
+            department=department,
+            is_leader=True,
+            status="active",
+        )
+
+        # Add a workforce agent so generate_task_proposal doesn't bail early
+        Agent.objects.create(
+            name="Twitter Guy",
+            agent_type="twitter",
+            department=department,
+            is_leader=False,
+            status="active",
+        )
+
+        count_before = Document.objects.filter(department=department).count()
+
+        with patch("agents.ai.claude_client.call_claude") as mock_claude:
+            mock_claude.return_value = (
+                '{"sprint_done": false, "exec_summary": "First task", '
+                '"tasks": [{"target_agent_type": "twitter", '
+                '"command_name": "post-content", "exec_summary": "Start writing", '
+                '"step_plan": "Begin.", "depends_on_previous": false}]}',
+                {"input_tokens": 100, "output_tokens": 50},
+            )
+
+            blueprint = ConcreteLeaderBlueprint()
+            blueprint.generate_task_proposal(leader)
+
+        assert Document.objects.filter(department=department).count() == count_before
+
+
 # ── WorkforceBlueprint default execute_task ────────────────────────────────
 
 
@@ -706,3 +837,127 @@ class TestWritersRoomReviewPairs:
 
         bp = WritersRoomLeaderBlueprint()
         assert bp._propose_review_chain(None, None, set()) is None
+
+
+# ── Volume safety net ──────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestVolumeThresholdCheck:
+    def test_triggers_consolidation_when_over_threshold(self, db, department):
+        from unittest.mock import MagicMock, patch
+
+        from agents.models import Agent
+
+        # Create docs totaling over 1.5M chars
+        big_content = "word " * 400000  # ~2M chars
+        Document.objects.create(
+            title="Huge doc",
+            content=big_content,
+            department=department,
+        )
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        with patch("agents.blueprints.base.consolidate_department_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            blueprint = agent.get_blueprint()
+            blueprint.get_context(agent)
+            mock_task.delay.assert_called_once_with(str(department.id))
+
+    def test_does_not_trigger_consolidation_when_under_threshold(self, db, department):
+        from unittest.mock import MagicMock, patch
+
+        from agents.models import Agent
+
+        # Small content, well under threshold
+        Document.objects.create(
+            title="Small doc",
+            content="Just a short document.",
+            department=department,
+        )
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        with patch("agents.blueprints.base.consolidate_department_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            blueprint = agent.get_blueprint()
+            blueprint.get_context(agent)
+            mock_task.delay.assert_not_called()
+
+
+# ── No truncation guarantees ──────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestNoTruncation:
+    def test_document_content_not_truncated(self, db, department):
+        from agents.models import Agent
+
+        long_content = "A" * 5000
+        Document.objects.create(title="Long doc", content=long_content, department=department)
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        blueprint = agent.get_blueprint()
+        ctx = blueprint.get_context(agent)
+        assert long_content in ctx["department_documents"]
+
+    def test_report_not_truncated(self, db, department):
+        from agents.models import Agent, AgentTask
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        long_report = "B" * 5000
+        AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.DONE,
+            exec_summary="Test task with long report",
+            report=long_report,
+        )
+
+        blueprint = agent.get_blueprint()
+        ctx = blueprint.get_context(agent)
+        assert long_report in ctx["own_recent_tasks"]
+
+    def test_exec_summary_not_truncated(self, db, department):
+        from agents.models import Agent, AgentTask
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        long_summary = "C" * 200
+        AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.DONE,
+            exec_summary=long_summary,
+            report="Short report",
+        )
+
+        blueprint = agent.get_blueprint()
+        ctx = blueprint.get_context(agent)
+        assert long_summary in ctx["own_recent_tasks"]

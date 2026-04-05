@@ -4,7 +4,7 @@ from projects.models import Output
 
 
 class OutputListSerializer(serializers.ModelSerializer):
-    """List view -- truncated content for performance."""
+    """List view serializer for Output model."""
 
     created_by_task_summary = serializers.SerializerMethodField()
 
@@ -42,10 +42,6 @@ class OutputListSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        # Truncate content in list view to 500 chars
-        if data.get("content") and len(data["content"]) > 500:
-            data["content"] = data["content"][:500] + "..."
-        # Never expose file_key directly
         data.pop("file_key", None)
         return data
 

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -178,6 +179,10 @@ CELERY_BEAT_SCHEDULE = {
     "monitor-pending-webhooks": {
         "task": "integrations.tasks.monitor_pending_webhooks",
         "schedule": 300,
+    },
+    "consolidate-monthly-documents": {
+        "task": "projects.tasks_consolidation.consolidate_monthly_documents",
+        "schedule": crontab(day_of_month="1", hour="3", minute="0"),
     },
 }
 

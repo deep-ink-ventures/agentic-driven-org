@@ -335,3 +335,66 @@ class TestBootstrapProposal:
         bp2 = BootstrapProposal.objects.create(project=project)
         proposals = list(BootstrapProposal.objects.filter(project=project))
         assert proposals[0].pk == bp2.pk
+
+
+# ── DocumentConsolidation ──────────────────────────────────────────────────────
+
+
+class TestDocumentConsolidation:
+    def test_document_has_consolidated_into_field(self, department):
+        parent = Document.objects.create(
+            title="Original",
+            content="old content",
+            department=department,
+        )
+        child = Document.objects.create(
+            title="Consolidated",
+            content="merged content",
+            department=department,
+            consolidated_into=parent,
+        )
+        assert child.consolidated_into == parent
+        assert parent.consolidated_from.count() == 1
+
+    def test_document_type_choices(self, department):
+        doc = Document.objects.create(
+            title="Sprint Progress",
+            content="results",
+            department=department,
+            document_type="sprint_progress",
+        )
+        assert doc.document_type == "sprint_progress"
+
+    def test_document_sprint_fk(self, user, department):
+        from projects.models import Sprint
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Write chapter 1",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+        doc = Document.objects.create(
+            title="Progress",
+            content="done",
+            department=department,
+            sprint=sprint,
+        )
+        assert doc.sprint == sprint
+        assert sprint.documents.count() == 1
+
+    def test_consolidated_into_nullable(self, department):
+        doc = Document.objects.create(
+            title="Standalone",
+            content="content",
+            department=department,
+        )
+        assert doc.consolidated_into is None
+
+    def test_document_type_default(self, department):
+        doc = Document.objects.create(
+            title="Test",
+            content="content",
+            department=department,
+        )
+        assert doc.document_type == "general"

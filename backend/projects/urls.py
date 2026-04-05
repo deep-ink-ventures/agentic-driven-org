@@ -2,6 +2,7 @@ from django.urls import path
 
 from agents import views as views_agents
 from projects import views
+from projects.views.document_view import DocumentListView
 
 urlpatterns = [
     path("projects/", views.ProjectListView.as_view(), name="project-list"),
@@ -50,5 +51,10 @@ urlpatterns = [
         "projects/<uuid:project_id>/sprints/<uuid:sprint_id>/",
         views.SprintDetailView.as_view(),
         name="sprint-detail",
+    ),
+    path(
+        "projects/<uuid:project_id>/departments/<uuid:department_id>/documents/",
+        DocumentListView.as_view(),
+        name="document-list",
     ),
 ]

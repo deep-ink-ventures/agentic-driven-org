@@ -61,8 +61,6 @@ def build_bootstrap_user_message(
     for s in sources:
         sources_text += f"\n\n<source name=\"{s['name']}\" type=\"{s['source_type']}\" id=\"{s['id']}\">\n"
         text = s["text"]
-        if len(text) > 10000:
-            text = text[:10000] + "\n\n[... truncated ...]"
         sources_text += text
         sources_text += "\n</source>"
 

@@ -1,6 +1,6 @@
 """Tests for Sprint model and API endpoints."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -356,3 +356,70 @@ class TestSprintTaskRelationship:
         sprint.delete()
         task.refresh_from_db()
         assert task.sprint is None
+
+
+# ── Sprint Consolidation Signal ───────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestSprintConsolidationSignal:
+    def test_sprint_done_triggers_consolidation(self, user, department):
+        from projects.models import Sprint
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Test sprint",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        with patch("projects.signals.consolidate_sprint_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            sprint.status = Sprint.Status.DONE
+            sprint.save(update_fields=["status", "updated_at"])
+            mock_task.delay.assert_called_once_with(str(sprint.id))
+
+    def test_sprint_paused_triggers_consolidation(self, user, department):
+        from projects.models import Sprint
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Test sprint",
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        with patch("projects.signals.consolidate_sprint_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            sprint.status = Sprint.Status.PAUSED
+            sprint.save(update_fields=["status", "updated_at"])
+            mock_task.delay.assert_called_once_with(str(sprint.id))
+
+    def test_sprint_running_does_not_trigger(self, user, department):
+        from projects.models import Sprint
+
+        sprint = Sprint.objects.create(
+            project=department.project,
+            text="Test sprint",
+            status=Sprint.Status.PAUSED,
+            created_by=user,
+        )
+        sprint.departments.add(department)
+
+        with patch("projects.signals.consolidate_sprint_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            sprint.status = Sprint.Status.RUNNING
+            sprint.save(update_fields=["status", "updated_at"])
+            mock_task.delay.assert_not_called()
+
+    def test_sprint_create_does_not_trigger(self, user, department):
+        from projects.models import Sprint
+
+        with patch("projects.signals.consolidate_sprint_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            Sprint.objects.create(
+                project=department.project,
+                text="New sprint",
+                created_by=user,
+            )
+            mock_task.delay.assert_not_called()

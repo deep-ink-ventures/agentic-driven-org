@@ -263,9 +263,7 @@ Each task you create should include:
             ).values_list("exec_summary", "status", "agent__agent_type", "agent__name")
         )
         active_text = (
-            "\n".join(f"- [{st}] ({at}) {es[:120]}" for es, st, at, _ in active_tasks)
-            if active_tasks
-            else "No active tasks."
+            "\n".join(f"- [{st}] ({at}) {es}" for es, st, at, _ in active_tasks) if active_tasks else "No active tasks."
         )
 
         internal_state = agent.internal_state or {}
@@ -280,7 +278,7 @@ Each task you create should include:
         context_text = ""
         if area_contexts:
             for area, ctx in area_contexts.items():
-                context_text += f"\n- {area}: {ctx.get('summary', '')[:150]}"
+                context_text += f"\n- {area}: {ctx.get('summary', '')}"
 
         has_active_work = len(active_tasks) > 0
         if has_active_work:
@@ -309,19 +307,19 @@ Each task you create should include:
 
         if round_num > MAX_REVIEW_ROUNDS:
             return {
-                "exec_summary": f"Escalation: {round_num} review rounds on {impl_task.exec_summary[:60]}",
+                "exec_summary": f"Escalation: {round_num} review rounds on {impl_task.exec_summary}",
                 "tasks": [
                     {
                         "target_agent_type": "ticket_manager",
                         "command_name": "create-issues",
-                        "exec_summary": f"Human review needed: {impl_task.exec_summary[:80]} — exceeded {MAX_REVIEW_ROUNDS} rounds",
+                        "exec_summary": f"Human review needed: {impl_task.exec_summary} — exceeded {MAX_REVIEW_ROUNDS} rounds",
                         "step_plan": f"Create an issue flagging that this task has gone through {round_num} review rounds without reaching quality threshold ({EXCELLENCE_THRESHOLD}/10). A human engineer needs to step in.",
                         "depends_on_previous": False,
                     }
                 ],
             }
 
-        impl_report_snippet = (impl_task.report or "")[:3000]
+        impl_report_snippet = impl_task.report or ""
 
         # Build parallel review tasks — all feed into review_engineer
         tasks = []
@@ -332,7 +330,7 @@ Each task you create should include:
                 {
                     "target_agent_type": "test_engineer",
                     "command_name": "check-coverage",
-                    "exec_summary": f"Test coverage check for: {impl_task.exec_summary[:80]}",
+                    "exec_summary": f"Test coverage check for: {impl_task.exec_summary}",
                     "step_plan": (
                         f"Review round {round_num}.\n\n"
                         f"Implementation report:\n{impl_report_snippet}\n\n"
@@ -349,7 +347,7 @@ Each task you create should include:
                 {
                     "target_agent_type": "security_auditor",
                     "command_name": "security-review",
-                    "exec_summary": f"Security review for: {impl_task.exec_summary[:80]}",
+                    "exec_summary": f"Security review for: {impl_task.exec_summary}",
                     "step_plan": (
                         f"Review round {round_num}.\n\n"
                         f"Implementation report:\n{impl_report_snippet}\n\n"
@@ -367,7 +365,7 @@ Each task you create should include:
                     {
                         "target_agent_type": "design_qa",
                         "command_name": "review_design",
-                        "exec_summary": f"Design QA for: {impl_task.exec_summary[:80]}",
+                        "exec_summary": f"Design QA for: {impl_task.exec_summary}",
                         "step_plan": (
                             f"Review round {round_num}.\n\n"
                             f"Implementation report:\n{impl_report_snippet}\n\n"
@@ -383,7 +381,7 @@ Each task you create should include:
                     {
                         "target_agent_type": "accessibility_engineer",
                         "command_name": "a11y-audit",
-                        "exec_summary": f"Accessibility audit for: {impl_task.exec_summary[:80]}",
+                        "exec_summary": f"Accessibility audit for: {impl_task.exec_summary}",
                         "step_plan": (
                             f"Review round {round_num}.\n\n"
                             f"Implementation report:\n{impl_report_snippet}\n\n"
@@ -400,7 +398,7 @@ Each task you create should include:
                 {
                     "target_agent_type": "review_engineer",
                     "command_name": "review-pr",
-                    "exec_summary": f"Consolidated review (round {round_num}): {impl_task.exec_summary[:60]}",
+                    "exec_summary": f"Consolidated review (round {round_num}): {impl_task.exec_summary}",
                     "step_plan": (
                         f"Review round {round_num}. Quality threshold: {EXCELLENCE_THRESHOLD}/10.\n\n"
                         f"Implementation report:\n{impl_report_snippet}\n\n"
@@ -428,7 +426,7 @@ Each task you create should include:
             )
 
         return {
-            "exec_summary": f"Review chain (round {round_num}) for: {impl_task.exec_summary[:80]}",
+            "exec_summary": f"Review chain (round {round_num}) for: {impl_task.exec_summary}",
             "tasks": tasks,
         }
 
@@ -524,9 +522,7 @@ Respond with JSON:
             .order_by("-completed_at")[:30]
             .values_list("exec_summary", "agent__agent_type")
         )
-        completed_text = (
-            "\n".join(f"- ({at}) {es[:150]}" for es, at in recent_completed) if recent_completed else "None."
-        )
+        completed_text = "\n".join(f"- ({at}) {es}" for es, at in recent_completed) if recent_completed else "None."
 
         context_msg = self.build_context_message(agent)
         msg = f"""{context_msg}
@@ -776,7 +772,7 @@ DECOMPOSITION RULES:
         contexts = internal_state.get("context", {})
 
         contexts[area_key] = {
-            "summary": summary[:1000],  # Cap length
+            "summary": summary,
             "last_updated": timezone.now().isoformat(),
             "from_task": task_id,
         }

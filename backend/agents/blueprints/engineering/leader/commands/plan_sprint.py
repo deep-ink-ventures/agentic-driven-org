@@ -53,7 +53,7 @@ def plan_sprint(self, agent: Agent) -> dict:
         .order_by("-completed_at")[:20]
         .values_list("exec_summary", "report")
     )
-    completed_text = "\n".join(f"- {es[:150]}" for es, _ in completed) if completed else "No completed tasks yet."
+    completed_text = "\n".join(f"- {es}" for es, _ in completed) if completed else "No completed tasks yet."
 
     # Get in-progress / queued tasks
     active = list(
@@ -62,7 +62,7 @@ def plan_sprint(self, agent: Agent) -> dict:
             status__in=[AgentTask.Status.PROCESSING, AgentTask.Status.QUEUED, AgentTask.Status.PROCESSING],
         ).values_list("exec_summary", "status", "agent__agent_type")
     )
-    active_text = "\n".join(f"- [{st}] ({at}) {es[:150]}" for es, st, at in active) if active else "No active tasks."
+    active_text = "\n".join(f"- [{st}] ({at}) {es}" for es, st, at in active) if active else "No active tasks."
 
     # Incremental context
     internal_state = agent.internal_state or {}

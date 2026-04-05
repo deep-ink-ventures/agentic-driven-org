@@ -469,7 +469,7 @@ def configure_new_department(self, department_id: str, context: str = ""):
         leader_bp = dept_config["leader"]
         leader_system_prompt = ""
         with contextlib.suppress(Exception):
-            leader_system_prompt = leader_bp.system_prompt[:3000] if hasattr(leader_bp, "system_prompt") else ""
+            leader_system_prompt = leader_bp.system_prompt if hasattr(leader_bp, "system_prompt") else ""
 
         # Get workforce agent descriptions
         from agents.blueprints import get_workforce_for_department
@@ -751,7 +751,7 @@ def provision_single_agent(self, agent_id: str):
         # Get the blueprint's actual system prompt for context
         bp_system_prompt = ""
         with contextlib.suppress(Exception):
-            bp_system_prompt = bp.system_prompt[:2000] if hasattr(bp, "system_prompt") else ""
+            bp_system_prompt = bp.system_prompt if hasattr(bp, "system_prompt") else ""
 
         user_message = f"""# Project: {project.name}
 

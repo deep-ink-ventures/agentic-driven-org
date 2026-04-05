@@ -249,13 +249,24 @@ class BaseBlueprint(ABC):
         docs = list(
             department.documents.filter(is_archived=False).values_list("title", "content", "doc_type", "created_at")
         )
+
+        # Volume safety net — trigger async consolidation if context is too large
+        total_chars = sum(len(content) for _, content, _, _ in docs)
+        if total_chars > 1_500_000:  # ~500k tokens
+            consolidate_department_documents.delay(str(department.id))
+            logger.warning(
+                "VOLUME_THRESHOLD dept=%s chars=%d — async consolidation triggered",
+                department.name,
+                total_chars,
+            )
+
         docs_text = ""
         for title, content, doc_type, created_at in docs:
             from django.utils import timezone
 
             age = (timezone.now() - created_at).days
             age_str = f", {age}d ago" if doc_type == "research" else ""
-            docs_text += f"\n\n--- [{doc_type}{age_str}] {title} ---\n{content[:3000]}"
+            docs_text += f"\n\n--- [{doc_type}{age_str}] {title} ---\n{content}"
 
         sibling_ids = list(
             department.agents.exclude(id=agent.id).filter(status="active").values_list("id", "name", "agent_type")
@@ -276,15 +287,15 @@ class BaseBlueprint(ABC):
             for sib_id, sib_name, sib_type in sibling_ids:
                 recent = tasks_by_agent.get(sib_id, [])
                 if recent:
-                    task_lines = "\n".join(f"  - [{s}] {e[:100]}" for e, s in recent)
+                    task_lines = "\n".join(f"  - [{s}] {e}" for e, s in recent)
                     sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:\n{task_lines}"
 
         own_recent = list(agent.tasks.order_by("-created_at")[:10].values_list("exec_summary", "status", "report"))
         own_text = ""
         for es, st, rp in own_recent:
-            own_text += f"\n  - [{st}] {es[:100]}"
+            own_text += f"\n  - [{st}] {es}"
             if rp:
-                own_text += f"\n    Report: {rp[:200]}"
+                own_text += f"\n    Report: {rp}"
 
         return {
             "project_name": project.name,
@@ -530,19 +541,19 @@ class LeaderBlueprint(BaseBlueprint):
                 creator_task.exec_summary[:60],
             )
             return {
-                "exec_summary": f"Escalation: {round_num} review rounds on {creator_task.exec_summary[:60]}",
+                "exec_summary": f"Escalation: {round_num} review rounds on {creator_task.exec_summary}",
                 "tasks": [
                     {
                         "target_agent_type": pair["creator"],
                         "command_name": pair["creator_fix_command"],
-                        "exec_summary": f"Human review needed: exceeded {MAX_REVIEW_ROUNDS} rounds — {creator_task.exec_summary[:60]}",
+                        "exec_summary": f"Human review needed: exceeded {MAX_REVIEW_ROUNDS} rounds — {creator_task.exec_summary}",
                         "step_plan": f"This task has gone through {round_num} review rounds without reaching quality threshold ({EXCELLENCE_THRESHOLD}/10). A human needs to step in.",
                         "depends_on_previous": False,
                     }
                 ],
             }
 
-        report_snippet = (creator_task.report or "")[:3000]
+        report_snippet = creator_task.report or ""
         # Read dimensions from reviewer blueprint (single source of truth),
         # falling back to pair definition for backwards compatibility
         from agents.blueprints import get_blueprint
@@ -552,12 +563,12 @@ class LeaderBlueprint(BaseBlueprint):
         dims_text = ", ".join(dims)
 
         return {
-            "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary[:80]}",
+            "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary}",
             "tasks": [
                 {
                     "target_agent_type": pair["reviewer"],
                     "command_name": pair["reviewer_command"],
-                    "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary[:80]}",
+                    "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary}",
                     "step_plan": (
                         f"Review round {round_num}. Quality threshold: {EXCELLENCE_THRESHOLD}/10.\n\n"
                         f"Content to review:\n{report_snippet}\n\n"
@@ -709,16 +720,16 @@ class LeaderBlueprint(BaseBlueprint):
         pair = self._get_pair_for_creator(creator_type)
         fix_command = pair["creator_fix_command"] if pair else "implement"
 
-        review_snippet = (review_task.report or "")[:3000]
+        review_snippet = review_task.report or ""
         polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
 
         return {
-            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}: {recent_creator.exec_summary[:60]}",
+            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}: {recent_creator.exec_summary}",
             "tasks": [
                 {
                     "target_agent_type": creator_type,
                     "command_name": fix_command,
-                    "exec_summary": f"Fix review issues (score {score}/10): {recent_creator.exec_summary[:60]}",
+                    "exec_summary": f"Fix review issues (score {score}/10): {recent_creator.exec_summary}",
                     "step_plan": (
                         f"Current quality score: {score}/10. Target: {EXCELLENCE_THRESHOLD}/10.\n"
                         f"Review round: {round_num}. Polish attempts: {polish_count}/{MAX_POLISH_ATTEMPTS}.\n\n"
@@ -918,7 +929,7 @@ Respond with JSON:
                     agent=agent,
                     status=TaskModel.Status.AWAITING_APPROVAL,
                     exec_summary=follow_up.get("exec_summary", f"Follow-up in {days} days"),
-                    step_plan=f"Review and assess. Original task: {task.exec_summary[:200]}",
+                    step_plan=f"Review and assess. Original task: {task.exec_summary}",
                     proposed_exec_at=timezone.now() + timedelta(days=days),
                 )
                 logger.info("Leader scheduled follow-up in %d days", days)
@@ -966,7 +977,7 @@ Respond with JSON:
         workforce = AgentModel.objects.filter(
             department=department,
             is_leader=False,
-            status=Agent.Status.ACTIVE,
+            status=AgentModel.Status.ACTIVE,
         )
         if not workforce.exists():
             return None
@@ -997,8 +1008,12 @@ Respond with JSON:
         for summary, report in completed_tasks:
             entry = summary
             if report:
-                entry += f"\n  Result: {report[:300]}"
+                entry += f"\n  Result: {report}"
             completed_text.append(entry)
+
+        # Write a progress document if there are completed tasks to capture
+        if completed_tasks:
+            self._write_sprint_progress_document(department, sprint, completed_tasks)
 
         from projects.models import Document
 
@@ -1006,9 +1021,9 @@ Respond with JSON:
 
         source_context = ""
         for src in sprint.sources.all()[:5]:
-            text = src.summary or (src.extracted_text or "")[:500] or (src.raw_content or "")[:500]
+            text = src.summary or src.extracted_text or src.raw_content or ""
             if text:
-                source_context += f"\n- {src.original_filename or 'Attached file'}: {text[:400]}"
+                source_context += f"\n- {src.original_filename or 'Attached file'}: {text}"
 
         locale = agent.get_config_value("locale") or "en"
 
@@ -1101,3 +1116,64 @@ What is the next step to advance this sprint toward completion?"""
         except Exception as e:
             logger.exception("Leader %s: sprint proposal failed: %s", agent.name, e)
             return None
+
+    def _write_sprint_progress_document(self, department, sprint, completed_tasks):
+        """Write a sprint progress document capturing completed task results."""
+        from projects.models import Document
+
+        batch_num = (
+            Document.objects.filter(
+                department=department,
+                sprint=sprint,
+                document_type="sprint_progress",
+            ).count()
+            + 1
+        )
+
+        last_progress = (
+            Document.objects.filter(
+                department=department,
+                sprint=sprint,
+                document_type="sprint_progress",
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+        if last_progress:
+            new_tasks = [(summary, report) for summary, report in completed_tasks if report]
+            existing_task_count = sum(
+                1 for line in (last_progress.content or "").split("\n") if line.startswith("## Task:")
+            )
+            if len(new_tasks) <= existing_task_count:
+                return
+
+        content_parts = [f"# Sprint Progress — Batch {batch_num}\n"]
+        content_parts.append(f"**Sprint:** {sprint.text}\n")
+
+        from django.utils import timezone
+
+        content_parts.append(f"**Date:** {timezone.now().strftime('%Y-%m-%d %H:%M')}\n")
+
+        for summary, report in completed_tasks:
+            content_parts.append(f"\n## Task: {summary}\n")
+            if report:
+                content_parts.append(f"{report}\n")
+            else:
+                content_parts.append("*No report provided.*\n")
+
+        Document.objects.create(
+            title=f"Sprint Progress — {sprint.text[:50]} — Batch {batch_num}",
+            content="\n".join(content_parts),
+            department=department,
+            document_type="sprint_progress",
+            doc_type=Document.DocType.GENERAL,
+            sprint=sprint,
+        )
+
+
+# ── Deferred import — placed here to avoid circular imports ─────────────────
+# projects.tasks_consolidation imports from agents.ai, so importing at the top
+# of this module would create a cycle. Importing at the bottom (after all class
+# definitions) is safe and puts the name in the module namespace for patching.
+from projects.tasks_consolidation import consolidate_department_documents  # noqa: E402
