@@ -518,7 +518,15 @@ class LeaderBlueprint(BaseBlueprint):
         Override for complex patterns (e.g., parallel reviewers → consolidator).
         """
         pair = self._get_pair_for_creator(creator_task.agent.agent_type)
-        if not pair or pair["reviewer"] not in workforce_types:
+        if not pair:
+            return None
+        if pair["reviewer"] not in workforce_types:
+            logger.warning(
+                "REVIEW_SKIPPED dept=%s creator=%s — reviewer %s is not active, work passes without review",
+                agent.department.name,
+                creator_task.agent.agent_type,
+                pair["reviewer"],
+            )
             return None
 
         # Track review round and active chain key
@@ -982,8 +990,23 @@ Respond with JSON:
         if not workforce.exists():
             return None
 
+        # Filter out orphaned reviewers whose creator pair is not active
+        active_types = set(workforce.values_list("agent_type", flat=True))
+        orphaned_reviewers = set()
+        for pair in self.get_review_pairs():
+            if pair["creator"] not in active_types and pair["reviewer"] in active_types:
+                orphaned_reviewers.add(pair["reviewer"])
+                logger.info(
+                    "ORPHANED_REVIEWER dept=%s reviewer=%s — creator %s is not active, excluding from task proposals",
+                    department.name,
+                    pair["reviewer"],
+                    pair["creator"],
+                )
+
         agents_desc = []
         for a in workforce:
+            if a.agent_type in orphaned_reviewers:
+                continue
             bp = a.get_blueprint()
             cmds = bp.get_commands() if bp else []
             cmd_names = [c["name"] for c in cmds]
