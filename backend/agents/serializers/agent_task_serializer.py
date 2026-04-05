@@ -1,4 +1,5 @@
 from rest_framework import serializers
+
 from agents.models import AgentTask
 
 
@@ -11,13 +12,30 @@ class AgentTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = AgentTask
         fields = [
-            "id", "agent", "agent_name", "agent_type",
-            "created_by_agent", "created_by_agent_name",
-            "status", "auto_execute", "command_name",
-            "blocked_by", "blocked_by_summary",
-            "exec_summary", "step_plan", "report", "error_message",
-            "proposed_exec_at", "scheduled_at", "started_at", "completed_at",
-            "token_usage", "created_at", "updated_at",
+            "id",
+            "agent",
+            "agent_name",
+            "agent_type",
+            "created_by_agent",
+            "created_by_agent_name",
+            "status",
+            "auto_execute",
+            "command_name",
+            "blocked_by",
+            "blocked_by_summary",
+            "exec_summary",
+            "step_plan",
+            "report",
+            "error_message",
+            "review_verdict",
+            "review_score",
+            "proposed_exec_at",
+            "scheduled_at",
+            "started_at",
+            "completed_at",
+            "token_usage",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 

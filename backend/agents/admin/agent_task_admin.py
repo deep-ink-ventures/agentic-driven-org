@@ -11,6 +11,8 @@ class AgentTaskAdmin(admin.ModelAdmin):
         "agent",
         "status",
         "auto_execute",
+        "review_verdict",
+        "review_score",
         "proposed_exec_at",
         "created_by_agent",
         "created_at",
@@ -18,12 +20,21 @@ class AgentTaskAdmin(admin.ModelAdmin):
     list_filter = ("status", "auto_execute", "agent__agent_type", "agent__department__project")
     search_fields = ("exec_summary", "agent__name")
     ordering = ("-created_at",)
-    readonly_fields = ("id", "created_at", "updated_at", "started_at", "completed_at", "scheduled_at")
+    readonly_fields = (
+        "id",
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+        "scheduled_at",
+        "review_verdict",
+        "review_score",
+    )
     fieldsets = (
         (None, {"fields": ("id", "agent", "created_by_agent", "status", "auto_execute")}),
         ("Scheduling", {"fields": ("proposed_exec_at", "scheduled_at")}),
         ("Task Details", {"fields": ("exec_summary", "step_plan")}),
-        ("Results", {"fields": ("report", "error_message")}),
+        ("Results", {"fields": ("report", "error_message", "review_verdict", "review_score")}),
         ("Timestamps", {"fields": ("created_at", "updated_at", "started_at", "completed_at")}),
     )
     actions = ["approve_tasks", "approve_and_auto_execute_similar", "reject_tasks"]

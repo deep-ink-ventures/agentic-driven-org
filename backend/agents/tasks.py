@@ -40,6 +40,8 @@ def _broadcast_task(task, event_type="task.updated"):
                     "started_at": task.started_at.isoformat() if task.started_at else None,
                     "completed_at": task.completed_at.isoformat() if task.completed_at else None,
                     "token_usage": task.token_usage,
+                    "review_verdict": task.review_verdict,
+                    "review_score": task.review_score,
                     "created_at": task.created_at.isoformat(),
                     "updated_at": task.updated_at.isoformat(),
                 },

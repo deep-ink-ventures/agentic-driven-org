@@ -67,6 +67,16 @@ class AgentTask(models.Model):
         blank=True,
         help_text="Token usage from Claude API: {model, input_tokens, output_tokens, cost_estimate}",
     )
+    review_verdict = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Structured verdict from reviewer: APPROVED or CHANGES_REQUESTED",
+    )
+    review_score = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Review score 0.0-10.0 from structured verdict",
+    )
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

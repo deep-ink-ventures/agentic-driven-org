@@ -19,6 +19,27 @@ NEAR_EXCELLENCE_THRESHOLD = 9.0  # Score at which we start counting "polish" att
 MAX_POLISH_ATTEMPTS = 3  # After reaching 9.0, max attempts to reach 9.5 before accepting
 MAX_REVIEW_ROUNDS = 5  # Hard cap before human escalation
 
+VERDICT_TOOL = {
+    "name": "submit_verdict",
+    "description": "Submit your review verdict. You MUST call this tool after completing your review.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "verdict": {
+                "type": "string",
+                "enum": ["APPROVED", "CHANGES_REQUESTED"],
+            },
+            "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "Overall review score out of 10",
+            },
+        },
+        "required": ["verdict", "score"],
+    },
+}
+
 
 def parse_review_verdict(report: str) -> tuple[str, float]:
     """Parse a review report for VERDICT line. Returns (verdict, score)."""

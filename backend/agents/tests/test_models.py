@@ -218,3 +218,29 @@ class TestAgentTaskModel:
         assert s.startswith("[Awaiting Approval]")
         assert "Twitter Bot" in s
         assert "Engage with" in s
+
+
+# ── AgentTask review fields tests ───────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestAgentTaskReviewFields:
+    def test_review_fields_default_empty(self, agent):
+        task = AgentTask.objects.create(
+            agent=agent,
+            exec_summary="Default fields check",
+        )
+        task.refresh_from_db()
+        assert task.review_verdict == ""
+        assert task.review_score is None
+
+    def test_review_fields_persist(self, agent):
+        task = AgentTask.objects.create(
+            agent=agent,
+            exec_summary="Review fields persist check",
+            review_verdict="APPROVED",
+            review_score=9.5,
+        )
+        task.refresh_from_db()
+        assert task.review_verdict == "APPROVED"
+        assert task.review_score == 9.5
