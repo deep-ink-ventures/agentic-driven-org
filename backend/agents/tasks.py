@@ -156,6 +156,29 @@ def execute_agent_task(self, task_id: str):
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
 
         _broadcast_task(task)
+        _fail_dependents(task)
+        _trigger_next_sprint_work(task)
+
+
+def _fail_dependents(failed_task):
+    """When a task fails, cascade failure to any tasks waiting on it."""
+    from agents.models import AgentTask
+
+    dependents = AgentTask.objects.filter(
+        blocked_by=failed_task,
+        status=AgentTask.Status.AWAITING_DEPENDENCIES,
+    ).select_related("agent", "agent__department__project", "blocked_by", "created_by_agent")
+
+    for dep in dependents:
+        summary = (failed_task.exec_summary or "")[:200]
+        dep.status = AgentTask.Status.FAILED
+        dep.error_message = f"Upstream task failed: {summary}"
+        dep.completed_at = timezone.now()
+        dep.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+        _broadcast_task(dep)
+        logger.info("Cascade-failed task %s due to upstream %s", dep.id, failed_task.id)
+        # Recurse to cascade through chains (A→B→C)
+        _fail_dependents(dep)
 
 
 def _unblock_dependents(completed_task):
@@ -212,6 +235,8 @@ def recover_stuck_tasks():
         task.completed_at = now
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
         _broadcast_task(task)
+        _fail_dependents(task)
+        _trigger_next_sprint_work(task)
 
 
 def _trigger_next_sprint_work(completed_task):

@@ -324,6 +324,24 @@ class TestRecoverStuckTasks:
         mock_broadcast.assert_not_called()
 
     @patch("agents.tasks._broadcast_task")
+    def test_recover_stuck_tasks_cascades_failure(self, mock_broadcast):
+        parent = AgentTask.objects.create(
+            agent=self.agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Stuck parent",
+            started_at=timezone.now() - timedelta(hours=2),
+        )
+        child = AgentTask.objects.create(
+            agent=self.agent,
+            status=AgentTask.Status.AWAITING_DEPENDENCIES,
+            blocked_by=parent,
+            exec_summary="Waiting child",
+        )
+        recover_stuck_tasks()
+        child.refresh_from_db()
+        assert child.status == AgentTask.Status.FAILED
+
+    @patch("agents.tasks._broadcast_task")
     def test_handles_processing_with_no_started_at(self, mock_broadcast):
         task = AgentTask.objects.create(
             agent=self.agent,
@@ -334,3 +352,54 @@ class TestRecoverStuckTasks:
         recover_stuck_tasks()
         task.refresh_from_db()
         assert task.status == AgentTask.Status.FAILED
+
+
+# ── _fail_dependents ────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestFailedTaskCascade:
+    def test_failed_task_fails_dependents(self, twitter_agent):
+        parent = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Parent task",
+        )
+        child = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.AWAITING_DEPENDENCIES,
+            blocked_by=parent,
+            exec_summary="Child task",
+        )
+        from agents.tasks import _fail_dependents
+
+        _fail_dependents(parent)
+        child.refresh_from_db()
+        assert child.status == AgentTask.Status.FAILED
+        assert "upstream task failed" in child.error_message.lower()
+
+    def test_failed_task_cascades_chain(self, twitter_agent):
+        a = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.PROCESSING,
+            exec_summary="Task A",
+        )
+        b = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.AWAITING_DEPENDENCIES,
+            blocked_by=a,
+            exec_summary="Task B",
+        )
+        c = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.AWAITING_DEPENDENCIES,
+            blocked_by=b,
+            exec_summary="Task C",
+        )
+        from agents.tasks import _fail_dependents
+
+        _fail_dependents(a)
+        b.refresh_from_db()
+        c.refresh_from_db()
+        assert b.status == AgentTask.Status.FAILED
+        assert c.status == AgentTask.Status.FAILED
