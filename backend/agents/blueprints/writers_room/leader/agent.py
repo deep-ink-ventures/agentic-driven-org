@@ -446,15 +446,6 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             )
             if has_source_material:
                 locale = config.get("locale", "en")
-                internal_state = agent.internal_state or {}
-                stage_status = internal_state.get("stage_status", {})
-                current_info = stage_status.get(stage, {"iterations": 0})
-                current_info["status"] = "writing_in_progress"
-                stage_status[stage] = current_info
-                internal_state["stage_status"] = stage_status
-                agent.internal_state = internal_state
-                agent.save(update_fields=["internal_state"])
-
                 return {
                     "exec_summary": f"Stage '{stage}': voice profiling must run before creative writing begins",
                     "tasks": [
@@ -474,7 +465,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                             "depends_on_previous": False,
                         },
                     ],
-                    "on_completion": {"set_status": "not_started", "stage": stage},
+                    "_on_dispatch": {"set_status": "writing_in_progress", "stage": stage},
                 }
 
         # Filter to only active agents in this department
@@ -907,20 +898,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             if agent_type == "story_researcher":
                 previous_depends = True
 
-        # Update stage status
-        internal_state = agent.internal_state or {}
-        stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(stage, {"iterations": 0})
-        current_info["status"] = "writing_in_progress"
-        stage_status[stage] = current_info
-        internal_state["stage_status"] = stage_status
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-
         return {
             "exec_summary": f"Stage '{stage}': assign creative agents to write",
             "tasks": tasks,
-            "on_completion": {"set_status": "writing_done", "stage": stage},
+            "_on_dispatch": {"set_status": "writing_in_progress", "stage": stage},
         }
 
     # ── Feedback task proposal ──────────────────────────────────────────
@@ -1005,20 +986,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 return self._propose_creative_tasks(agent, next_stg, config)
             return None
 
-        # Update stage status
-        internal_state = agent.internal_state or {}
-        stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(stage, {"iterations": 0})
-        current_info["status"] = "feedback_in_progress"
-        stage_status[stage] = current_info
-        internal_state["stage_status"] = stage_status
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-
         return {
             "exec_summary": f"Stage '{stage}': assign feedback agents to analyze",
             "tasks": tasks,
-            "on_completion": {"set_status": "feedback_done", "stage": stage},
+            "_on_dispatch": {"set_status": "feedback_in_progress", "stage": stage},
         }
 
     # ── Review task proposal (dispatch creative_reviewer) ────────────
@@ -1045,16 +1016,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             if report:
                 feedback_text += f"\n\n## {agent_type}\n{report}"
 
-        internal_state = agent.internal_state or {}
-        stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(stage, {"iterations": 0})
-        current_info["status"] = "review_in_progress"
-        stage_status[stage] = current_info
-        internal_state["stage_status"] = stage_status
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-
         return {
+            "_on_dispatch": {"set_status": "review_in_progress", "stage": stage},
             "exec_summary": f"Stage '{stage}': consolidate analyst feedback and score",
             "tasks": [
                 {
@@ -1086,14 +1049,6 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         internal_state = agent.internal_state or {}
         current_stage = internal_state.get("current_stage", STAGES[0])
 
-        stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(current_stage, {"iterations": 0})
-        current_info["status"] = "fix_in_progress"
-        stage_status[current_stage] = current_info
-        internal_state["stage_status"] = stage_status
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-
         review_snippet = review_task.report or ""
         polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
 
@@ -1120,6 +1075,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         return {
             "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}",
             "tasks": tasks,
+            "_on_dispatch": {"set_status": "fix_in_progress", "stage": current_stage},
         }
 
 

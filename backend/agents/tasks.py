@@ -204,6 +204,29 @@ def _unblock_dependents(completed_task):
             logger.info("Unblocked task %s → awaiting approval", dep.id)
 
 
+def _apply_on_dispatch(agent, on_dispatch):
+    """Apply state transition after tasks are successfully created.
+
+    Prevents state desync: if task creation fails (celery down, old worker, etc.),
+    the leader state remains unchanged and can be retried cleanly.
+    """
+    set_status = on_dispatch.get("set_status")
+    stage = on_dispatch.get("stage")
+    if not set_status or not stage:
+        return
+
+    agent.refresh_from_db()
+    internal_state = agent.internal_state or {}
+    stage_status = internal_state.get("stage_status", {})
+    current_info = stage_status.get(stage, {"iterations": 0})
+    current_info["status"] = set_status
+    stage_status[stage] = current_info
+    internal_state["stage_status"] = stage_status
+    agent.internal_state = internal_state
+    agent.save(update_fields=["internal_state"])
+    logger.info("Leader %s: stage '%s' → %s (on_dispatch)", agent.name, stage, set_status)
+
+
 @shared_task
 def recover_stuck_tasks():
     """
@@ -286,8 +309,9 @@ def create_next_leader_task(leader_agent_id: str):
     try:
         proposal = blueprint.generate_task_proposal(agent)
 
-        # Extract sprint ID from proposal (set by generate_task_proposal)
+        # Extract metadata from proposal (set by generate_task_proposal)
         sprint_id = proposal.pop("_sprint_id", None) if proposal else None
+        on_dispatch = proposal.pop("_on_dispatch", None) if proposal else None
 
         if proposal is None:
             logger.info("Leader %s has nothing to propose (no active workforce)", agent.name)
@@ -350,6 +374,10 @@ def create_next_leader_task(leader_agent_id: str):
 
                 previous_task = new_task
                 created += 1
+            # Apply state transition AFTER tasks are created (prevents desync if task creation fails)
+            if created > 0 and on_dispatch:
+                _apply_on_dispatch(agent, on_dispatch)
+
             logger.info("Leader %s proposed %d task(s): %s", agent.name, created, proposal.get("exec_summary", "")[:80])
             return
 
