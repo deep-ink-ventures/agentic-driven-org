@@ -511,3 +511,44 @@ class TestReviewDimensions:
         # Dimensions from ContentReviewerBlueprint.review_dimensions
         assert "brand_alignment" in step_plan
         assert "cta_effectiveness" in step_plan
+
+
+# ── Quality gate helper ────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestApplyQualityGate:
+    def test_accepts_excellent_score(self, leader_agent):
+        bp = get_blueprint("leader", "marketing")
+        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, 9.5, "test_key")
+        assert accepted is True
+
+    def test_rejects_low_score(self, leader_agent):
+        bp = get_blueprint("leader", "marketing")
+        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, 7.0, "test_key")
+        assert accepted is False
+
+    def test_accepts_near_excellence_after_max_polish(self, leader_agent):
+        """After MAX_POLISH_ATTEMPTS at >= 9.0, accepts even without reaching 9.5."""
+        bp = get_blueprint("leader", "marketing")
+        # Seed state with existing polish attempts
+        leader_agent.internal_state = {
+            "review_rounds": {"test_key": 3},
+            "polish_attempts": {"test_key": 2},  # Will be incremented to 3 = MAX
+        }
+        leader_agent.save(update_fields=["internal_state"])
+        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, 9.2, "test_key")
+        assert accepted is True
+        assert polish_count == 3
+
+    def test_clears_tracking_on_acceptance(self, leader_agent):
+        bp = get_blueprint("leader", "marketing")
+        leader_agent.internal_state = {
+            "review_rounds": {"test_key": 1},
+            "polish_attempts": {"test_key": 0},
+        }
+        leader_agent.save(update_fields=["internal_state"])
+        bp._apply_quality_gate(leader_agent, 9.5, "test_key")
+        leader_agent.refresh_from_db()
+        assert "test_key" not in leader_agent.internal_state.get("review_rounds", {})
+        assert "test_key" not in leader_agent.internal_state.get("polish_attempts", {})

@@ -14,7 +14,6 @@ from agents.blueprints.base import (
     MAX_REVIEW_ROUNDS,
     NEAR_EXCELLENCE_THRESHOLD,
     LeaderBlueprint,
-    should_accept_review,
 )
 from agents.blueprints.writers_room.leader.commands import check_progress, plan_room
 from agents.blueprints.writers_room.leader.skills import format_skills
@@ -721,28 +720,23 @@ VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
 
         score = float(data.get("overall_score", 0.0))
 
-        # Update polish attempts (count attempts after reaching 9.0)
-        if score >= NEAR_EXCELLENCE_THRESHOLD:
-            polish_attempts += 1
+        # Use shared quality gate (tracks polish, evaluates acceptance)
+        # We use a stage-scoped key so each stage has independent tracking
+        stage_key = f"wr_{stage}"
+        # Seed review_rounds so _apply_quality_gate sees the iteration count
+        internal_state.setdefault("review_rounds", {})[stage_key] = iteration
+        internal_state.setdefault("polish_attempts", {})[stage_key] = polish_attempts
+        agent.internal_state = internal_state
+        agent.save(update_fields=["internal_state"])
 
-        logger.info(
-            "Writers Room stage '%s': score %.1f/10, iteration %d, polish %d/%d",
-            stage,
-            score,
-            iteration,
-            polish_attempts,
-            MAX_POLISH_ATTEMPTS,
-        )
+        accepted, polish_count, _round_num = self._apply_quality_gate(agent, score, stage_key)
 
-        # Use universal acceptance logic
-        if should_accept_review(score, iteration, polish_attempts):
-            if score < EXCELLENCE_THRESHOLD:
-                logger.info(
-                    "Writers Room: accepting score %.1f/10 after %d polish attempts (diminishing returns)",
-                    score,
-                    polish_attempts,
-                )
+        # Re-read internal_state since _apply_quality_gate saved it
+        internal_state = agent.internal_state or {}
+        stage_status = internal_state.get("stage_status", {})
+        current_info = stage_status.get(stage, {"iterations": iteration})
 
+        if accepted:
             # Stage passed — mark and advance
             current_info["status"] = "passed"
             current_info["polish_attempts"] = 0  # reset for next stage
@@ -774,7 +768,7 @@ VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
 
         current_info["status"] = "fix_in_progress"
         current_info["iterations"] = iteration + 1
-        current_info["polish_attempts"] = polish_attempts
+        current_info["polish_attempts"] = polish_count
         current_info["last_score"] = score
         stage_status[stage] = current_info
         internal_state["stage_status"] = stage_status

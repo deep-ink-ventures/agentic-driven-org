@@ -537,6 +537,61 @@ class LeaderBlueprint(BaseBlueprint):
             ],
         }
 
+    def _apply_quality_gate(self, agent: Agent, score: float, stage_key: str) -> tuple[bool, int, int]:
+        """Apply universal quality scoring logic.
+
+        Tracks polish attempts and evaluates acceptance.
+        Returns (accepted, polish_count, round_num).
+
+        Args:
+            agent: The leader agent (state is stored on it).
+            score: The review score (0.0-10.0).
+            stage_key: Key to track this review chain in internal_state.
+        """
+        internal_state = agent.internal_state or {}
+        review_rounds = internal_state.get("review_rounds", {})
+        polish_attempts_map = internal_state.get("polish_attempts", {})
+
+        round_num = review_rounds.get(stage_key, 1)
+
+        # Update polish attempts counter (count attempts after reaching 9.0)
+        polish_count = polish_attempts_map.get(stage_key, 0)
+        if score >= NEAR_EXCELLENCE_THRESHOLD:
+            polish_count += 1
+            polish_attempts_map[stage_key] = polish_count
+
+        logger.info(
+            "Quality gate: score %.1f/10, round %d, polish %d/%d (key=%s)",
+            score,
+            round_num,
+            polish_count,
+            MAX_POLISH_ATTEMPTS,
+            stage_key,
+        )
+
+        accepted = should_accept_review(score, round_num, polish_count)
+
+        if accepted:
+            # Clear tracking for this key
+            review_rounds.pop(stage_key, None)
+            polish_attempts_map.pop(stage_key, None)
+            internal_state["review_rounds"] = review_rounds
+            internal_state["polish_attempts"] = polish_attempts_map
+            internal_state.pop("active_review_key", None)
+            if score < EXCELLENCE_THRESHOLD:
+                logger.info(
+                    "Accepting score %.1f/10 after %d polish attempts (diminishing returns)",
+                    score,
+                    polish_count,
+                )
+        else:
+            # Persist polish tracking
+            internal_state["polish_attempts"] = polish_attempts_map
+
+        agent.internal_state = internal_state
+        agent.save(update_fields=["internal_state"])
+        return accepted, polish_count, round_num
+
     def _evaluate_review_and_loop(self, agent: Agent, review_task: AgentTask, workforce_types: set) -> dict | None:
         """After a reviewer completes, evaluate score and loop back if needed.
 
@@ -548,60 +603,21 @@ class LeaderBlueprint(BaseBlueprint):
         report = review_task.report or ""
         verdict, score = parse_review_verdict(report)
 
-        # Track review rounds and polish attempts in internal_state
-        internal_state = agent.internal_state or {}
-        review_rounds = internal_state.get("review_rounds", {})
-        polish_attempts_map = internal_state.get("polish_attempts", {})
-
         # Find the task key: use stored active_review_key (set when review chain starts)
+        internal_state = agent.internal_state or {}
         task_key = internal_state.get("active_review_key")
         if not task_key:
-            # Fallback: find any tracked review round (backwards compat)
+            review_rounds = internal_state.get("review_rounds", {})
             for key in review_rounds:
                 task_key = key
                 break
         if not task_key:
             task_key = str(review_task.id)
 
-        round_num = review_rounds.get(task_key, 1)
+        accepted, polish_count, round_num = self._apply_quality_gate(agent, score, task_key)
 
-        # Update polish attempts counter (count attempts after reaching 9.0)
-        polish_count = polish_attempts_map.get(task_key, 0)
-        if score >= NEAR_EXCELLENCE_THRESHOLD:
-            polish_count += 1
-            polish_attempts_map[task_key] = polish_count
-
-        logger.info(
-            "Review verdict: %s (score: %.1f/10, round: %d, polish: %d/%d)",
-            verdict,
-            score,
-            round_num,
-            polish_count,
-            MAX_POLISH_ATTEMPTS,
-        )
-
-        # Use universal acceptance logic
-        if should_accept_review(score, round_num, polish_count):
-            # Clear review tracking
-            review_rounds.pop(task_key, None)
-            polish_attempts_map.pop(task_key, None)
-            internal_state["review_rounds"] = review_rounds
-            internal_state["polish_attempts"] = polish_attempts_map
-            internal_state.pop("active_review_key", None)
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
-            if score < EXCELLENCE_THRESHOLD:
-                logger.info(
-                    "Accepting score %.1f/10 after %d polish attempts (diminishing returns)",
-                    score,
-                    polish_count,
-                )
+        if accepted:
             return None  # Approved — fall through to standard proposal
-
-        # Persist polish tracking
-        internal_state["polish_attempts"] = polish_attempts_map
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
 
         # Find the original creator and route fix back
         return self._propose_fix_task(agent, review_task, score, round_num, polish_count)
