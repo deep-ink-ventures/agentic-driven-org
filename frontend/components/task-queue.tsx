@@ -512,8 +512,8 @@ export function TaskQueue({
       <h2 className="text-2xl font-semibold mb-1">Task Queue</h2>
       <p className="text-sm text-text-secondary mb-6">Monitor and manage your agents&apos; work</p>
 
-      {/* In Progress at the top */}
-      <div className="mb-8">
+      {/* Two lanes side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <TaskLane
           config={{ title: "In Progress", statuses: "queued,processing,awaiting_dependencies,planned", pulse: true }}
           projectId={projectId}
@@ -521,10 +521,6 @@ export function TaskQueue({
           agent={agent}
           wsEvent={wsEvent}
         />
-      </div>
-
-      {/* Two lanes side by side below */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <TaskLane
           config={{ title: "Needs Attention", statuses: "awaiting_approval,failed" }}
           projectId={projectId}
@@ -532,14 +528,16 @@ export function TaskQueue({
           agent={agent}
           wsEvent={wsEvent}
         />
-        <TaskLane
-          config={{ title: "Completed", statuses: "done", collapsible: true }}
-          projectId={projectId}
-          department={department}
-          agent={agent}
-          wsEvent={wsEvent}
-        />
       </div>
+
+      {/* Collapsed completed stack */}
+      <TaskLane
+        config={{ title: "Completed", statuses: "done", collapsible: true }}
+        projectId={projectId}
+        department={department}
+        agent={agent}
+        wsEvent={wsEvent}
+      />
     </div>
   );
 }
