@@ -16,49 +16,6 @@ function getCsrfToken(): string | null {
   return match ? match[1] : null;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_URL}${path}`;
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (!(options.body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  const method = (options.method || "GET").toUpperCase();
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    const csrfToken = getCsrfToken();
-    if (csrfToken) {
-      headers["X-CSRFToken"] = csrfToken;
-    }
-  }
-
-  const doFetch = () =>
-    fetch(url, { ...options, credentials: "include", headers });
-
-  let res: Response;
-  try {
-    res = await doFetch();
-  } catch {
-    await new Promise((r) => setTimeout(r, 2000));
-    res = await doFetch();
-  }
-
-  if (res.status === 503) {
-    await new Promise((r) => setTimeout(r, 2000));
-    res = await doFetch();
-  }
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new ApiError(res.status, body);
-  }
-
-  if (res.status === 204) return undefined as T;
-  return res.json();
-}
-
 async function requestWithHeaders<T>(path: string, options: RequestInit = {}): Promise<{ data: T; headers: Headers }> {
   const url = `${API_URL}${path}`;
   const headers: Record<string, string> = {
@@ -100,6 +57,11 @@ async function requestWithHeaders<T>(path: string, options: RequestInit = {}): P
 
   if (res.status === 204) return { data: undefined as T, headers: res.headers };
   return { data: await res.json(), headers: res.headers };
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const { data } = await requestWithHeaders<T>(path, options);
+  return data;
 }
 
 export const api = {
