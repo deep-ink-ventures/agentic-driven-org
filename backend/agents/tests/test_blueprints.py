@@ -184,8 +184,8 @@ class TestBlueprintRegistry:
 class TestBlueprintAbstracts:
     def test_workforce_has_execute_task(self):
         assert hasattr(WorkforceBlueprint, "execute_task")
-        # It is abstract
-        assert getattr(WorkforceBlueprint.execute_task, "__isabstractmethod__", False)
+        # It is concrete (default implementation calls Claude)
+        assert not getattr(WorkforceBlueprint.execute_task, "__isabstractmethod__", False)
 
     def test_leader_has_execute_task(self):
         assert hasattr(LeaderBlueprint, "execute_task")
@@ -328,3 +328,127 @@ class TestGetWorkforceMetadata:
 
         metadata = get_workforce_metadata("nonexistent")
         assert metadata == []
+
+
+# ── WorkforceBlueprint default execute_task ────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestWorkforceDefaultExecuteTask:
+    """Test that WorkforceBlueprint.execute_task provides a working default."""
+
+    def test_default_execute_task_calls_claude(self, twitter_agent):
+        """Default execute_task calls call_claude and returns response."""
+        from unittest.mock import patch
+
+        with patch(
+            "agents.ai.claude_client.call_claude",
+            return_value=("Test response from Claude", {"input_tokens": 10, "output_tokens": 20}),
+        ) as mock_call:
+            bp = get_blueprint("prospector", "sales")
+            task = AgentTask.objects.create(
+                agent=twitter_agent,
+                status=AgentTask.Status.PROCESSING,
+                exec_summary="Test task",
+                step_plan="Do something",
+            )
+
+            result = bp.execute_task(twitter_agent, task)
+
+            assert result == "Test response from Claude"
+            assert mock_call.called
+            task.refresh_from_db()
+            assert task.token_usage == {"input_tokens": 10, "output_tokens": 20}
+
+    def test_get_task_suffix_injected_into_message(self, twitter_agent):
+        """Agents with get_task_suffix have their suffix included in the task message."""
+        from unittest.mock import patch
+
+        with patch(
+            "agents.ai.claude_client.call_claude",
+            return_value=("OK", {}),
+        ) as mock_call:
+            bp = get_blueprint("outreach_writer", "sales")
+            task = AgentTask.objects.create(
+                agent=twitter_agent,
+                status=AgentTask.Status.PROCESSING,
+                exec_summary="Draft outreach",
+            )
+
+            bp.execute_task(twitter_agent, task)
+
+            user_message = mock_call.call_args.kwargs.get("user_message", "")
+            assert "OUTREACH METHODOLOGY" in user_message
+
+    def test_get_max_tokens_passed_to_claude(self, twitter_agent):
+        """Agents with get_max_tokens have it passed to call_claude."""
+        from unittest.mock import patch
+
+        with patch(
+            "agents.ai.claude_client.call_claude",
+            return_value=("OK", {}),
+        ) as mock_call:
+            bp = get_blueprint("market_analyst", "writers_room")
+            task = AgentTask.objects.create(
+                agent=twitter_agent,
+                status=AgentTask.Status.PROCESSING,
+                exec_summary="Analyze market",
+            )
+
+            bp.execute_task(twitter_agent, task)
+
+            assert mock_call.call_args.kwargs.get("max_tokens") == 12000
+
+    def test_default_max_tokens_not_passed(self, twitter_agent):
+        """Agents without get_max_tokens override don't pass max_tokens."""
+        from unittest.mock import patch
+
+        with patch(
+            "agents.ai.claude_client.call_claude",
+            return_value=("OK", {}),
+        ) as mock_call:
+            bp = get_blueprint("prospector", "sales")
+            task = AgentTask.objects.create(
+                agent=twitter_agent,
+                status=AgentTask.Status.PROCESSING,
+                exec_summary="Research",
+            )
+
+            bp.execute_task(twitter_agent, task)
+
+            assert "max_tokens" not in mock_call.call_args.kwargs
+
+    def test_default_suffix_is_empty(self):
+        """Base WorkforceBlueprint.get_task_suffix returns empty string."""
+        from agents.blueprints.marketing.workforce.web_researcher.agent import WebResearcherBlueprint
+
+        bp = WebResearcherBlueprint()
+        assert bp.get_task_suffix(None, None) == ""
+
+    def test_agents_without_override_use_default(self):
+        """Agents that removed execute_task should NOT have it on their class."""
+        from agents.blueprints.sales.workforce.outreach_writer.agent import OutreachWriterBlueprint
+        from agents.blueprints.sales.workforce.prospector.agent import ProspectorBlueprint
+
+        # These classes should NOT define execute_task — they inherit from WorkforceBlueprint
+        assert "execute_task" not in OutreachWriterBlueprint.__dict__
+        assert "execute_task" not in ProspectorBlueprint.__dict__
+        # But they should define get_task_suffix
+        assert "get_task_suffix" in OutreachWriterBlueprint.__dict__
+        assert "get_task_suffix" in ProspectorBlueprint.__dict__
+
+    def test_agents_with_integrations_still_override(self):
+        """Agents with external integrations keep their custom execute_task."""
+        from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint
+
+        # Twitter has Playwright integration — it must override execute_task
+        assert "execute_task" in TwitterBlueprint.__dict__
+
+    def test_all_workforce_agents_have_execute_task(self):
+        """Every workforce blueprint must have an execute_task (inherited or overridden)."""
+        from agents.blueprints import DEPARTMENTS
+
+        for dept_slug, dept in DEPARTMENTS.items():
+            for agent_slug, bp in dept["workforce"].items():
+                assert hasattr(bp, "execute_task"), f"{dept_slug}/{agent_slug} missing execute_task"
+                assert callable(bp.execute_task), f"{dept_slug}/{agent_slug}.execute_task not callable"

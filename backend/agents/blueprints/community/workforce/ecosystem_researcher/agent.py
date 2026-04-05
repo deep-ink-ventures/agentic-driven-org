@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.community.workforce.ecosystem_researcher.commands import map_ecosystem, revise_research
@@ -50,10 +50,8 @@ When researching, respond with JSON:
     map_ecosystem = map_ecosystem
     revise_research = revise_research
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = """# ECOSYSTEM RESEARCH METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return """# ECOSYSTEM RESEARCH METHODOLOGY
 
 ## Breadth First
 - Cast a wide net within the assigned category
@@ -69,15 +67,3 @@ When researching, respond with JSON:
 - Note which entities are connected to each other
 - Shared audiences, co-hosted events, mutual partnerships
 - This reveals ecosystem clusters and entry points"""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response

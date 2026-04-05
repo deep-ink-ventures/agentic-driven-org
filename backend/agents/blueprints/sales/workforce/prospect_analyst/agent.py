@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.workforce.prospect_analyst.commands import review_prospects
@@ -50,10 +50,8 @@ Approve threshold: overall score >= 7 and no prospect has critical gaps."""
 
     review_prospects = review_prospects
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = """# REVIEW METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return """# REVIEW METHODOLOGY
 
 ## Completeness Check
 - Every prospect must have: name, type, profile, at least one key contact, qualification score with reasoning
@@ -69,15 +67,3 @@ Approve threshold: overall score >= 7 and no prospect has critical gaps."""
 - Score >= 7 with no critical gaps: APPROVED
 - Score < 7 OR any critical gaps: REVISION_NEEDED with specific feedback
 - Be specific in feedback — "improve qualification" is useless, "Company X missing budget signals — check their recent funding rounds" is actionable"""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response

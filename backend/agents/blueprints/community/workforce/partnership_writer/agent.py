@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.community.workforce.partnership_writer.commands import draft_proposal, revise_proposal
@@ -49,10 +49,8 @@ When executing tasks, respond with JSON:
     draft_proposal = draft_proposal
     revise_proposal = revise_proposal
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = """# PROPOSAL METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return """# PROPOSAL METHODOLOGY
 
 ## Win-Win Framing
 - Open with something relevant to THEIR mission or audience
@@ -68,15 +66,3 @@ When executing tasks, respond with JSON:
 - Collaborative, not transactional
 - Confident but respectful of their time
 - Brief — proposals should be scannable"""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response

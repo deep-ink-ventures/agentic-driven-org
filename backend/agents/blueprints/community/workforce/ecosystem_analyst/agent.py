@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.community.workforce.ecosystem_analyst.commands import review_ecosystem
@@ -49,10 +49,8 @@ Approve threshold: overall score >= 7 and no critical gaps in coverage."""
 
     review_ecosystem = review_ecosystem
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = """# REVIEW METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return """# REVIEW METHODOLOGY
 
 ## Coverage Check
 - Are the obvious entities in this category represented?
@@ -67,15 +65,3 @@ Approve threshold: overall score >= 7 and no critical gaps in coverage."""
 ## Verdict Rules
 - Score >= 7 with no major coverage gaps: APPROVED
 - Otherwise: REVISION_NEEDED with specific feedback on what to add or fix"""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response

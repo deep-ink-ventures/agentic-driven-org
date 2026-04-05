@@ -367,11 +367,52 @@ Execute this task now.{extra}"""
 
 
 class WorkforceBlueprint(BaseBlueprint):
-    """Base for workforce agents (twitter, reddit, etc.). Execute tasks only."""
+    """Base for workforce agents (twitter, reddit, etc.). Execute tasks only.
 
-    @abstractmethod
+    Default execute_task: build task message → call Claude → return response.
+    Override get_task_suffix() for per-agent methodology instructions.
+    Override get_max_tokens() for per-agent token limits.
+    Override execute_task() only for agents with integrations or special dispatch.
+    """
+
+    def get_task_suffix(self, agent: Agent, task: AgentTask) -> str:
+        """Return extra instructions appended to the task message.
+
+        Override for methodology-specific instructions (e.g. review criteria,
+        research methodology). Default: empty string.
+        """
+        return ""
+
+    def get_max_tokens(self, agent: Agent, task: AgentTask) -> int | None:
+        """Return max output tokens for this task, or None for default."""
+        return None
+
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        """Execute a task. Returns the report text."""
+        """Execute a task by calling Claude and returning the response.
+
+        This default handles the common pattern used by ~20 agents.
+        Override only for agents with external integrations (Playwright,
+        GitHub, SendGrid) or command-dispatch logic.
+        """
+        from agents.ai.claude_client import call_claude
+
+        suffix = self.get_task_suffix(agent, task)
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+
+        kwargs = {
+            "system_prompt": self.build_system_prompt(agent),
+            "user_message": task_msg,
+            "model": self.get_model(agent, task.command_name),
+        }
+        max_tokens = self.get_max_tokens(agent, task)
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+
+        response, usage = call_claude(**kwargs)
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response
 
 
 # ── Leader Blueprint ─────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.community.workforce.partnership_reviewer.commands import review_proposal
@@ -41,10 +41,8 @@ For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific 
 
     review_proposal = review_proposal
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = f"""# REVIEW METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return f"""# REVIEW METHODOLOGY
 
 ## Value Balance
 - Is the partner's benefit clearly articulated?
@@ -67,15 +65,3 @@ The overall score is the MINIMUM of all dimension scores.
 - Score < {EXCELLENCE_THRESHOLD}: VERDICT: CHANGES_REQUESTED (score: N.N/10) with actionable feedback
 
 End your report with exactly one VERDICT line."""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response

@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.workforce.prospector.commands import research_targets, revise_prospects
@@ -54,10 +54,8 @@ When executing tasks, respond with JSON:
     research_targets = research_targets
     revise_prospects = revise_prospects
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = """# RESEARCH METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return """# RESEARCH METHODOLOGY
 
 ## Source Diversity
 - Search company websites, LinkedIn, press releases, news articles, job postings
@@ -73,15 +71,3 @@ When executing tasks, respond with JSON:
 - Every prospect must have at least one key contact identified
 - Every qualification note must cite a specific source or signal
 - Recommended approach must be specific, not generic"""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response

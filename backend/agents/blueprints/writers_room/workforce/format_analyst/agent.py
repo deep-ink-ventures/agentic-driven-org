@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.format_analyst.commands import analyze
@@ -104,12 +104,9 @@ class FormatAnalystBlueprint(WorkforceBlueprint):
 
     cmd_analyze = analyze
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
+    def get_task_suffix(self, agent, task):
         locale = agent.get_config_value("locale") or "en"
-
-        suffix = (
+        return (
             f"Output language: {locale}\n\n"
             "Analyze this material using the full format and craft methodology:\n"
             "1. Industry format compliance — check page count/word count against genre norms, margins, slug lines, "
@@ -120,14 +117,5 @@ class FormatAnalystBlueprint(WorkforceBlueprint):
             "Flag every deviation that a professional reader, script reader, or acquisitions editor would flag."
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, "analyze"),
-            max_tokens=8000,
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response
+    def get_max_tokens(self, agent, task):
+        return 8000

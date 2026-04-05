@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    pass
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.workforce.outreach_writer.commands import draft_outreach, revise_outreach
@@ -48,10 +48,8 @@ When executing tasks, respond with JSON:
     draft_outreach = draft_outreach
     revise_outreach = revise_outreach
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-
-        suffix = """# OUTREACH METHODOLOGY
+    def get_task_suffix(self, agent, task):
+        return """# OUTREACH METHODOLOGY
 
 ## Personalization Depth
 - Reference at least 2 specific details about the prospect (recent news, company focus, role)
@@ -67,15 +65,3 @@ When executing tasks, respond with JSON:
 - Professional but human — no corporate speak
 - Confident but not pushy — we're offering value, not begging
 - Brief — 3-5 short paragraphs maximum"""
-
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent, task.command_name),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        return response
