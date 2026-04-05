@@ -26,7 +26,7 @@ def execute_task(self, agent, task):
 
 ---
 
-## 2. Leader delegation helper on LeaderBlueprint [TODO]
+## 2. Leader delegation helper on LeaderBlueprint [DONE]
 
 **Problem:** Marketing, Sales, Community leaders have 95% identical `execute_task` methods (build workforce desc → call Claude → parse delegated_tasks → create subtasks → schedule follow-ups). Engineering's is similar but adds file locking. ~60 lines copy-pasted 4 times.
 

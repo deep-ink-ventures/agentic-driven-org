@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from django.utils import timezone
+
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
@@ -421,10 +423,6 @@ class WorkforceBlueprint(BaseBlueprint):
 class LeaderBlueprint(BaseBlueprint):
     """Base for department leader agents. Proposes and delegates tasks."""
 
-    @abstractmethod
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        """Execute a task. Returns the report text."""
-
     # ── Declarative review ping-pong ────────────────────────────────────
     #
     # Subclasses define get_review_pairs() to declare creator→reviewer flows.
@@ -699,6 +697,149 @@ class LeaderBlueprint(BaseBlueprint):
                 return loop_proposal
 
         return None
+
+    # ── Leader delegation (shared execute_task) ───────────────────────
+
+    def _get_delegation_context(self, agent: Agent) -> str:
+        """Return extra context text for the delegation prompt.
+
+        Override to add department-specific context (e.g., file locks, stage info).
+        Inserted between the workforce list and the JSON schema.
+        """
+        return ""
+
+    def _get_delegation_schema_extras(self) -> str:
+        """Return extra fields for the delegation JSON schema.
+
+        Override to add department-specific fields (e.g., file_paths, follow_up).
+        """
+        return ""
+
+    def _on_subtask_created(self, agent: Agent, sub_task: AgentTask, delegation_data: dict) -> None:
+        """Hook called after each delegated subtask is created.
+
+        Override for post-creation logic (e.g., file lock claiming).
+        """
+
+    def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        """Execute a leader task by calling Claude and processing delegated subtasks.
+
+        This default handles the common delegation pattern used by all leaders.
+        Customize via hooks: _get_delegation_context, _get_delegation_schema_extras,
+        _on_subtask_created.
+        """
+        import json
+
+        from agents.ai.claude_client import call_claude, parse_json_response
+        from agents.models import Agent as AgentModel
+        from agents.models import AgentTask as TaskModel
+
+        workforce = list(
+            agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type")
+        )
+        workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
+
+        extra_context = self._get_delegation_context(agent)
+        if extra_context:
+            extra_context = f"\n{extra_context}\n"
+
+        extra_schema = self._get_delegation_schema_extras()
+
+        delegation_suffix = f"""# Workforce Agents
+{workforce_desc}
+{extra_context}
+If this task involves delegating work to workforce agents, include delegated_tasks in your response.
+
+Respond with JSON:
+{{
+    "delegated_tasks": [
+        {{
+            "target_agent_type": "agent type",
+            "exec_summary": "What the agent should do",
+            "step_plan": "Detailed steps",
+            "auto_execute": false{extra_schema}
+        }}
+    ],
+    "follow_up": {{
+        "exec_summary": "What to revisit",
+        "days_from_now": 7
+    }},
+    "report": "Summary of what was decided and why"
+}}"""
+
+        task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
+
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent),
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        try:
+            data = json.loads(response) if response.strip().startswith("{") else None
+            if not data:
+                data = parse_json_response(response)
+            if not data:
+                return response
+
+            delegated = data.get("delegated_tasks", [])
+            report = data.get("report", response)
+
+            if delegated:
+                workforce_agents = AgentModel.objects.filter(
+                    department=agent.department,
+                    status="active",
+                    is_leader=False,
+                )
+                agents_by_type = {a.agent_type: a for a in workforce_agents}
+
+                for dt in delegated:
+                    target_type = dt.get("target_agent_type")
+                    target_agent = agents_by_type.get(target_type)
+                    if not target_agent:
+                        logger.warning("No active workforce agent of type %s", target_type)
+                        continue
+
+                    sub_task = TaskModel.objects.create(
+                        agent=target_agent,
+                        created_by_agent=agent,
+                        status=TaskModel.Status.QUEUED
+                        if dt.get("auto_execute")
+                        else TaskModel.Status.AWAITING_APPROVAL,
+                        auto_execute=bool(dt.get("auto_execute")),
+                        exec_summary=dt.get("exec_summary", "Delegated task"),
+                        step_plan=dt.get("step_plan", ""),
+                    )
+
+                    self._on_subtask_created(agent, sub_task, dt)
+
+                    if dt.get("auto_execute"):
+                        from agents.tasks import execute_agent_task
+
+                        execute_agent_task.delay(str(sub_task.id))
+
+                    logger.info("Leader delegated task %s to %s", sub_task.id, target_agent.name)
+
+            # Schedule follow-up if requested
+            follow_up = data.get("follow_up")
+            if follow_up and follow_up.get("days_from_now"):
+                from datetime import timedelta
+
+                days = follow_up["days_from_now"]
+                TaskModel.objects.create(
+                    agent=agent,
+                    status=TaskModel.Status.AWAITING_APPROVAL,
+                    exec_summary=follow_up.get("exec_summary", f"Follow-up in {days} days"),
+                    step_plan=f"Review and assess. Original task: {task.exec_summary[:200]}",
+                    proposed_exec_at=timezone.now() + timedelta(days=days),
+                )
+                logger.info("Leader scheduled follow-up in %d days", days)
+
+            return report
+        except (json.JSONDecodeError, KeyError):
+            return response
 
     def generate_task_proposal(self, agent: Agent) -> dict | None:
         """

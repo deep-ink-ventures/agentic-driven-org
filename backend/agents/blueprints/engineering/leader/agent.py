@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    from agents.models import Agent
 
 from django.utils import timezone
 
@@ -140,20 +139,9 @@ Each task you create should include:
 
     # ── Task execution ───────────────────────────────────────────────────
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude
-        from agents.models import Agent as AgentModel
-        from agents.models import AgentTask as TaskModel
-
-        workforce = list(
-            agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type")
-        )
-        workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
-
-        # Include file lock state
+    def _get_delegation_context(self, agent):
         internal_state = agent.internal_state or {}
         files_claimed = internal_state.get("files_claimed", {})
-        locks_text = ""
         if files_claimed:
             locks_text = "\n".join(
                 f"- {fp}: locked by {info.get('agent')} (task {info.get('task_id', '?')[:8]})"
@@ -161,97 +149,25 @@ Each task you create should include:
             )
         else:
             locks_text = "No files currently locked."
+        return f"# Current File Locks\n{locks_text}"
 
-        delegation_suffix = f"""# Workforce Agents
-{workforce_desc}
+    def _get_delegation_schema_extras(self):
+        return ',\n            "file_paths": ["paths/this/task/touches"]'
 
-# Current File Locks
-{locks_text}
+    def _on_subtask_created(self, agent, sub_task, dt):
+        file_paths = dt.get("file_paths", [])
+        if not file_paths:
+            return
+        conflict = self._check_file_lock_conflicts(agent, file_paths)
+        if conflict:
+            # Downgrade to awaiting approval if file conflict
+            from agents.models import AgentTask as TaskModel
 
-If this task involves delegating work to workforce agents, include delegated_tasks in your response.
-For each delegated task, include file_paths so file locks can be managed.
-
-Respond with JSON:
-{{
-    "delegated_tasks": [
-        {{
-            "target_agent_type": "agent type",
-            "exec_summary": "What the agent should do",
-            "step_plan": "Detailed steps with acceptance criteria",
-            "file_paths": ["paths/this/task/touches"],
-            "auto_execute": false
-        }}
-    ],
-    "report": "Summary of what was decided and why"
-}}"""
-
-        task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent),
-        )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        try:
-            data = json.loads(response) if response.strip().startswith("{") else None
-            if not data:
-                from agents.ai.claude_client import parse_json_response
-
-                data = parse_json_response(response)
-
-            if not data:
-                return response
-
-            delegated = data.get("delegated_tasks", [])
-            report = data.get("report", response)
-
-            if delegated:
-                workforce_agents = AgentModel.objects.filter(
-                    department=agent.department,
-                    status="active",
-                    is_leader=False,
-                )
-                agents_by_type = {a.agent_type: a for a in workforce_agents}
-
-                for dt in delegated:
-                    target_type = dt.get("target_agent_type")
-                    target_agent = agents_by_type.get(target_type)
-                    if not target_agent:
-                        logger.warning("No active workforce agent of type %s", target_type)
-                        continue
-
-                    # Check file locks
-                    file_paths = dt.get("file_paths", [])
-                    conflict = self._check_file_lock_conflicts(agent, file_paths)
-
-                    sub_task = TaskModel.objects.create(
-                        agent=target_agent,
-                        created_by_agent=agent,
-                        status=TaskModel.Status.QUEUED
-                        if dt.get("auto_execute") and not conflict
-                        else TaskModel.Status.AWAITING_APPROVAL,
-                        auto_execute=bool(dt.get("auto_execute")) and not conflict,
-                        exec_summary=dt.get("exec_summary", "Delegated task"),
-                        step_plan=dt.get("step_plan", ""),
-                    )
-
-                    # Claim files
-                    if file_paths and not conflict:
-                        self._manage_file_locks(agent, file_paths, str(sub_task.id), target_type, action="claim")
-
-                    if dt.get("auto_execute") and not conflict:
-                        from agents.tasks import execute_agent_task
-
-                        execute_agent_task.delay(str(sub_task.id))
-
-                    logger.info("Leader delegated task %s to %s", sub_task.id, target_agent.name)
-
-            return report
-        except (json.JSONDecodeError, KeyError):
-            return response
+            sub_task.status = TaskModel.Status.AWAITING_APPROVAL
+            sub_task.auto_execute = False
+            sub_task.save(update_fields=["status", "auto_execute", "updated_at"])
+        else:
+            self._manage_file_locks(agent, file_paths, str(sub_task.id), sub_task.agent.agent_type, action="claim")
 
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 

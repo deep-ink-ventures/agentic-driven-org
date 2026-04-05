@@ -189,7 +189,8 @@ class TestBlueprintAbstracts:
 
     def test_leader_has_execute_task(self):
         assert hasattr(LeaderBlueprint, "execute_task")
-        assert getattr(LeaderBlueprint.execute_task, "__isabstractmethod__", False)
+        # It is concrete (default delegation implementation)
+        assert not getattr(LeaderBlueprint.execute_task, "__isabstractmethod__", False)
 
     def test_leader_has_generate_task_proposal(self):
         assert hasattr(LeaderBlueprint, "generate_task_proposal")

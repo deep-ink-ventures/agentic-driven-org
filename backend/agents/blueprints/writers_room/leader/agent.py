@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.models import Agent, AgentTask
+    from agents.models import Agent
 
 from agents.ai.claude_client import call_claude, parse_json_response
 from agents.blueprints.base import (
@@ -201,103 +201,17 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     plan_room = plan_room
     check_progress = check_progress
 
-    # ── Task execution ───────────────────────────────────────────────────
+    # ── Task execution (uses base class delegation with stage context) ──
 
-    def execute_task(self, agent: Agent, task: AgentTask) -> str:
-        from agents.ai.claude_client import call_claude, parse_json_response
-        from agents.models import Agent as AgentModel
-        from agents.models import AgentTask as TaskModel
-
-        workforce = list(
-            agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type")
-        )
-        workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
-
+    def _get_delegation_context(self, agent):
         internal_state = agent.internal_state or {}
         stage_status = internal_state.get("stage_status", {})
         current_stage = internal_state.get("current_stage", STAGES[0])
-
-        delegation_suffix = f"""# Workforce Agents
-{workforce_desc}
-
-# Current Stage: {current_stage}
-# Stage Status: {json.dumps(stage_status, indent=2)}
-# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (minimum dimension score)
-
-If this task involves delegating work to workforce agents, include delegated_tasks in your response.
-
-Respond with JSON:
-{{
-    "delegated_tasks": [
-        {{
-            "target_agent_type": "agent type",
-            "exec_summary": "What the agent should do",
-            "step_plan": "Detailed steps",
-            "auto_execute": false
-        }}
-    ],
-    "report": "Summary of what was decided and why"
-}}"""
-
-        task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=task_msg,
-            model=self.get_model(agent),
+        return (
+            f"# Current Stage: {current_stage}\n"
+            f"# Stage Status: {json.dumps(stage_status, indent=2)}\n"
+            f"# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (minimum dimension score)"
         )
-        task.token_usage = usage
-        task.save(update_fields=["token_usage"])
-
-        try:
-            data = json.loads(response) if response.strip().startswith("{") else None
-            if not data:
-                from agents.ai.claude_client import parse_json_response
-
-                data = parse_json_response(response)
-
-            if not data:
-                return response
-
-            delegated = data.get("delegated_tasks", [])
-            report = data.get("report", response)
-
-            if delegated:
-                workforce_agents = AgentModel.objects.filter(
-                    department=agent.department,
-                    status="active",
-                    is_leader=False,
-                )
-                agents_by_type = {a.agent_type: a for a in workforce_agents}
-
-                for dt in delegated:
-                    target_type = dt.get("target_agent_type")
-                    target_agent = agents_by_type.get(target_type)
-                    if not target_agent:
-                        logger.warning("No active workforce agent of type %s", target_type)
-                        continue
-
-                    sub_task = TaskModel.objects.create(
-                        agent=target_agent,
-                        created_by_agent=agent,
-                        status=TaskModel.Status.QUEUED
-                        if dt.get("auto_execute")
-                        else TaskModel.Status.AWAITING_APPROVAL,
-                        auto_execute=bool(dt.get("auto_execute")),
-                        exec_summary=dt.get("exec_summary", "Delegated task"),
-                        step_plan=dt.get("step_plan", ""),
-                    )
-
-                    if dt.get("auto_execute"):
-                        from agents.tasks import execute_agent_task
-
-                        execute_agent_task.delay(str(sub_task.id))
-
-                    logger.info("Showrunner delegated task %s to %s", sub_task.id, target_agent.name)
-
-            return report
-        except (json.JSONDecodeError, KeyError):
-            return response
 
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 
