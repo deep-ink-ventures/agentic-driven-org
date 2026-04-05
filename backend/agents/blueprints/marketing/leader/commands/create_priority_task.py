@@ -1,7 +1,7 @@
 """Leader command: propose the highest-value initiative for the department's workforce."""
+
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -13,34 +13,38 @@ from agents.blueprints.base import command
 logger = logging.getLogger(__name__)
 
 
-@command(name="create-priority-task", description="Propose the highest-value initiative — may involve one or multiple agents", schedule="hourly")
+@command(
+    name="create-priority-task",
+    description="Propose the highest-value initiative — may involve one or multiple agents",
+    schedule="hourly",
+)
 def create_priority_task(self, agent: Agent) -> dict:
     from agents.ai.claude_client import call_claude
     from agents.models import AgentTask
 
     workforce = list(
-        agent.department.agents.filter(is_active=True, is_leader=False)
-        .values_list("id", "name", "agent_type")
+        agent.department.agents.filter(status="active", is_leader=False).values_list("id", "name", "agent_type")
     )
     if not workforce:
         return None
 
     workforce_desc = ""
-    for wid, wname, wtype in workforce:
+    for _wid, wname, wtype in workforce:
         workforce_desc += f"- {wname} ({wtype})"
         try:
             from agents.blueprints import get_blueprint
+
             bp = get_blueprint(wtype, agent.department.department_type)
             cmds = bp.get_commands()
             if cmds:
                 cmd_names = ", ".join(c["name"] for c in cmds)
                 workforce_desc += f"\n  Commands: {cmd_names}"
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
         workforce_desc += "\n"
 
     awaiting_by_agent = {}
-    for wid, wname, wtype in workforce:
+    for wid, wname, _wtype in workforce:
         count = AgentTask.objects.filter(agent_id=wid, status=AgentTask.Status.AWAITING_APPROVAL).count()
         awaiting_by_agent[wname] = count
 
@@ -92,6 +96,7 @@ IMPORTANT:
     )
 
     from agents.ai.claude_client import parse_json_response
+
     data = parse_json_response(response)
     if not data:
         logger.warning("Failed to parse create-priority-task response: %s", response[:200])

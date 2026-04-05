@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 from django.utils import timezone
 
 from agents.blueprints.base import LeaderBlueprint
-from agents.blueprints.marketing.leader.skills import format_skills
 from agents.blueprints.marketing.leader.commands import (
-    create_priority_task,
+    analyze_performance,
     create_campaign,
     create_content_calendar,
-    analyze_performance,
+    create_priority_task,
 )
+from agents.blueprints.marketing.leader.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 class MarketingLeaderBlueprint(LeaderBlueprint):
     name = "Marketing Leader"
     slug = "leader"
-    description = "Marketing department leader — orchestrates campaigns, coordinates research and execution across all channels"
+    description = (
+        "Marketing department leader — orchestrates campaigns, coordinates research and execution across all channels"
+    )
     tags = ["leadership", "strategy", "campaigns", "coordination", "marketing"]
     config_schema = {}
 
@@ -60,11 +62,11 @@ When creating campaigns, stagger content across channels for maximum impact. Res
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         from agents.ai.claude_client import call_claude
-        from agents.models import Agent as AgentModel, AgentTask as TaskModel
+        from agents.models import Agent as AgentModel
+        from agents.models import AgentTask as TaskModel
 
         workforce = list(
-            agent.department.agents.filter(is_active=True, is_leader=False)
-            .values_list("name", "agent_type")
+            agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type")
         )
         workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
 
@@ -111,7 +113,7 @@ Respond with JSON:
             if delegated:
                 workforce_agents = AgentModel.objects.filter(
                     department=agent.department,
-                    is_active=True,
+                    status="active",
                     is_leader=False,
                 )
                 agents_by_type = {a.agent_type: a for a in workforce_agents}
@@ -126,7 +128,9 @@ Respond with JSON:
                     sub_task = TaskModel.objects.create(
                         agent=target_agent,
                         created_by_agent=agent,
-                        status=TaskModel.Status.QUEUED if dt.get("auto_execute") else TaskModel.Status.AWAITING_APPROVAL,
+                        status=TaskModel.Status.QUEUED
+                        if dt.get("auto_execute")
+                        else TaskModel.Status.AWAITING_APPROVAL,
                         auto_execute=bool(dt.get("auto_execute")),
                         exec_summary=dt.get("exec_summary", "Delegated task"),
                         step_plan=dt.get("step_plan", ""),
@@ -134,6 +138,7 @@ Respond with JSON:
 
                     if dt.get("auto_execute"):
                         from agents.tasks import execute_agent_task
+
                         execute_agent_task.delay(str(sub_task.id))
 
                     logger.info("Leader delegated task %s to %s", sub_task.id, target_agent.name)

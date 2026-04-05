@@ -1,4 +1,5 @@
 """Generic webhook receive endpoint."""
+
 import logging
 
 from rest_framework.permissions import AllowAny
@@ -15,19 +16,22 @@ class WebhookReceiveView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    def post(self, request, integration_slug, project_id, webhook_secret):
+    def post(self, request, integration_slug, project_id):
         adapter = get_adapter(integration_slug)
         if not adapter:
-            return Response({"error": "Unknown integration"}, status=404)
+            logger.info("Webhook received for unknown integration: %s", integration_slug)
+            return Response({"status": "ok"})
 
-        if not adapter.verify(request, webhook_secret):
+        signature = request.headers.get("X-Webhook-Signature", "")
+        if not adapter.verify(request, signature):
             logger.warning("Webhook verification failed for %s/%s", integration_slug, project_id)
-            return Response({"error": "Verification failed"}, status=403)
+            return Response({"status": "ok"})
 
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
-            return Response({"error": "Project not found"}, status=404)
+            logger.warning("Webhook received for nonexistent project: %s", project_id)
+            return Response({"status": "ok"})
 
         event = adapter.parse_event(request)
         logger.info("Webhook received: %s %s for project %s", integration_slug, event["event_type"], project.name)

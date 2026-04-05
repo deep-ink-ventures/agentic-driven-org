@@ -2,14 +2,15 @@ from rest_framework.generics import ListCreateAPIView
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 
-from projects.models import Source, Project
+from projects.extraction import compute_content_hash, extract_text
+from projects.models import Project, Source
 from projects.serializers import SourceSerializer
-from projects.extraction import extract_text, compute_content_hash
 from projects.storage import upload_file
 
 
 class ProjectSourceListView(ListCreateAPIView):
     """List and create sources for a project. Accepts JSON or multipart file uploads."""
+
     serializer_class = SourceSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser]
@@ -49,3 +50,8 @@ class ProjectSourceListView(ListCreateAPIView):
                 source.extracted_text = text
                 source.word_count = len(text.split())
                 source.save(update_fields=["extracted_text", "word_count"])
+
+        # Generate summary asynchronously
+        from projects.tasks import summarize_source
+
+        summarize_source.delay(str(source.id))

@@ -1,8 +1,9 @@
 """GitHub webhook adapter."""
+
 import logging
 
-from integrations.webhooks.base import BaseWebhookAdapter
 from integrations.github_dev import service as github_service
+from integrations.webhooks.base import BaseWebhookAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,11 @@ class GitHubWebhookAdapter(BaseWebhookAdapter):
             if not run_id:
                 return
 
-            for agent in Agent.objects.filter(department__project=project, is_active=True):
+            for agent in Agent.objects.filter(department__project=project, status="active"):
                 pending = agent.internal_state.get("pending_webhook_events", [])
-                matched = [e for e in pending if e.get("external_id") == str(run_id) and e.get("integration") == "github"]
+                matched = [
+                    e for e in pending if e.get("external_id") == str(run_id) and e.get("integration") == "github"
+                ]
                 if not matched:
                     continue
 

@@ -1,12 +1,10 @@
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
-from django.utils import timezone
 
 from agents.models import Agent, AgentTask
-from projects.models import Project, Department
-
+from projects.models import Department, Project
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -14,6 +12,7 @@ from projects.models import Project, Department
 @pytest.fixture
 def user(db):
     from django.contrib.auth import get_user_model
+
     return get_user_model().objects.create_user(email="test@example.com", password="pass")
 
 
@@ -33,8 +32,8 @@ def twitter_agent(department):
         name="Twitter Bot",
         agent_type="twitter",
         department=department,
-        auto_actions={"place-content": True, "post-content": False},
-        is_active=True,
+        auto_approve=True,
+        status="active",
     )
 
 
@@ -44,8 +43,8 @@ def twitter_agent_disabled(department):
         name="Twitter Disabled",
         agent_type="twitter",
         department=department,
-        auto_actions={},
-        is_active=True,
+        auto_approve=False,
+        status="active",
     )
 
 
@@ -56,8 +55,8 @@ def leader_agent(department):
         agent_type="leader",
         department=department,
         is_leader=True,
-        auto_actions={"create-priority-task": True},
-        is_active=True,
+        auto_approve=True,
+        status="active",
     )
 
 
@@ -65,6 +64,7 @@ def leader_agent(department):
 def inactive_leader(department):
     """An inactive leader for skip tests. Needs different project to avoid unique constraint."""
     from accounts.models import User
+
     user2 = User.objects.create_user(email="other@example.com", password="pass")
     project2 = Project.objects.create(name="Other", goal="Other", owner=user2)
     dept2 = Department.objects.create(department_type="marketing", project=project2)
@@ -73,7 +73,7 @@ def inactive_leader(department):
         agent_type="leader",
         department=dept2,
         is_leader=True,
-        is_active=False,
+        status="inactive",
     )
 
 
@@ -107,15 +107,14 @@ class TestRunScheduledActions:
         mock_exec.delay.assert_not_called()
 
     @patch("agents.tasks.execute_agent_task")
-    def test_daily_creates_tasks(self, mock_exec, twitter_agent):
+    def test_daily_creates_tasks_when_approved(self, mock_exec, twitter_agent):
         from agents.tasks import run_scheduled_actions
 
-        # post-content is daily but disabled => no task for that
-        # engage-tweets is hourly => not picked for daily
+        # twitter_agent has auto_approve=True, so daily command runs
         run_scheduled_actions("daily")
 
         tasks = AgentTask.objects.filter(agent=twitter_agent)
-        assert tasks.count() == 0
+        assert tasks.count() == 1
 
     @patch("agents.tasks.execute_agent_task")
     def test_daily_with_enabled_daily_action(self, mock_exec, department):
@@ -125,8 +124,8 @@ class TestRunScheduledActions:
             name="Daily Twitter",
             agent_type="twitter",
             department=department,
-            auto_actions={"post-content": True},
-            is_active=True,
+            auto_approve=True,
+            status="active",
         )
         run_scheduled_actions("daily")
 
@@ -140,7 +139,10 @@ class TestRunScheduledActions:
 
 @pytest.mark.django_db
 class TestExecuteAgentTask:
-    @patch("agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done tweeting")
+    @patch(
+        "agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task",
+        return_value="Done tweeting",
+    )
     def test_transitions_queued_to_done(self, mock_bp_exec, twitter_agent):
         from agents.tasks import execute_agent_task
 
@@ -156,7 +158,9 @@ class TestExecuteAgentTask:
         assert task.report == "Done tweeting"
         assert task.completed_at is not None
 
-    @patch("agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done planned")
+    @patch(
+        "agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task", return_value="Done planned"
+    )
     def test_handles_planned_status(self, mock_bp_exec, twitter_agent):
         from agents.tasks import execute_agent_task
 
@@ -210,9 +214,7 @@ class TestExecuteAgentTask:
 @pytest.mark.django_db
 class TestCreateNextLeaderTask:
     @patch("agents.ai.claude_client.call_claude")
-    def test_creates_proposal_for_workforce(
-        self, mock_claude, leader_agent, twitter_agent
-    ):
+    def test_creates_proposal_for_workforce(self, mock_claude, leader_agent, twitter_agent):
         import json
 
         mock_claude.return_value = (
@@ -239,7 +241,7 @@ class TestCreateNextLeaderTask:
         # Should create a task for the twitter agent
         task = AgentTask.objects.filter(agent=twitter_agent).first()
         assert task is not None
-        # place-content is enabled in auto_actions, so task is auto-queued
+        # auto_approve is True on twitter_agent, so task is auto-queued
         assert task.status in [AgentTask.Status.QUEUED, AgentTask.Status.AWAITING_APPROVAL]
         assert task.created_by_agent == leader_agent
         assert task.command_name == "place-content"

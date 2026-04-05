@@ -1,20 +1,17 @@
 import pytest
-from unittest.mock import patch, MagicMock
 
-from agents.blueprints.base import (
-    BaseBlueprint,
-    WorkforceBlueprint,
-    LeaderBlueprint,
-    command,
-)
 from agents.blueprints import (
-    get_blueprint,
     AGENT_TYPE_CHOICES,
     WORKFORCE_TYPE_CHOICES,
+    get_blueprint,
+)
+from agents.blueprints.base import (
+    LeaderBlueprint,
+    WorkforceBlueprint,
+    command,
 )
 from agents.models import Agent, AgentTask
-from projects.models import Project, Department, Document
-
+from projects.models import Department, Document, Project
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -22,6 +19,7 @@ from projects.models import Project, Department, Document
 @pytest.fixture
 def user(db):
     from django.contrib.auth import get_user_model
+
     return get_user_model().objects.create_user(email="test@example.com", password="pass")
 
 
@@ -43,7 +41,7 @@ def leader_agent(department):
         department=department,
         is_leader=True,
         instructions="Focus on crypto audience",
-        is_active=True,
+        status="active",
     )
 
 
@@ -54,7 +52,7 @@ def twitter_agent(department):
         agent_type="twitter",
         department=department,
         instructions="Be witty",
-        is_active=True,
+        status="active",
     )
 
 
@@ -64,7 +62,7 @@ def reddit_agent(department):
         name="Reddit Poster",
         agent_type="reddit",
         department=department,
-        is_active=True,
+        status="active",
     )
 
 
@@ -145,14 +143,17 @@ class TestBaseBlueprint:
 class TestBlueprintRegistry:
     def test_get_blueprint_twitter(self):
         from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint
+
         assert isinstance(get_blueprint("twitter", "marketing"), TwitterBlueprint)
 
     def test_get_blueprint_reddit(self):
         from agents.blueprints.marketing.workforce.reddit.agent import RedditBlueprint
+
         assert isinstance(get_blueprint("reddit", "marketing"), RedditBlueprint)
 
     def test_get_blueprint_leader(self):
         from agents.blueprints.marketing.leader.agent import MarketingLeaderBlueprint
+
         assert isinstance(get_blueprint("leader", "marketing"), MarketingLeaderBlueprint)
 
     def test_get_blueprint_leader_requires_department(self):
@@ -192,9 +193,7 @@ class TestBlueprintAbstracts:
 
     def test_leader_has_generate_task_proposal(self):
         assert hasattr(LeaderBlueprint, "generate_task_proposal")
-        assert getattr(
-            LeaderBlueprint.generate_task_proposal, "__isabstractmethod__", False
-        )
+        assert callable(LeaderBlueprint.generate_task_proposal)
 
 
 # ── build_system_prompt / build_context_message / get_context ────────────────
@@ -226,9 +225,7 @@ class TestBlueprintPrompts:
         assert "World domination" in msg
         assert "Marketing" in msg
 
-    def test_get_context_gathers_correct_data(
-        self, twitter_agent, reddit_agent, leader_agent, doc
-    ):
+    def test_get_context_gathers_correct_data(self, twitter_agent, reddit_agent, leader_agent, doc):
         # Create a task for a sibling agent
         AgentTask.objects.create(
             agent=reddit_agent,
@@ -255,3 +252,79 @@ class TestBlueprintPrompts:
         assert "Tweeted about launch" in ctx["own_recent_tasks"]
         assert "Got 50 likes" in ctx["own_recent_tasks"]
         assert ctx["agent_instructions"] == "Be witty"
+
+
+# ── Blueprint metadata (essential / controls) ────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestBlueprintMetadata:
+    def test_base_blueprint_defaults(self):
+        from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint
+
+        bp = TwitterBlueprint()
+        assert bp.essential is False
+        assert bp.controls is None
+
+    def test_essential_field_on_blueprint(self):
+        from agents.blueprints.writers_room.workforce.format_analyst.agent import FormatAnalystBlueprint
+
+        bp = FormatAnalystBlueprint()
+        assert bp.essential is True
+
+    def test_controls_field_string(self):
+        from agents.blueprints.writers_room.workforce.market_analyst.agent import MarketAnalystBlueprint
+
+        bp = MarketAnalystBlueprint()
+        assert bp.controls == "story_researcher"
+
+    def test_controls_field_list(self):
+        from agents.blueprints.engineering.workforce.review_engineer.agent import ReviewEngineerBlueprint
+
+        bp = ReviewEngineerBlueprint()
+        assert bp.controls == ["backend_engineer", "frontend_engineer"]
+
+
+# ── get_workforce_metadata ───────────────────────────────────────────────────
+
+
+class TestGetWorkforceMetadata:
+    def test_returns_all_agents_with_metadata(self):
+        from agents.blueprints import get_workforce_metadata
+
+        metadata = get_workforce_metadata("writers_room")
+        slugs = {m["agent_type"] for m in metadata}
+        assert "dialog_writer" in slugs
+        assert "dialogue_analyst" in slugs
+        assert "format_analyst" in slugs
+
+    def test_includes_essential_flag(self):
+        from agents.blueprints import get_workforce_metadata
+
+        metadata = get_workforce_metadata("writers_room")
+        by_slug = {m["agent_type"]: m for m in metadata}
+        assert by_slug["format_analyst"]["essential"] is True
+        assert by_slug["dialog_writer"]["essential"] is False
+
+    def test_includes_controls_field(self):
+        from agents.blueprints import get_workforce_metadata
+
+        metadata = get_workforce_metadata("writers_room")
+        by_slug = {m["agent_type"]: m for m in metadata}
+        assert by_slug["market_analyst"]["controls"] == "story_researcher"
+        assert by_slug["dialog_writer"]["controls"] is None
+
+    def test_includes_name_and_description(self):
+        from agents.blueprints import get_workforce_metadata
+
+        metadata = get_workforce_metadata("writers_room")
+        for m in metadata:
+            assert "name" in m
+            assert "description" in m
+            assert len(m["name"]) > 0
+
+    def test_unknown_department_returns_empty(self):
+        from agents.blueprints import get_workforce_metadata
+
+        metadata = get_workforce_metadata("nonexistent")
+        assert metadata == []

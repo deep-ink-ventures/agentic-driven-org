@@ -10,6 +10,8 @@ class Document(models.Model):
         BRANDING = "branding", "Branding"
         STRATEGY = "strategy", "Strategy"
         CAMPAIGN = "campaign", "Campaign"
+        VOICE_PROFILE = "voice_profile", "Voice Profile"
+        CONCEPT = "concept", "Concept"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)

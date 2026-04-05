@@ -10,6 +10,8 @@ venv/
 .env
 *.env
 *.sqlite3
+celerybeat-schedule.db
+*.db
 staticfiles/
 media/
 .idea/
@@ -27,6 +29,11 @@ frontend/.next/
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Screenshots and critique images
+*.png
+!frontend/public/**/*.png
+!landing-page/public/**/*.png
 
 # Worktrees
 .worktrees/

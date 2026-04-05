@@ -10,5 +10,4 @@ def get_blueprint_info(agent):
         "skills_description": bp.skills_description,
         "commands": bp.get_commands(),
         "config_schema": bp.get_config_json_schema(),
-        "auto_actions_schema": bp.get_auto_actions_json_schema(),
     }

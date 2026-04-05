@@ -57,10 +57,10 @@ export interface AgentSummary {
   name: string;
   agent_type: string;
   is_leader: boolean;
-  is_active: boolean;
+  status: "provisioning" | "active" | "inactive" | "failed";
   instructions: string;
   config: Record<string, unknown>;
-  auto_actions: Record<string, boolean>;
+  auto_approve: boolean;
   pending_task_count: number;
   effective_config: Record<string, unknown>;
   config_source: Record<string, string>;
@@ -125,5 +125,73 @@ export interface BlueprintInfo {
   skills_description: string;
   commands: { name: string; description: string; schedule: string | null; model: string | null }[];
   config_schema: Record<string, unknown>;
-  auto_actions_schema: Record<string, unknown>;
+}
+
+export interface AvailableAgent {
+  agent_type: string;
+  name: string;
+  description: string;
+  recommended: boolean;
+  essential: boolean;
+  controls: string | string[] | null;
+}
+
+export interface AvailableDepartment {
+  department_type: string;
+  name: string;
+  description: string;
+  recommended: boolean;
+  config_schema: Record<string, unknown>;
+  workforce: AvailableAgent[];
+}
+
+export interface AvailableDepartmentsResponse {
+  departments: AvailableDepartment[];
+}
+
+export interface TaskPage {
+  tasks: AgentTask[];
+  totalCount: number;
+}
+
+export interface Output {
+  id: string;
+  project: string;
+  department: string | null;
+  title: string;
+  label: string;
+  output_type: "markdown" | "fountain" | "plaintext" | "pdf" | "html" | "other";
+  content: string;
+  original_filename: string;
+  file_size: number;
+  content_type: string;
+  version: number;
+  parent: string | null;
+  word_count: number;
+  created_by_task: string | null;
+  created_by_task_summary: { id: string; exec_summary: string } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BriefingAttachment {
+  id: string;
+  original_filename: string;
+  file_format: string;
+  file_size: number;
+  word_count: number;
+}
+
+export interface Briefing {
+  id: string;
+  project: string;
+  department: string | null;
+  title: string;
+  content: string;
+  status: "active" | "archived";
+  attachments: BriefingAttachment[];
+  task_count: number;
+  created_by_email: string;
+  created_at: string;
+  updated_at: string;
 }

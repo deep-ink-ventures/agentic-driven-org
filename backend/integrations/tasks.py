@@ -1,4 +1,5 @@
 """Integration beat tasks."""
+
 import logging
 from collections import defaultdict
 
@@ -11,14 +12,16 @@ logger = logging.getLogger(__name__)
 def monitor_pending_webhooks():
     """Every 5 minutes: check for pending webhook events that may have been missed."""
     from datetime import timedelta
+
     from django.utils import timezone
+
     from agents.models import Agent, AgentTask
     from integrations.webhooks import get_adapter
 
     now = timezone.now()
-    stale_cutoff = now - timedelta(hours=1)
+    stale_cutoff = now - timedelta(hours=2)
 
-    agents = Agent.objects.filter(is_active=True).exclude(internal_state={})
+    agents = Agent.objects.filter(status="active").exclude(internal_state={})
 
     for agent in agents:
         pending = agent.internal_state.get("pending_webhook_events", [])
@@ -63,9 +66,12 @@ def monitor_pending_webhooks():
                     updated = True
                 elif evt.get("created_at"):
                     from django.utils.dateparse import parse_datetime
+
                     created = parse_datetime(evt["created_at"])
                     if created and created < stale_cutoff:
-                        logger.warning("Beat monitor: stale %s event %s — removing", integration_slug, evt.get("external_id"))
+                        logger.warning(
+                            "Beat monitor: stale %s event %s — removing", integration_slug, evt.get("external_id")
+                        )
                         updated = True
                     else:
                         remaining.append(evt)

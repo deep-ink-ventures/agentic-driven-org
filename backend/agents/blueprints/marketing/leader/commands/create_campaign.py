@@ -1,7 +1,7 @@
 """Leader command: design a multi-channel campaign."""
+
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -13,14 +13,13 @@ from agents.blueprints.base import command
 logger = logging.getLogger(__name__)
 
 
-@command(name="create-campaign", description="Design a multi-channel campaign with coordinated tasks for workforce agents")
+@command(
+    name="create-campaign", description="Design a multi-channel campaign with coordinated tasks for workforce agents"
+)
 def create_campaign(self, agent: Agent) -> dict:
     from agents.ai.claude_client import call_claude
 
-    workforce = list(
-        agent.department.agents.filter(is_active=True, is_leader=False)
-        .values_list("name", "agent_type")
-    )
+    workforce = list(agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type"))
     workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
 
     context_msg = self.build_context_message(agent)
@@ -71,6 +70,7 @@ Respond with JSON:
     )
 
     from agents.ai.claude_client import parse_json_response
+
     data = parse_json_response(response)
     if not data:
         logger.warning("Failed to parse create-campaign response: %s", response[:200])

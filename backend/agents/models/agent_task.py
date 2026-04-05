@@ -38,7 +38,7 @@ class AgentTask(models.Model):
     command_name = models.CharField(
         max_length=100,
         blank=True,
-        help_text="Command on the agent's blueprint this task executes. Used for auto_actions lookup.",
+        help_text="Command on the agent's blueprint this task executes.",
     )
     blocked_by = models.ForeignKey(
         "self",
@@ -97,6 +97,7 @@ class AgentTask(models.Model):
         # Self-perpetuating chain: if this is a leader task, create the next proposal
         if self.agent.is_leader:
             from agents.tasks import create_next_leader_task
+
             create_next_leader_task.delay(str(self.agent.id))
 
         return True

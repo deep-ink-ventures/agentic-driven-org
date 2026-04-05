@@ -48,6 +48,10 @@ class Source(models.Model):
         blank=True,
         help_text="Cleaned text ready for Claude analysis.",
     )
+    summary = models.TextField(
+        blank=True,
+        help_text="Claude-generated summary of the full source content. Used in prompts instead of truncated text.",
+    )
     file_format = models.CharField(max_length=20, blank=True)
     content_type = models.CharField(max_length=100, blank=True)
     file_size = models.PositiveIntegerField(null=True, blank=True)

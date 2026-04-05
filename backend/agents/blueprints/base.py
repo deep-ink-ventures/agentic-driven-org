@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 _command_registry: dict[str, dict] = {}
 
 
-def command(name: str, description: str, schedule: str | None = None, model: str | None = None, max_tokens: int | None = None):
+def command(
+    name: str, description: str, schedule: str | None = None, model: str | None = None, max_tokens: int | None = None
+):
     """
     Decorator to register a method as a blueprint command.
 
@@ -28,9 +30,17 @@ def command(name: str, description: str, schedule: str | None = None, model: str
         model: Override model for this command (e.g. "claude-haiku-4-5")
         max_tokens: Override max output tokens for this command
     """
+
     def decorator(func):
-        func._command_meta = {"name": name, "description": description, "schedule": schedule, "model": model, "max_tokens": max_tokens}
+        func._command_meta = {
+            "name": name,
+            "description": description,
+            "schedule": schedule,
+            "model": model,
+            "max_tokens": max_tokens,
+        }
         return func
+
     return decorator
 
 
@@ -46,6 +56,8 @@ class BaseBlueprint(ABC):
     tags: list[str] = []
     default_model: str = "claude-sonnet-4-6"
     config_schema: dict[str, dict] = {}  # {"key": {"type": "str", "required": bool, "description": "..."}}
+    essential: bool = False  # always pre-selected when department is added
+    controls: str | list[str] | None = None  # auto-selected when controlled agent is selected
 
     @property
     @abstractmethod
@@ -57,7 +69,7 @@ class BaseBlueprint(ABC):
     def skills_description(self) -> str:
         """Formatted skills text injected into system prompt."""
 
-    def get_bootstrap_command(self, agent: "Agent") -> dict | None:
+    def get_bootstrap_command(self, agent: Agent) -> dict | None:
         """
         Return a bootstrap task dict for this agent, or None to skip.
 
@@ -83,16 +95,15 @@ class BaseBlueprint(ABC):
         """Return commands matching the given schedule type."""
         return [c for c in self.get_commands() if c.get("schedule") == schedule]
 
-    def run_command(self, command_name: str, agent: "Agent", **kwargs):
+    def run_command(self, command_name: str, agent: Agent, **kwargs):
         """Run a named command on this blueprint."""
         for attr_name in dir(self):
             attr = getattr(self, attr_name, None)
-            if callable(attr) and hasattr(attr, "_command_meta"):
-                if attr._command_meta["name"] == command_name:
-                    return attr(agent, **kwargs)
+            if callable(attr) and hasattr(attr, "_command_meta") and attr._command_meta["name"] == command_name:
+                return attr(agent, **kwargs)
         raise ValueError(f"Unknown command: {command_name}")
 
-    def get_model(self, agent: "Agent", command_name: str | None = None) -> str:
+    def get_model(self, agent: Agent, command_name: str | None = None) -> str:
         """Resolve model: command model -> agent.config['model'] -> blueprint default_model."""
         # 1. Command-specific model
         if command_name:
@@ -108,7 +119,9 @@ class BaseBlueprint(ABC):
 
     def validate_config(self, config: dict) -> list[str]:
         """Validate agent config against this blueprint's JSON Schema. Returns list of error strings."""
-        from jsonschema import validate, ValidationError as JsonSchemaError
+        from jsonschema import ValidationError as JsonSchemaError
+        from jsonschema import validate
+
         schema = self.get_config_json_schema()
         try:
             validate(instance=config, schema=schema)
@@ -148,26 +161,6 @@ class BaseBlueprint(ABC):
             schema["required"] = required
         return schema
 
-    def validate_auto_actions(self, auto_actions: dict) -> list[str]:
-        """Validate auto_actions as {command_name: bool} with only valid scheduled commands as keys."""
-        from jsonschema import validate, ValidationError as JsonSchemaError
-        schema = self.get_auto_actions_json_schema()
-        try:
-            validate(instance=auto_actions, schema=schema)
-            return []
-        except JsonSchemaError as e:
-            return [e.message]
-
-    def get_auto_actions_json_schema(self) -> dict:
-        """Build a JSON Schema for auto_actions based on this blueprint's scheduled commands."""
-        valid_commands = {c["name"] for c in self.get_commands() if c.get("schedule")}
-        properties = {name: {"type": "boolean"} for name in valid_commands}
-        return {
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": False,
-        }
-
     def get_available_commands_description(self) -> str:
         """Format available commands for inclusion in context messages."""
         cmds = self.get_commands()
@@ -179,7 +172,7 @@ class BaseBlueprint(ABC):
             lines.append(f"- {c['name']}{schedule}: {c['description']}")
         return "\n".join(lines)
 
-    def get_context(self, agent: "Agent") -> dict:
+    def get_context(self, agent: Agent) -> dict:
         """Gather context with prefetched queries to avoid N+1."""
         from agents.models import AgentTask
 
@@ -188,21 +181,18 @@ class BaseBlueprint(ABC):
 
         # Department documents — exclude archived, include type and age
         docs = list(
-            department.documents
-            .filter(is_archived=False)
-            .values_list("title", "content", "doc_type", "created_at")
+            department.documents.filter(is_archived=False).values_list("title", "content", "doc_type", "created_at")
         )
         docs_text = ""
         for title, content, doc_type, created_at in docs:
             from django.utils import timezone
+
             age = (timezone.now() - created_at).days
             age_str = f", {age}d ago" if doc_type == "research" else ""
             docs_text += f"\n\n--- [{doc_type}{age_str}] {title} ---\n{content[:3000]}"
 
         sibling_ids = list(
-            department.agents.exclude(id=agent.id)
-            .filter(is_active=True)
-            .values_list("id", "name", "agent_type")
+            department.agents.exclude(id=agent.id).filter(status="active").values_list("id", "name", "agent_type")
         )
         sibling_text = ""
         if sibling_ids:
@@ -223,15 +213,45 @@ class BaseBlueprint(ABC):
                     task_lines = "\n".join(f"  - [{s}] {e[:100]}" for e, s in recent)
                     sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:\n{task_lines}"
 
-        own_recent = list(
-            agent.tasks.order_by("-created_at")[:10]
-            .values_list("exec_summary", "status", "report")
-        )
+        own_recent = list(agent.tasks.order_by("-created_at")[:10].values_list("exec_summary", "status", "report"))
         own_text = ""
         for es, st, rp in own_recent:
             own_text += f"\n  - [{st}] {es[:100]}"
             if rp:
                 own_text += f"\n    Report: {rp[:200]}"
+
+        # Active briefings for this department (department-specific + project-level)
+        from django.db.models import Q
+        from django.utils import timezone as tz
+
+        from projects.models import Briefing
+
+        briefings = list(
+            Briefing.objects.filter(
+                project=project,
+                status="active",
+            )
+            .filter(Q(department=department) | Q(department__isnull=True))
+            .prefetch_related("attachments")
+            .order_by("-created_at")
+        )
+        briefings_text = ""
+        if briefings:
+            for b in briefings:
+                age = tz.now() - b.created_at
+                if age.days > 0:
+                    age_str = f"{age.days}d ago"
+                else:
+                    hours = age.seconds // 3600
+                    age_str = f"{hours}h ago" if hours > 0 else "just now"
+                scope = "department-level" if b.department else "project-level"
+                briefings_text += f'\n\n## "{b.title}" ({scope}, created {age_str})\nContent: {b.content}'
+                attachments = list(b.attachments.all())
+                if attachments:
+                    briefings_text += "\nAttachments:"
+                    for att in attachments:
+                        snippet = att.extracted_text[:500] if att.extracted_text else "(not yet extracted)"
+                        briefings_text += f"\n- {att.original_filename}: {snippet}"
 
         return {
             "project_name": project.name,
@@ -241,46 +261,58 @@ class BaseBlueprint(ABC):
             "sibling_agents": sibling_text,
             "own_recent_tasks": own_text,
             "agent_instructions": agent.instructions,
+            "active_briefings": briefings_text,
         }
 
-    def build_system_prompt(self, agent: "Agent") -> str:
+    def build_system_prompt(self, agent: Agent) -> str:
         parts = [self.system_prompt]
         parts.append(f"\n\n## Your Skills\n{self.skills_description}")
         parts.append(f"\n\n## Your Commands\n{self.get_available_commands_description()}")
         if agent.instructions:
             # Wrap user-controlled content in XML tags so Claude treats it as data, not instructions
-            parts.append(f"\n\n## Additional Instructions\n<user_instructions>\n{agent.instructions}\n</user_instructions>")
+            parts.append(
+                f"\n\n## Additional Instructions\n<user_instructions>\n{agent.instructions}\n</user_instructions>"
+            )
         return "".join(parts)
 
-    def build_context_message(self, agent: "Agent") -> str:
+    def build_context_message(self, agent: Agent) -> str:
         ctx = self.get_context(agent)
         # All user-controlled content wrapped in XML tags to mitigate prompt injection.
         # Claude is trained to treat content inside XML tags as data rather than instructions.
+        briefings_section = ""
+        if ctx.get("active_briefings"):
+            briefings_section = f"""
+
+### Active Briefings
+<briefings>
+{ctx["active_briefings"]}
+</briefings>"""
+
         return f"""# Context
 
-## Project: {ctx['project_name']}
+## Project: {ctx["project_name"]}
 <project_goal>
-{ctx['project_goal']}
+{ctx["project_goal"]}
 </project_goal>
 
-## Department: {ctx['department_name']}
+## Department: {ctx["department_name"]}
 
 ### Department Documents
 <documents>
-{ctx['department_documents'] or 'No documents yet.'}
-</documents>
+{ctx["department_documents"] or "No documents yet."}
+</documents>{briefings_section}
 
 ### Other Agents in Department
 <sibling_activity>
-{ctx['sibling_agents'] or 'No other agents.'}
+{ctx["sibling_agents"] or "No other agents."}
 </sibling_activity>
 
 ### Your Recent Tasks
 <own_activity>
-{ctx['own_recent_tasks'] or 'No tasks yet.'}
+{ctx["own_recent_tasks"] or "No tasks yet."}
 </own_activity>"""
 
-    def build_task_message(self, agent: "Agent", task: "AgentTask", suffix: str = "") -> str:
+    def build_task_message(self, agent: Agent, task: AgentTask, suffix: str = "") -> str:
         """Build a task execution message with user-controlled content wrapped in XML tags."""
         context_msg = self.build_context_message(agent)
         extra = f"\n\n{suffix}" if suffix else ""
@@ -304,7 +336,7 @@ class WorkforceBlueprint(BaseBlueprint):
     """Base for workforce agents (twitter, reddit, etc.). Execute tasks only."""
 
     @abstractmethod
-    def execute_task(self, agent: "Agent", task: "AgentTask") -> str:
+    def execute_task(self, agent: Agent, task: AgentTask) -> str:
         """Execute a task. Returns the report text."""
 
 
@@ -315,9 +347,129 @@ class LeaderBlueprint(BaseBlueprint):
     """Base for department leader agents. Proposes and delegates tasks."""
 
     @abstractmethod
-    def execute_task(self, agent: "Agent", task: "AgentTask") -> str:
+    def execute_task(self, agent: Agent, task: AgentTask) -> str:
         """Execute a task. Returns the report text."""
 
-    @abstractmethod
-    def generate_task_proposal(self, agent: "Agent") -> dict:
-        """Propose the next highest-value task. Returns {exec_summary, step_plan, target_agent_type (optional)}."""
+    def generate_task_proposal(self, agent: Agent) -> dict | None:
+        """
+        Propose the next highest-value task by asking Claude to assess and plan.
+
+        Uses project goal, department documents, completed tasks, and available agents
+        to determine what to do next. Subclasses can override for domain-specific logic.
+        """
+        import json
+        import logging
+
+        from agents.ai.claude_client import call_claude, parse_json_response
+
+        logger = logging.getLogger(__name__)
+
+        department = agent.department
+        project = department.project
+
+        # Gather available workforce agents
+        workforce = Agent.objects.filter(
+            department=department,
+            is_leader=False,
+            status=Agent.Status.ACTIVE,
+        )
+        if not workforce.exists():
+            return None
+
+        agents_desc = []
+        for a in workforce:
+            bp = a.get_blueprint()
+            cmds = bp.get_commands() if bp else []
+            cmd_names = [c["name"] for c in cmds]
+            agents_desc.append(
+                {
+                    "agent_type": a.agent_type,
+                    "name": a.name,
+                    "description": bp.description if bp else "",
+                    "commands": cmd_names,
+                }
+            )
+
+        # Gather recent completed tasks
+        completed_tasks = list(
+            AgentTask.objects.filter(
+                agent__department=department,
+                status__in=["completed", "processing"],
+            )
+            .order_by("-created_at")
+            .values_list("exec_summary", flat=True)[:20]
+        )
+
+        # Gather department documents
+        from projects.models import Document
+
+        docs = list(Document.objects.filter(department=department).values_list("title", flat=True)[:20])
+
+        # Get locale
+        locale = agent.get_config_value("locale") or "en"
+
+        system_prompt = f"""You are a department leader deciding the next highest-value task for your team.
+
+You MUST respond with valid JSON only. No markdown fences, no explanation.
+
+## Your Process
+1. ASSESS: Where does the project stand? What has been done? What's missing?
+2. GOAL: What does the project need most right now to move forward?
+3. IMPACT: Which agent and action would create the most value right now?
+4. PLAN: Write a detailed, actionable task plan for that agent.
+
+## Rules
+- Propose ONE task at a time (or a small chain of dependent tasks if they form a logical unit)
+- Each task must target a specific agent by agent_type
+- Each task must have a specific command_name from that agent's available commands
+- The step_plan must be detailed enough that the agent can work autonomously
+- Reference specific project details — characters, themes, goals, constraints
+- All output in {locale}
+
+## Response JSON Schema
+{{
+    "exec_summary": "Brief description of what this task achieves",
+    "tasks": [
+        {{
+            "target_agent_type": "agent_type_slug",
+            "command_name": "command_name",
+            "exec_summary": "What this specific agent should deliver",
+            "step_plan": "Detailed, actionable instructions for the agent...",
+            "depends_on_previous": false
+        }}
+    ]
+}}"""
+
+        user_message = f"""# Project: {project.name}
+
+## Project Goal
+{project.goal or "No goal set."}
+
+## Leader Instructions
+{agent.instructions or "No specific instructions."}
+
+## Available Agents
+{json.dumps(agents_desc, indent=2)}
+
+## Completed / In-Progress Tasks
+{json.dumps(completed_tasks) if completed_tasks else "None yet — this is the first task."}
+
+## Department Documents
+{json.dumps(docs) if docs else "None yet."}
+
+What is the single most impactful next action for this department?"""
+
+        try:
+            response, _usage = call_claude(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                max_tokens=4096,
+            )
+            result = parse_json_response(response)
+            if result:
+                return result
+            logger.warning("Leader %s: failed to parse task proposal from Claude", agent.name)
+        except Exception as e:
+            logger.exception("Leader %s: Claude call failed for task proposal: %s", agent.name, e)
+
+        return None

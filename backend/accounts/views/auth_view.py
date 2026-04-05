@@ -1,14 +1,18 @@
+import logging
+
 from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, login, logout
-from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import User, AllowList
+from accounts.models import AllowList, User
 from accounts.serializers import LoginSerializer, SignupSerializer, UserSerializer
+
+logger = logging.getLogger(__name__)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -58,6 +62,7 @@ class LoginView(APIView):
             password=serializer.validated_data["password"],
         )
         if user is None:
+            logger.warning("Failed login attempt for email: %s", serializer.validated_data["email"].lower())
             return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
 
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
@@ -75,5 +80,6 @@ class LogoutView(APIView):
 class WsTicketView(APIView):
     def post(self, request):
         from config.ws_auth import create_ws_ticket
+
         ticket = create_ws_ticket(request.user.id)
         return Response({"ticket": ticket})

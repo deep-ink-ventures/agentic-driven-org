@@ -1,18 +1,18 @@
-import uuid
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from django.db import IntegrityError
 from django.utils import timezone
 
 from agents.models import Agent, AgentTask
-from projects.models import Project, Department
+from projects.models import Department, Project
 
 
 @pytest.fixture
 def user(db):
     from django.contrib.auth import get_user_model
+
     User = get_user_model()
     return User.objects.create_user(email="test@example.com", password="pass")
 
@@ -40,10 +40,10 @@ def agent(department):
         agent_type="twitter",
         department=department,
         is_leader=False,
-        is_active=True,
+        status=Agent.Status.ACTIVE,
         instructions="Be nice",
         config={"api_key": "xxx"},
-        auto_actions={"place-content": True, "post-content": False},
+        auto_approve=True,
     )
 
 
@@ -54,7 +54,7 @@ def leader_agent(department):
         agent_type="leader",
         department=department,
         is_leader=True,
-        is_active=True,
+        status=Agent.Status.ACTIVE,
     )
 
 
@@ -69,10 +69,17 @@ class TestAgentModel:
         assert agent.agent_type == "twitter"
         assert agent.instructions == "Be nice"
         assert agent.config == {"api_key": "xxx"}
-        assert agent.auto_actions == {"place-content": True, "post-content": False}
-        assert agent.is_active is True
+        assert agent.auto_approve is True
+        assert agent.status == Agent.Status.ACTIVE
         assert agent.is_leader is False
         assert agent.created_at is not None
+
+    def test_status_choices(self, agent):
+        assert set(Agent.Status.values) == {"provisioning", "active", "inactive", "failed"}
+
+    def test_default_status_is_provisioning(self, department):
+        a = Agent.objects.create(name="New", agent_type="twitter", department=department)
+        assert a.status == Agent.Status.PROVISIONING
 
     def test_is_leader_unique_per_department(self, leader_agent, department):
         with pytest.raises(IntegrityError):
@@ -95,14 +102,22 @@ class TestAgentModel:
     def test_is_action_enabled_true(self, agent):
         assert agent.is_action_enabled("place-content") is True
 
-    def test_is_action_enabled_false(self, agent):
+    def test_is_action_enabled_false(self, department):
+        agent = Agent.objects.create(
+            name="No Auto",
+            agent_type="twitter",
+            department=department,
+            auto_approve=False,
+            status=Agent.Status.ACTIVE,
+        )
         assert agent.is_action_enabled("post-content") is False
 
-    def test_is_action_enabled_missing_key(self, agent):
-        assert agent.is_action_enabled("nonexistent") is False
+    def test_is_action_enabled_returns_auto_approve(self, agent):
+        assert agent.is_action_enabled("nonexistent") is True
 
     def test_get_blueprint_returns_correct_instance(self, agent):
         from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint
+
         bp = agent.get_blueprint()
         assert isinstance(bp, TwitterBlueprint)
 
@@ -173,9 +188,7 @@ class TestAgentTaskModel:
 
     @patch("agents.tasks.create_next_leader_task")
     @patch("agents.tasks.execute_agent_task")
-    def test_approve_triggers_create_next_leader_task_for_leaders(
-        self, mock_exec, mock_next, leader_agent
-    ):
+    def test_approve_triggers_create_next_leader_task_for_leaders(self, mock_exec, mock_next, leader_agent):
         task = AgentTask.objects.create(
             agent=leader_agent,
             status=AgentTask.Status.AWAITING_APPROVAL,

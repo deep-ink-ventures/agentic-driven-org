@@ -1,32 +1,34 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { connectWs } from "@/lib/ws";
 import type {
   ProjectDetail,
-  AgentTask,
   AgentSummary,
   DepartmentDetail,
   BlueprintInfo,
+  AvailableAgent,
 } from "@/lib/types";
+import { AddDepartmentWizard } from "@/components/add-department-wizard";
+import { TaskQueue } from "@/components/task-queue";
 import {
   Loader2,
   LayoutDashboard,
   ChevronLeft,
   Check,
-  X,
-  AlertCircle,
+  CheckCircle,
   ChevronDown,
   ChevronUp,
   ToggleLeft,
   ToggleRight,
   Save,
-  Pencil,
   FileText,
   Terminal,
   Settings2,
-  Clock,
+  Plus,
+  ListTodo,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -38,323 +40,75 @@ function slugifyName(name: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Status badge colours                                              */
-/* ------------------------------------------------------------------ */
-
-const statusColors: Record<AgentTask["status"], string> = {
-  awaiting_approval:
-    "bg-accent-gold/15 text-accent-gold border-accent-gold/30",
-  awaiting_dependencies: "bg-bg-surface text-text-secondary border-border",
-  planned: "bg-bg-surface text-text-secondary border-border",
-  queued: "bg-bg-surface text-text-secondary border-border",
-  processing: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  done: "bg-flag-strength/15 text-flag-strength border-flag-strength/30",
-  failed: "bg-flag-critical/15 text-flag-critical border-flag-critical/30",
-};
-
-/* ------------------------------------------------------------------ */
-/*  TaskCard                                                          */
-/* ------------------------------------------------------------------ */
-
-function TaskCard({
-  task,
-  projectId,
-  onUpdate,
-}: {
-  task: AgentTask;
-  projectId: string;
-  onUpdate: (t: AgentTask) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [acting, setActing] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [showPlan, setShowPlan] = useState(false);
-  const [editedPlan, setEditedPlan] = useState(task.step_plan);
-  const [editedSummary, setEditedSummary] = useState(task.exec_summary);
-
-  const isApproval = task.status === "awaiting_approval";
-  const hasEdits = editedPlan !== task.step_plan || editedSummary !== task.exec_summary;
-
-  async function handleApprove() {
-    setActing(true);
-    try {
-      const edits = hasEdits ? { step_plan: editedPlan, exec_summary: editedSummary } : undefined;
-      const updated = await api.approveTask(projectId, task.id, edits);
-      onUpdate(updated);
-      setEditing(false);
-    } finally {
-      setActing(false);
-    }
-  }
-
-  async function handleReject() {
-    setActing(true);
-    try {
-      const updated = await api.rejectTask(projectId, task.id);
-      onUpdate(updated);
-    } finally {
-      setActing(false);
-    }
-  }
-
-  return (
-    <div className="border border-border rounded-lg bg-bg-surface">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left"
-      >
-        <span
-          className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${statusColors[task.status]}`}
-        >
-          {task.status.replace("_", " ")}
-        </span>
-        <span className="text-xs text-text-secondary shrink-0">
-          {task.agent_name}
-        </span>
-        <span className="text-sm text-text-primary truncate flex-1">
-          {editing ? editedSummary : task.exec_summary}
-        </span>
-        <span className="text-xs text-text-secondary shrink-0">
-          {new Date(task.created_at).toLocaleTimeString()}
-        </span>
-        {expanded ? (
-          <ChevronUp className="h-3.5 w-3.5 text-text-secondary" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
-        )}
-      </button>
-
-      {expanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-          {/* Summary — editable for approval tasks */}
-          <div>
-            <p className="text-xs text-text-secondary mb-1">Summary</p>
-            {editing ? (
-              <Input
-                value={editedSummary}
-                onChange={(e) => setEditedSummary(e.target.value)}
-                className="bg-bg-input border-border text-text-primary text-sm"
-              />
-            ) : (
-              <p className="text-sm text-text-primary">{task.exec_summary}</p>
-            )}
-          </div>
-
-          {/* Plan — toggle visibility, editable for approval tasks */}
-          {(task.step_plan || editing) && (
-            <div>
-              {!editing && (
-                <button
-                  onClick={() => setShowPlan(!showPlan)}
-                  className="text-xs text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1 mb-2"
-                >
-                  {showPlan ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  {showPlan ? "Hide plan" : "Show plan"}
-                </button>
-              )}
-              {(showPlan || editing) && (
-                editing ? (
-                  <textarea
-                    value={editedPlan}
-                    onChange={(e) => setEditedPlan(e.target.value)}
-                    rows={Math.max(6, editedPlan.split("\n").length + 2)}
-                    className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-xs text-text-primary font-mono outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-y"
-                  />
-                ) : (
-                  <div
-                    onClick={isApproval ? () => setEditing(true) : undefined}
-                    className={`rounded-lg border border-dashed border-border p-3 text-sm text-text-primary max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&>*:last-child]:mb-0 ${isApproval ? "cursor-pointer hover:border-accent-gold/40 transition-colors" : ""}`}
-                  >
-                    <ReactMarkdown>{task.step_plan}</ReactMarkdown>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-
-          {/* Report — read only */}
-          {task.report && (
-            <div>
-              <p className="text-xs text-text-secondary mb-1">Report</p>
-              <pre className="text-xs text-text-primary whitespace-pre-wrap bg-bg-input rounded-lg p-3 border border-border">
-                {task.report}
-              </pre>
-            </div>
-          )}
-          {task.error_message && (
-            <div className="flex items-start gap-2 text-flag-critical text-xs p-2 rounded-lg bg-flag-critical/10">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              {task.error_message}
-            </div>
-          )}
-          {task.token_usage && (
-            <p className="text-[10px] text-text-secondary">
-              {task.token_usage.model} &middot;{" "}
-              {task.token_usage.input_tokens}&rarr;
-              {task.token_usage.output_tokens} tokens &middot; $
-              {task.token_usage.cost_usd.toFixed(4)}
-            </p>
-          )}
-
-          {/* Blocker info for awaiting_dependencies tasks */}
-          {task.status === "awaiting_dependencies" && task.blocked_by_summary && (
-            <div className="flex items-center gap-2 text-xs text-text-secondary p-2 rounded-lg bg-bg-input">
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>Waiting on: {task.blocked_by_summary}</span>
-            </div>
-          )}
-
-          {/* Actions for approval tasks */}
-          {isApproval && (
-            <div className="flex items-center gap-2 pt-1">
-              {!editing ? (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={handleApprove}
-                    disabled={acting}
-                    className="bg-flag-strength text-white hover:bg-flag-strength/90 text-xs h-8"
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditing(true)}
-                    className="border-border text-text-secondary hover:text-text-primary text-xs h-8"
-                  >
-                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleReject}
-                    disabled={acting}
-                    className="border-flag-critical/50 text-flag-critical hover:bg-flag-critical/10 text-xs h-8"
-                  >
-                    <X className="h-3.5 w-3.5 mr-1" /> Reject
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={handleApprove}
-                    disabled={acting}
-                    className="bg-flag-strength text-white hover:bg-flag-strength/90 text-xs h-8"
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1" /> {hasEdits ? "Approve with edits" : "Approve"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { setEditing(false); setEditedPlan(task.step_plan); setEditedSummary(task.exec_summary); }}
-                    className="border-border text-text-secondary hover:text-text-primary text-xs h-8"
-                  >
-                    Cancel
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  DashboardView                                                     */
-/* ------------------------------------------------------------------ */
-
-function DashboardView({
-  tasks,
-  projectId,
-  onTaskUpdate,
-}: {
-  tasks: AgentTask[];
-  projectId: string;
-  onTaskUpdate: (t: AgentTask) => void;
-}) {
-  const statusOrder: AgentTask["status"][] = [
-    "awaiting_approval",
-    "awaiting_dependencies",
-    "processing",
-    "queued",
-    "planned",
-    "done",
-    "failed",
-  ];
-
-  const sorted = [...tasks].sort(
-    (a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status),
-  );
-
-  return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-6">Task Queue</h2>
-      {sorted.length === 0 ? (
-        <p className="text-text-secondary text-sm py-10 text-center">
-          No tasks yet.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {sorted.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              projectId={projectId}
-              onUpdate={onTaskUpdate}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  AgentCard                                                         */
 /* ------------------------------------------------------------------ */
 
 function AgentCard({
   agent,
   onClick,
+  onToggle,
+  onToggleAutoApprove,
 }: {
   agent: AgentSummary;
   onClick: () => void;
+  onToggle?: () => void;
+  onToggleAutoApprove?: () => void;
 }) {
+  const clickable = agent.status === "active" || agent.status === "inactive";
+  const toggleable = agent.status === "active" || agent.status === "inactive";
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left border border-border rounded-lg bg-bg-surface hover:border-accent-gold/50 transition-colors p-4 group"
+    <div
+      onClick={clickable ? onClick : undefined}
+      className={`w-full text-left border border-border rounded-lg bg-bg-surface transition-colors p-4 group ${clickable ? "hover:border-accent-gold/50 cursor-pointer" : "opacity-60 cursor-default"}`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-text-heading group-hover:text-accent-gold transition-colors">
+        <span className="text-sm font-medium text-text-heading group-hover:text-accent-gold transition-colors truncate mr-2">
           {agent.name}
         </span>
-        <span
-          className={`text-[10px] px-1.5 py-0.5 rounded-full ${agent.is_active ? "bg-flag-strength/15 text-flag-strength" : "bg-bg-input text-text-secondary"}`}
-        >
-          {agent.is_active ? "Active" : "Inactive"}
-        </span>
-      </div>
-      {agent.tags && agent.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1">
-          {agent.tags.map((tag) => (
-            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
-              {tag}
+        <div className="flex items-center gap-2 shrink-0">
+          {agent.status === "provisioning" && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 animate-pulse">
+              Provisioning
             </span>
-          ))}
+          )}
+          {agent.status === "failed" && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-flag-critical/15 text-flag-critical">
+              Failed
+            </span>
+          )}
+          {toggleable && onToggle && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggle(); }}
+              className={`transition-colors ${agent.status === "active" ? "text-flag-strength" : "text-text-secondary/40 hover:text-flag-strength"}`}
+              title={agent.status === "active" ? "Deactivate" : "Activate"}
+            >
+              {agent.status === "active" ? (
+                <ToggleRight className="h-5 w-5" />
+              ) : (
+                <ToggleLeft className="h-5 w-5" />
+              )}
+            </button>
+          )}
         </div>
-      )}
-      {agent.pending_task_count > 0 && (
-        <p className="text-xs text-accent-gold mt-2">
-          {agent.pending_task_count} pending task
-          {agent.pending_task_count !== 1 ? "s" : ""}
-        </p>
-      )}
-    </button>
+      </div>
+      <div className="flex items-center justify-between mt-2">
+        {agent.pending_task_count > 0 ? (
+          <p className="text-xs text-accent-gold">
+            {agent.pending_task_count} pending task{agent.pending_task_count !== 1 ? "s" : ""}
+          </p>
+        ) : <div />}
+        {toggleable && onToggleAutoApprove && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleAutoApprove(); }}
+            className={`flex items-center gap-1 text-[10px] transition-colors ${agent.auto_approve ? "text-accent-gold" : "text-text-secondary/50 hover:text-accent-gold"}`}
+            title={agent.auto_approve ? "Disable auto-approve" : "Enable auto-approve"}
+          >
+            <CheckCircle className="h-3 w-3" />
+            <span>Auto</span>
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -364,17 +118,79 @@ function AgentCard({
 
 function DepartmentView({
   dept,
+  projectId,
   onSelectAgent,
+  onRefresh,
 }: {
   dept: DepartmentDetail;
+  projectId: string;
   onSelectAgent: (a: AgentSummary) => void;
+  onRefresh: () => void;
 }) {
   const leader = dept.agents.find((a) => a.is_leader);
   const workforce = dept.agents.filter((a) => !a.is_leader);
 
+  const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>([]);
+  const [provisioning, setProvisioning] = useState<Set<string>>(new Set());
+
+  async function toggleAgent(agent: AgentSummary) {
+    const newStatus = agent.status === "active" ? "inactive" : "active";
+    await api.updateAgent(agent.id, { status: newStatus });
+    onRefresh();
+  }
+
+  async function toggleAutoApprove(agent: AgentSummary) {
+    await api.updateAgent(agent.id, { auto_approve: !agent.auto_approve });
+    onRefresh();
+  }
+
+  async function toggleAllAutoApprove() {
+    if (activeAgents.length === 0) return;
+    const newValue = !deptAllApproved;
+    await Promise.all(activeAgents.map((a) => api.updateAgent(a.id, { auto_approve: newValue })));
+    onRefresh();
+  }
+
+  useEffect(() => {
+    api
+      .getAvailableAgents(projectId, dept.id)
+      .then((res) => setAvailableAgents(res.agents))
+      .catch(() => {});
+  }, [projectId, dept.id]);
+
+  async function handleAddAgent(agentType: string) {
+    setProvisioning((prev) => new Set(prev).add(agentType));
+    try {
+      await api.addAgent({ department_id: dept.id, agent_type: agentType });
+      setAvailableAgents((prev) => prev.filter((a) => a.agent_type !== agentType));
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setProvisioning((prev) => {
+        const next = new Set(prev);
+        next.delete(agentType);
+        return next;
+      });
+    }
+  }
+
+  const activeAgents = [...(leader ? [leader] : []), ...workforce].filter((a) => a.status === "active" || a.status === "inactive");
+  const deptAllApproved = activeAgents.length > 0 && activeAgents.every((a) => a.auto_approve);
+
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-2">{dept.display_name}</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-semibold">{dept.display_name}</h2>
+        {activeAgents.length > 0 && (
+          <button
+            onClick={toggleAllAutoApprove}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${deptAllApproved ? "border-accent-gold/30 bg-accent-gold/10 text-accent-gold" : "border-border bg-bg-surface text-text-secondary hover:text-accent-gold hover:border-accent-gold/30"}`}
+          >
+            <CheckCircle className="h-3.5 w-3.5" />
+            {deptAllApproved ? "Auto-approve on" : "Auto-approve all"}
+          </button>
+        )}
+      </div>
       {dept.description && (
         <p className="text-sm text-text-secondary mb-6">{dept.description}</p>
       )}
@@ -384,6 +200,8 @@ function DepartmentView({
           <AgentCard
             agent={leader}
             onClick={() => onSelectAgent(leader)}
+            onToggle={() => toggleAgent(leader)}
+            onToggleAutoApprove={() => toggleAutoApprove(leader)}
           />
         </div>
       )}
@@ -393,12 +211,68 @@ function DepartmentView({
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {workforce.map((agent) => (
-          <AgentCard
+          <div
             key={agent.id}
-            agent={agent}
-            onClick={() => onSelectAgent(agent)}
-          />
+            className={agent.status === "provisioning" ? "opacity-50 animate-pulse" : ""}
+          >
+            <AgentCard
+              agent={agent}
+              onClick={() => agent.status !== "provisioning" && onSelectAgent(agent)}
+              onToggle={() => toggleAgent(agent)}
+              onToggleAutoApprove={() => toggleAutoApprove(agent)}
+            />
+          </div>
         ))}
+      </div>
+
+      {availableAgents.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
+            Available Agents
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {availableAgents.map((agent) => {
+              const isProvisioning = provisioning.has(agent.agent_type);
+              return (
+                <div
+                  key={agent.agent_type}
+                  className="border border-dashed border-border rounded-lg bg-bg-surface p-4 flex flex-col gap-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-text-heading">
+                      {agent.name}
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAddAgent(agent.agent_type)}
+                      disabled={isProvisioning}
+                      className="h-7 text-xs bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50"
+                    >
+                      {isProvisioning ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          Add
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {agent.description && (
+                    <p className="text-xs text-text-secondary line-clamp-2">
+                      {agent.description}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Department task queue */}
+      <div className="mt-8">
+        <TaskQueue projectId={projectId} department={dept.id} />
       </div>
     </div>
   );
@@ -418,16 +292,13 @@ function AgentConfigEditor({
   onSaved: () => void;
 }) {
   const [config, setConfig] = useState(agent.config);
-  const [autoActions, setAutoActions] = useState(agent.auto_actions);
+  const [autoApprove, setAutoApprove] = useState(agent.auto_approve);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const schema = blueprint.config_schema as {
     required?: string[];
     properties?: Record<string, { type: string; description: string; title?: string }>;
-  };
-  const aaSchema = blueprint.auto_actions_schema as {
-    properties?: Record<string, unknown>;
   };
 
   const requiredKeys = new Set(schema?.required ?? []);
@@ -441,7 +312,7 @@ function AgentConfigEditor({
     try {
       await api.updateAgent(agent.id, {
         config,
-        auto_actions: autoActions,
+        auto_approve: autoApprove,
       });
       onSaved();
       setSaved(true);
@@ -452,10 +323,12 @@ function AgentConfigEditor({
   }
 
   async function toggleActive() {
-    if (!configComplete && !agent.is_active) return;
+    if (!configComplete && agent.status !== "active") return;
     setSaving(true);
     try {
-      await api.updateAgent(agent.id, { is_active: !agent.is_active });
+      await api.updateAgent(agent.id, {
+        status: agent.status === "active" ? "inactive" : "active",
+      });
       onSaved();
     } finally {
       setSaving(false);
@@ -468,9 +341,9 @@ function AgentConfigEditor({
       <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-bg-surface">
         <div>
           <p className="text-sm font-medium text-text-primary">
-            {agent.is_active ? "Agent is active" : "Agent is inactive"}
+            {agent.status === "active" ? "Agent is active" : "Agent is inactive"}
           </p>
-          {!configComplete && !agent.is_active && (
+          {!configComplete && agent.status !== "active" && (
             <p className="text-xs text-text-secondary mt-0.5">
               Fill in required configuration to activate
             </p>
@@ -478,10 +351,30 @@ function AgentConfigEditor({
         </div>
         <button
           onClick={toggleActive}
-          disabled={!configComplete && !agent.is_active}
-          className={`transition-colors ${agent.is_active ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
+          disabled={!configComplete && agent.status !== "active"}
+          className={`transition-colors ${agent.status === "active" ? "text-flag-strength" : configComplete ? "text-text-secondary hover:text-flag-strength" : "text-text-secondary/30 cursor-not-allowed"}`}
         >
-          {agent.is_active ? (
+          {agent.status === "active" ? (
+            <ToggleRight className="h-8 w-8" />
+          ) : (
+            <ToggleLeft className="h-8 w-8" />
+          )}
+        </button>
+      </div>
+
+      {/* Auto-approve all toggle */}
+      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-bg-surface">
+        <div>
+          <p className="text-sm font-medium text-text-primary">Auto-approve tasks</p>
+          <p className="text-xs text-text-secondary mt-0.5">
+            {autoApprove ? "All tasks execute without manual approval" : "Tasks require manual approval before execution"}
+          </p>
+        </div>
+        <button
+          onClick={() => setAutoApprove(!autoApprove)}
+          className={`transition-colors ${autoApprove ? "text-accent-gold" : "text-text-secondary hover:text-accent-gold"}`}
+        >
+          {autoApprove ? (
             <ToggleRight className="h-8 w-8" />
           ) : (
             <ToggleLeft className="h-8 w-8" />
@@ -536,65 +429,6 @@ function AgentConfigEditor({
         )}
 
       {/* Auto Approve Actions */}
-      {aaSchema?.properties &&
-        Object.keys(aaSchema.properties).length > 0 && (
-          <div>
-            <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
-              Auto Approve Actions
-            </h3>
-            <p className="text-[10px] text-text-secondary mb-3">
-              When enabled, tasks from these commands execute without manual approval.
-            </p>
-            <div className="space-y-3">
-              {Object.keys(aaSchema.properties).map((cmdName) => {
-                const enabled = autoActions[cmdName] ?? false;
-                const cmd = blueprint.commands.find(
-                  (c) => c.name === cmdName,
-                );
-                return (
-                  <div
-                    key={cmdName}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-bg-surface"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-text-primary font-medium">
-                          {cmdName}
-                        </span>
-                        {cmd?.schedule && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-input border border-border text-text-secondary">
-                            {cmd.schedule}
-                          </span>
-                        )}
-                      </div>
-                      {cmd?.description && (
-                        <p className="text-xs text-text-secondary mt-0.5 truncate">
-                          {cmd.description}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() =>
-                        setAutoActions({
-                          ...autoActions,
-                          [cmdName]: !enabled,
-                        })
-                      }
-                      className={`shrink-0 ml-3 ${enabled ? "text-flag-strength" : "text-text-secondary"} transition-colors`}
-                    >
-                      {enabled ? (
-                        <ToggleRight className="h-6 w-6" />
-                      ) : (
-                        <ToggleLeft className="h-6 w-6" />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
       <Button
         onClick={save}
         disabled={saving || saved}
@@ -622,6 +456,7 @@ function AgentConfigEditor({
 
 function AgentDetailView({
   agent,
+  projectId,
   onBack,
   onAgentUpdated,
 }: {
@@ -630,7 +465,7 @@ function AgentDetailView({
   onBack: () => void;
   onAgentUpdated: () => void;
 }) {
-  const [tab, setTab] = useState<"overview" | "instructions" | "config">(
+  const [tab, setTab] = useState<"overview" | "instructions" | "config" | "tasks">(
     "overview",
   );
   const [blueprint, setBlueprint] = useState<BlueprintInfo | null>(null);
@@ -657,6 +492,7 @@ function AgentDetailView({
 
   const tabs = [
     { key: "overview" as const, label: "Overview", icon: FileText },
+    { key: "tasks" as const, label: "Tasks", icon: ListTodo },
     { key: "instructions" as const, label: "Instructions", icon: Terminal },
     { key: "config" as const, label: "Config", icon: Settings2 },
   ];
@@ -819,6 +655,13 @@ function AgentDetailView({
           onSaved={onAgentUpdated}
         />
       )}
+
+      {/* Tasks tab */}
+      {tab === "tasks" && (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <TaskQueue projectId={projectId} agent={agent.id} />
+        </div>
+      )}
     </div>
   );
 }
@@ -836,9 +679,9 @@ export default function ProjectDetailPage() {
   const router = useRouter();
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"dashboard" | "department" | "agent">(
+  const [showAddDept, setShowAddDept] = useState(false);
+  const [view, setView] = useState<"dashboard" | "department" | "agent" | "settings">(
     "dashboard",
   );
   const [selectedDept, setSelectedDept] = useState<DepartmentDetail | null>(
@@ -883,10 +726,10 @@ export default function ProjectDetailPage() {
 
   const load = useCallback(() => {
     if (!projectSlug) return;
-    Promise.all([api.getProjectDetail(projectSlug), api.getProjectTasks(project?.id || projectSlug)])
-      .then(([proj, t]) => {
+    api
+      .getProjectDetail(projectSlug)
+      .then((proj) => {
         setProject(proj);
-        setTasks(t);
         setSelectedDept((prev) => {
           if (!prev) return prev;
           return proj.departments.find((d) => d.id === prev.id) ?? prev;
@@ -902,17 +745,56 @@ export default function ProjectDetailPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [projectSlug, project?.id]);
+  }, [projectSlug]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  function handleTaskUpdate(updated: AgentTask) {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === updated.id ? updated : t)),
-    );
-  }
+  // WebSocket for real-time agent status updates
+  const wsRef = useRef<WebSocket | null>(null);
+  useEffect(() => {
+    if (!project) return;
+    let cancelled = false;
+    connectWs(`/ws/project/${project.id}/`, (data) => {
+      if (data.type === "agent.status") {
+        const agentId = data.agent_id as string;
+        const newStatus = data.status as string;
+        setProject((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            departments: prev.departments.map((dept) => ({
+              ...dept,
+              agents: dept.agents.map((a) =>
+                a.id === agentId ? { ...a, status: newStatus as AgentSummary["status"] } : a,
+              ),
+            })),
+          };
+        });
+        setSelectedDept((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            agents: prev.agents.map((a) =>
+              a.id === agentId ? { ...a, status: newStatus as AgentSummary["status"] } : a,
+            ),
+          };
+        });
+        setSelectedAgent((prev) => {
+          if (!prev || prev.id !== agentId) return prev;
+          return { ...prev, status: newStatus as AgentSummary["status"] };
+        });
+      }
+    }).then((ws) => {
+      if (cancelled) { ws.close(); return; }
+      wsRef.current = ws;
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      wsRef.current?.close();
+    };
+  }, [project?.id]);
 
   if (loading) {
     return (
@@ -956,7 +838,7 @@ export default function ProjectDetailPage() {
             Departments
           </p>
           {project.departments.map((dept) => {
-            const activeCount = dept.agents.filter((a) => a.is_active).length;
+            const activeCount = dept.agents.filter((a) => a.status === "active").length;
             const totalCount = dept.agents.length;
             return (
               <button
@@ -981,25 +863,48 @@ export default function ProjectDetailPage() {
             );
           })}
         </div>
+        <div className="px-2 py-2 border-t border-border space-y-1">
+          <button
+            onClick={() => setShowAddDept(true)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Department
+          </button>
+          <button
+            onClick={() => {
+              setView("settings");
+              setSelectedDept(null);
+              setSelectedAgent(null);
+              router.push(`/project/${projectSlug}/settings`);
+            }}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+              view === "settings"
+                ? "text-accent-gold bg-accent-gold/10"
+                : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
+            }`}
+          >
+            <Settings2 className="h-4 w-4" />
+            Settings
+          </button>
+        </div>
       </div>
 
       {/* Main area */}
       <div className="flex-1 overflow-y-auto p-6">
         {view === "dashboard" && (
-          <DashboardView
-            tasks={tasks}
-            projectId={project.id}
-            onTaskUpdate={handleTaskUpdate}
-          />
+          <TaskQueue projectId={project.id} />
         )}
         {view === "department" && selectedDept && !selectedAgent && (
           <DepartmentView
             dept={selectedDept}
+            projectId={project.id}
             onSelectAgent={(agent) => {
               setSelectedAgent(agent);
               setView("agent");
               router.push(`/project/${projectSlug}/${selectedDept.department_type}/${slugifyName(agent.name)}`);
             }}
+            onRefresh={load}
           />
         )}
         {view === "agent" && selectedAgent && (
@@ -1014,7 +919,30 @@ export default function ProjectDetailPage() {
             onAgentUpdated={load}
           />
         )}
+        {view === "settings" && (
+          <div>
+            <h2 className="text-2xl font-semibold mb-4">Project Settings</h2>
+            <p className="text-sm text-text-secondary mb-6">
+              Configure project-level settings that apply to all departments.
+            </p>
+            <div className="rounded-lg border border-border bg-bg-surface p-6">
+              <p className="text-sm text-text-secondary">
+                Project configuration coming soon.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
+
+      <AddDepartmentWizard
+        projectId={project.id}
+        isOpen={showAddDept}
+        onClose={() => setShowAddDept(false)}
+        onAdded={() => {
+          setShowAddDept(false);
+          load();
+        }}
+      />
     </div>
   );
 }

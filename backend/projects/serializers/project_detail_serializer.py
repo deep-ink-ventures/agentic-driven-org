@@ -1,18 +1,56 @@
 from rest_framework import serializers
-from projects.models import Project, Department
+
 from agents.models import Agent
+from projects.models import Department, Project
+
+
+def _mask_value(val):
+    """Mask sensitive config values, showing only a prefix."""
+    if isinstance(val, str) and len(val) > 8:
+        return val[:4] + "********"
+    if isinstance(val, dict):
+        return {k: _mask_value(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_mask_value(v) for v in val]
+    return val
+
+
+def _mask_config(config: dict) -> dict:
+    """Mask all values in a config dict for safe API exposure."""
+    if not config:
+        return {}
+    return {k: _mask_value(v) for k, v in config.items()}
 
 
 class AgentSummarySerializer(serializers.ModelSerializer):
     pending_task_count = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
+    config = serializers.SerializerMethodField()
     effective_config = serializers.SerializerMethodField()
     config_source = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
-        fields = ["id", "name", "agent_type", "is_leader", "is_active", "instructions", "config", "auto_actions", "internal_state", "pending_task_count", "tags", "effective_config", "config_source", "created_at"]
+        fields = [
+            "id",
+            "name",
+            "agent_type",
+            "is_leader",
+            "status",
+            "instructions",
+            "config",
+            "auto_approve",
+            "internal_state",
+            "pending_task_count",
+            "tags",
+            "effective_config",
+            "config_source",
+            "created_at",
+        ]
         read_only_fields = fields
+
+    def get_config(self, obj):
+        return _mask_config(obj.config)
 
     def get_pending_task_count(self, obj):
         return obj.tasks.filter(status="awaiting_approval").count()
@@ -32,7 +70,7 @@ class AgentSummarySerializer(serializers.ModelSerializer):
         if obj.department.config:
             merged.update(obj.department.config)
         merged.update(obj.config)
-        return merged
+        return _mask_config(merged)
 
     def get_config_source(self, obj):
         sources = {}
@@ -58,7 +96,17 @@ class DepartmentDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Department
-        fields = ["id", "department_type", "name", "display_name", "description", "agents", "config", "config_schema", "created_at"]
+        fields = [
+            "id",
+            "department_type",
+            "name",
+            "display_name",
+            "description",
+            "agents",
+            "config",
+            "config_schema",
+            "created_at",
+        ]
         read_only_fields = fields
 
     def get_display_name(self, obj):
@@ -66,11 +114,13 @@ class DepartmentDetailSerializer(serializers.ModelSerializer):
 
     def get_description(self, obj):
         from agents.blueprints import DEPARTMENTS
+
         dept = DEPARTMENTS.get(obj.department_type)
         return dept["description"] if dept else ""
 
     def get_config_schema(self, obj):
         from agents.blueprints import get_department_config_schema
+
         return get_department_config_schema(obj.department_type)
 
 

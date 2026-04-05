@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-size: 13px;
+    }
+    .header {
+      padding: 16px;
+      border-bottom: 1px solid #1a1a2e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #d4a843;
+    }
+    .header .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #444;
+    }
+    .header .dot.connected { background: #4ade80; }
+
+    .section {
+      padding: 16px;
+      border-bottom: 1px solid #1a1a2e;
+    }
+    .section:last-child { border-bottom: none; }
+
+    label {
+      display: block;
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    input {
+      width: 100%;
+      padding: 8px 10px;
+      background: #12121f;
+      border: 1px solid #1a1a2e;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus { border-color: #d4a843; }
+    input + input { margin-top: 8px; }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-primary {
+      background: #d4a843;
+      color: #0a0a0f;
+    }
+    .btn-save {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border: 1px solid #2a2a3e;
+    }
+
+    .platform-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #12121f;
+      border: 1px solid #1a1a2e;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .platform-badge .icon { font-size: 16px; }
+
+    .status {
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-top: 10px;
+      display: none;
+    }
+    .status.success {
+      display: block;
+      background: #0f2b1a;
+      border: 1px solid #166534;
+      color: #4ade80;
+    }
+    .status.error {
+      display: block;
+      background: #2b0f0f;
+      border: 1px solid #7f1d1d;
+      color: #f87171;
+    }
+    .status.info {
+      display: block;
+      background: #0f1a2b;
+      border: 1px solid #1e3a5f;
+      color: #60a5fa;
+    }
+
+    .no-platform {
+      color: #666;
+      font-size: 12px;
+      text-align: center;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="dot" id="statusDot"></div>
+    <h1>Agentic Session Sync</h1>
+  </div>
+
+  <!-- Setup section -->
+  <div class="section" id="setupSection">
+    <label>Backend URL</label>
+    <input type="text" id="backendUrl" placeholder="https://your-app.com or http://localhost:8000">
+    <label style="margin-top: 10px;">Pairing Token</label>
+    <input type="text" id="pairingToken" placeholder="Paste token from project settings">
+    <button class="btn-save" id="saveConfigBtn">Save</button>
+    <div class="status" id="setupStatus"></div>
+  </div>
+
+  <!-- Sync section -->
+  <div class="section" id="syncSection" style="display:none;">
+    <div id="platformInfo"></div>
+    <button class="btn-primary" id="syncBtn" disabled>Sync Cookies</button>
+    <div class="status" id="syncStatus"></div>
+  </div>
+
+  <script src="platforms.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

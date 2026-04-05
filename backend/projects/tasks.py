@@ -1,4 +1,4 @@
-import json
+import contextlib
 import logging
 
 from celery import shared_task
@@ -6,15 +6,86 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=1, default_retry_delay=30)
+def _context_section(context: str) -> str:
+    if not context:
+        return ""
+    return f"## Additional Context\n{context}"
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=10)
+def summarize_source(self, source_id: str):
+    """Generate a comprehensive summary of a source document using Claude."""
+    from agents.ai.claude_client import call_claude
+    from projects.models import Source
+
+    try:
+        source = Source.objects.get(id=source_id)
+    except Source.DoesNotExist:
+        logger.error("Source %s not found", source_id)
+        return
+
+    text = source.extracted_text or source.raw_content or ""
+    if not text:
+        return
+
+    # Short texts don't need summarization — use as-is
+    if len(text) < 3000:
+        source.summary = text
+        source.save(update_fields=["summary"])
+        return
+
+    try:
+        response, _usage = call_claude(
+            system_prompt=(
+                "You are a document analyst. Produce a comprehensive summary that preserves ALL key information. "
+                "This summary will be used by AI agents as their ONLY access to this document, so nothing important "
+                "can be lost. Include: main themes, specific names/places/dates, key arguments, data points, "
+                "creative details (characters, settings, plot points), and any instructions or requirements. "
+                "Write in the same language as the source. Be thorough — 500-2000 words depending on document length."
+            ),
+            user_message=f"Summarize this document comprehensively. Preserve all key details.\n\n{text}",
+            max_tokens=4096,
+        )
+        source.summary = response.strip()
+        source.save(update_fields=["summary"])
+        logger.info(
+            "Summarized source %s (%d chars → %d chars)",
+            source.original_filename or source.id,
+            len(text),
+            len(source.summary),
+        )
+    except Exception as e:
+        logger.warning("summarize_source attempt %d failed: %s", self.request.retries + 1, e)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e) from e
+        logger.exception("Failed to summarize source %s", source_id)
+
+
+def get_sources_context(project) -> str:
+    """Get source context for prompts — uses summaries when available, full text when short."""
+    from projects.models import Source
+
+    sources_text = ""
+    for s in Source.objects.filter(project=project):
+        text = s.summary or s.extracted_text or s.raw_content or ""
+        if not text:
+            continue
+        name = s.original_filename or s.url or "Text input"
+        sources_text += f"\n### {name}\n{text}\n"
+    return sources_text
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
 def bootstrap_project(self, proposal_id: str):
     """
     Analyze project sources with Claude and generate a bootstrap proposal.
     """
+    import re
+
+    from agents.ai.claude_client import stream_claude
+    from agents.blueprints import DEPARTMENTS
     from projects.models import BootstrapProposal, Source
     from projects.prompts import BOOTSTRAP_SYSTEM_PROMPT, build_bootstrap_user_message
-    from agents.ai.claude_client import call_claude
-    from agents.blueprints import DEPARTMENTS
 
     try:
         proposal = BootstrapProposal.objects.select_related("project").get(id=proposal_id)
@@ -29,26 +100,21 @@ def bootstrap_project(self, proposal_id: str):
     _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Gathering sources")
 
     try:
-        # Gather sources
-        sources = Source.objects.filter(project=project)
-        if not sources.exists():
-            raise ValueError("No sources found for this project")
-
+        # Gather sources (optional — bootstrap can work with just a goal)
         source_data = []
-        for s in sources:
-            text = s.extracted_text or s.raw_content or ""
+        for s in Source.objects.filter(project=project):
+            text = s.summary or s.extracted_text or s.raw_content or ""
             if not text:
                 continue
             name = s.original_filename or s.url or "Text input"
-            source_data.append({
-                "id": str(s.id),
-                "name": name,
-                "source_type": s.source_type,
-                "text": text,
-            })
-
-        if not source_data:
-            raise ValueError("No sources with extracted text found")
+            source_data.append(
+                {
+                    "id": str(s.id),
+                    "name": name,
+                    "source_type": s.source_type,
+                    "text": text,
+                }
+            )
 
         _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Mapping your project")
 
@@ -59,12 +125,14 @@ def bootstrap_project(self, proposal_id: str):
                 {"slug": slug, "name": bp.name, "description": bp.description}
                 for slug, bp in dept_config["workforce"].items()
             ]
-            available_departments.append({
-                "slug": dept_slug,
-                "name": dept_config["name"],
-                "description": dept_config["description"],
-                "workforce": workforce,
-            })
+            available_departments.append(
+                {
+                    "slug": dept_slug,
+                    "name": dept_config["name"],
+                    "description": dept_config["description"],
+                    "workforce": workforce,
+                }
+            )
 
         # Build prompt
         user_message = build_bootstrap_user_message(
@@ -74,18 +142,84 @@ def bootstrap_project(self, proposal_id: str):
             available_departments=available_departments,
         )
 
-        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Building your project structure")
+        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Analyzing your project")
 
-        # Call Claude
-        response, _usage = call_claude(
+        # Stream Claude with time-based phases + content detection
+        seen_names = set()
+        events = []
+        max_tokens = 4096
+        last_broadcast_len = 0
+        import time
+
+        stream_start = time.monotonic()
+
+        # Time-based phases so the user always sees movement
+        TIMED_PHASES = [
+            (0, "Analyzing sources"),
+            (5, "Understanding project goals"),
+            (15, "Building department structure"),
+            (30, "Selecting agents"),
+            (60, "Generating instructions"),
+            (90, "Writing initial documents"),
+            (120, "Finalizing proposal"),
+        ]
+
+        # Detect department types and agent types in streaming JSON
+        dept_type_re = re.compile(r'"department_type"\s*:\s*"([^"]+)"')
+        agent_type_re = re.compile(r'"agent_type"\s*:\s*"([^"]+)"')
+
+        def on_progress(accumulated: str, tokens_so_far: int):
+            nonlocal last_broadcast_len
+            if len(accumulated) - last_broadcast_len < 200:
+                return
+            last_broadcast_len = len(accumulated)
+
+            elapsed = time.monotonic() - stream_start
+
+            # Detect departments and agents by their type slugs (reliable, not name-based)
+            for match in dept_type_re.finditer(accumulated):
+                slug = match.group(1)
+                label = f"{slug.replace('_', ' ').title()} department"
+                if label not in seen_names:
+                    seen_names.add(label)
+                    events.append(label)
+            for match in agent_type_re.finditer(accumulated):
+                slug = match.group(1)
+                label = slug.replace("_", " ").title()
+                if label not in seen_names:
+                    seen_names.add(label)
+                    events.append(label)
+
+            # Phase: use content-detected events if available, otherwise time-based
+            if events:
+                current_phase = f"Adding {events[-1]}"
+            else:
+                current_phase = "Analyzing sources"
+                for threshold, phase_text in TIMED_PHASES:
+                    if elapsed >= threshold:
+                        current_phase = phase_text
+
+            _broadcast_bootstrap(
+                project.id,
+                proposal.id,
+                "processing",
+                phase=current_phase,
+                events=events[:],
+            )
+
+        response, _usage = stream_claude(
             system_prompt=BOOTSTRAP_SYSTEM_PROMPT,
             user_message=user_message,
-            max_tokens=8192,
+            max_tokens=max_tokens,
+            on_progress=on_progress,
         )
 
-        _broadcast_bootstrap(project.id, proposal.id, "processing", phase="Validating proposal")
+        _broadcast_bootstrap(
+            project.id, proposal.id, "processing", phase="Validating proposal", progress=98, events=events[:]
+        )
 
         from agents.ai.claude_client import parse_json_response
+
         proposal_data = parse_json_response(response)
         if proposal_data is None:
             raise ValueError(f"Failed to parse Claude response as JSON: {response[:200]}")
@@ -106,7 +240,12 @@ def bootstrap_project(self, proposal_id: str):
         _broadcast_bootstrap(project.id, proposal.id, "proposed")
 
     except Exception as e:
-        logger.exception("Bootstrap failed for project %s: %s", project.name, e)
+        logger.warning("bootstrap_project attempt %d failed: %s", self.request.retries + 1, e)
+        if self.request.retries < self.max_retries:
+            proposal.status = BootstrapProposal.Status.PENDING
+            proposal.save(update_fields=["status", "updated_at"])
+            raise self.retry(exc=e) from e
+        logger.exception("Bootstrap failed for project %s after %d retries", project.name, self.max_retries)
         proposal.status = BootstrapProposal.Status.FAILED
         proposal.error_message = str(e)[:1000]
         proposal.save(update_fields=["status", "error_message", "updated_at"])
@@ -121,7 +260,9 @@ def recover_stuck_proposals():
     - processing for >5min: reset to pending and dispatch (task likely crashed)
     """
     from datetime import timedelta
+
     from django.utils import timezone
+
     from projects.models import BootstrapProposal
 
     now = timezone.now()
@@ -152,7 +293,9 @@ def recover_stuck_proposals():
 def archive_stale_documents():
     """Daily: archive research documents older than 30 days."""
     from datetime import timedelta
+
     from django.utils import timezone
+
     from projects.models import Document
 
     cutoff = timezone.now() - timedelta(days=30)
@@ -166,7 +309,9 @@ def archive_stale_documents():
         logger.info("Archived %d stale research documents", count)
 
 
-def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_message="", phase=""):
+def _broadcast_bootstrap(
+    project_id, proposal_id, bootstrap_status, error_message="", phase="", progress=0, events=None
+):
     """Send bootstrap status update via WebSocket."""
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
@@ -181,7 +326,532 @@ def _broadcast_bootstrap(project_id, proposal_id, bootstrap_status, error_messag
                 "proposal_id": str(proposal_id),
                 "error_message": error_message,
                 "phase": phase,
+                "progress": progress,
+                "events": events or [],
             },
         )
     except Exception:
         logger.exception("Failed to broadcast bootstrap status")
+
+
+CONFIGURE_LEADER_SYSTEM_PROMPT = """You are a senior project strategist writing the operating manual for a department leader AI agent.
+
+Respond with valid JSON only. No markdown fences, no explanation.
+
+## What leader instructions must contain
+
+The leader reads these instructions before every decision — proposing tasks, reviewing output, delegating work. They must be rich enough to run the department autonomously:
+
+1. **Project context**: What is this project about? What are the key themes, characters, goals, constraints? Reference specific details from the sources — not generic descriptions.
+2. **Department mission**: What does this department own? What does success look like?
+3. **Quality bar**: What separates good output from bad in this project? What tone, style, and standards apply?
+4. **Strategic priorities**: What should the department focus on first? What's the roadmap?
+5. **Workforce overview**: How should the leader use each agent? What's the workflow?
+6. **Output language**: All work must be in the detected language.
+
+Write 4-6 substantial paragraphs. Think of this as a creative brief + operating manual combined.
+
+## Rules
+
+1. Write in the project's language (detect from goal and sources).
+2. Detect the locale using ISO codes (e.g. "de", "en", "fr").
+3. Reference specific details from the source materials — generic instructions will be rejected.
+
+## Response JSON Schema
+
+{"leader_instructions": "4-6 paragraphs of detailed, project-specific instructions...", "locale": "de"}"""
+
+
+GENERATE_DOCUMENTS_SYSTEM_PROMPT = """You are a senior project strategist creating foundational documents for a department in an AI agent platform. These documents are the department's knowledge base — agents read them to understand the project and do their work.
+
+Respond with valid JSON only. No markdown fences, no explanation.
+
+## Rules
+
+1. Each document must be rich, thorough, and grounded in the project's actual source materials.
+2. Reference specific details from the sources — characters, themes, settings, market data, goals, constraints.
+3. Documents should be substantial (1000-3000 words each) — not bullet-point summaries but real working documents.
+4. Write in the project's language (specified in the prompt).
+5. Generate 2-4 documents appropriate for the department's function.
+6. Avoid overlap with other departments' responsibilities.
+7. Use markdown formatting with clear structure, headers, and sections.
+
+## Document Quality Bar
+
+Bad: "This document outlines the marketing strategy for the project."
+Good: A 2000-word strategy document with specific competitive analysis, target audience segments, positioning, and actionable recommendations grounded in the source material.
+
+## Response JSON Schema
+
+{
+    "documents": [
+        {
+            "title": "Document Title",
+            "content": "Thorough markdown content grounded in project sources...",
+            "tags": ["tag1", "tag2"]
+        }
+    ]
+}"""
+
+
+RECOMMEND_DEPARTMENTS_SYSTEM_PROMPT = """You are a project setup analyst for an AI agent platform. Given a project's context, recommend which departments and agents would be most valuable.
+
+You MUST respond with valid JSON. No markdown, no explanation outside the JSON.
+
+## Rules
+
+1. Only recommend department types and agent types from the AVAILABLE list provided.
+2. Consider the project's domain, goals, and existing setup.
+3. Focus on creative/production agents — essential and controller agents are auto-included by the system.
+4. Leaders are auto-created — do NOT include leaders.
+
+## Response JSON Schema
+
+{
+    "departments": ["department_type_slug", ...],
+    "agents": {
+        "department_type_slug": ["agent_type_slug", ...],
+        ...
+    }
+}"""
+
+
+def get_department_recommendations(project) -> dict:
+    """Call Claude to get department and agent recommendations for a project."""
+    from agents.ai.claude_client import call_claude, parse_json_response
+    from agents.blueprints import DEPARTMENTS, get_workforce_metadata
+
+    sources_summary = get_sources_context(project)
+
+    installed = set(project.departments.values_list("department_type", flat=True))
+
+    available_text = ""
+    for slug, dept in DEPARTMENTS.items():
+        if slug in installed:
+            continue
+        metadata = get_workforce_metadata(slug)
+        agents_text = "\n".join(f"  - **{m['agent_type']}** ({m['name']}): {m['description']}" for m in metadata)
+        available_text += f"\n### {slug} — {dept['name']}\n{dept['description']}\n{agents_text}\n"
+
+    if not available_text:
+        return {"departments": [], "agents": {}}
+
+    user_message = f"""# Project: {project.name}
+
+<project_goal>
+{project.goal or "No goal set."}
+</project_goal>
+
+## Sources Summary
+<sources>
+{sources_summary or "No sources available."}
+</sources>
+
+## Available Departments and Agents
+{available_text}
+
+Recommend which departments and agents to activate. Respond with JSON only."""
+
+    response, _usage = call_claude(
+        system_prompt=RECOMMEND_DEPARTMENTS_SYSTEM_PROMPT,
+        user_message=user_message,
+        max_tokens=2048,
+    )
+
+    result = parse_json_response(response)
+    if result is None:
+        return {"departments": [], "agents": {}}
+    return result
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
+def configure_new_department(self, department_id: str, context: str = ""):
+    """Configure a department: leader instructions via Claude, then fan out agent + document tasks."""
+    from agents.ai.claude_client import call_claude, parse_json_response
+    from agents.blueprints import DEPARTMENTS
+    from agents.models import Agent
+    from projects.models import Department
+
+    try:
+        department = Department.objects.select_related("project").get(id=department_id)
+    except Department.DoesNotExist:
+        logger.error("Department %s not found", department_id)
+        return
+
+    project = department.project
+    department_type = department.department_type
+
+    if department_type not in DEPARTMENTS:
+        logger.error("Unknown department type: %s", department_type)
+        return
+
+    dept_config = DEPARTMENTS[department_type]
+    _broadcast_department(project.id, department_id, "configuring", phase="Generating leader instructions")
+
+    try:
+        # 1. Build rich context for leader instructions
+        sources_summary = get_sources_context(project)
+
+        # Get the leader blueprint's built-in system prompt
+        leader_bp = dept_config["leader"]
+        leader_system_prompt = ""
+        with contextlib.suppress(Exception):
+            leader_system_prompt = leader_bp.system_prompt[:3000] if hasattr(leader_bp, "system_prompt") else ""
+
+        # Get workforce agent descriptions
+        from agents.blueprints import get_workforce_for_department
+
+        workforce = get_workforce_for_department(department_type)
+        workforce_text = ""
+        for slug, bp in workforce.items():
+            cmds = bp.get_commands() if bp else []
+            cmd_names = ", ".join(c["name"] for c in cmds) if cmds else "none"
+            workforce_text += f"- **{slug}** ({bp.name}): {bp.description}. Commands: {cmd_names}\n"
+
+        user_message = f"""# Project: {project.name}
+
+<project_goal>
+{project.goal or "No goal set."}
+</project_goal>
+
+## Sources
+<sources>
+{sources_summary or "No sources available."}
+</sources>
+
+## Department: {dept_config['name']}
+{dept_config['description']}
+
+## Leader's Built-in System Prompt (for context)
+<leader_prompt>
+{leader_system_prompt or "Not available."}
+</leader_prompt>
+
+## Workforce Agents this Leader Manages
+{workforce_text or "No workforce agents."}
+
+{_context_section(context)}
+
+Write comprehensive leader instructions for this department. The leader uses these instructions to decide what tasks to create and how to coordinate the workforce."""
+
+        # 2. Claude call for leader instructions
+        response, _usage = call_claude(
+            system_prompt=CONFIGURE_LEADER_SYSTEM_PROMPT,
+            user_message=user_message,
+            max_tokens=4096,
+        )
+
+        result = parse_json_response(response)
+        leader_instructions = result.get("leader_instructions", "") if result else ""
+
+        # 3. Set department-level locale from detected language
+        locale = result.get("locale") if result else None
+        if locale:
+            dept_config = department.config or {}
+            dept_config["locale"] = locale
+            department.config = dept_config
+            department.save(update_fields=["config"])
+
+        # 4. Update or create leader
+        leader = department.agents.filter(is_leader=True).first()
+        if leader:
+            if leader_instructions:
+                leader.instructions = leader_instructions
+            leader.status = Agent.Status.INACTIVE
+            leader.save(update_fields=["instructions", "status", "updated_at"])
+            _broadcast_agent(project.id, department.id, leader.id, leader.status)
+        else:
+            leader = Agent.objects.create(
+                name=f"Head of {department.name}",
+                agent_type="leader",
+                department=department,
+                is_leader=True,
+                status=Agent.Status.INACTIVE,
+                instructions=leader_instructions
+                or f"Lead the {department.name} department for project: {project.name}.",
+            )
+            _broadcast_agent(project.id, department.id, leader.id, leader.status)
+
+        # 4. Fan out per-agent provisioning tasks
+        provisioning_agents = department.agents.filter(is_leader=False, status=Agent.Status.PROVISIONING)
+        for agent in provisioning_agents:
+            provision_single_agent.delay(str(agent.id))
+
+        # 5. Fan out document generation
+        generate_department_documents.delay(str(department.id), context)
+
+        _broadcast_department(project.id, department_id, "configured")
+        logger.info("Department %s configured, %d agents queued", department.name, provisioning_agents.count())
+
+    except Exception as e:
+        logger.warning("configure_new_department attempt %d failed: %s", self.request.retries + 1, e)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e) from e
+        # Final failure — mark leader as failed, leave agents as provisioning
+        # Do NOT fan out agents here — locale may not be set, they'd get wrong language
+        logger.exception("Failed to configure department %s after %d retries", department_id, self.max_retries)
+        leader = department.agents.filter(is_leader=True, status=Agent.Status.PROVISIONING).first()
+        if leader:
+            leader.status = Agent.Status.FAILED
+            leader.save(update_fields=["status"])
+            _broadcast_agent(project.id, department.id, leader.id, "failed", str(e)[:200])
+        _broadcast_department(project.id, department_id, "failed", error_message=str(e)[:200])
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
+def generate_department_documents(self, department_id: str, context: str = ""):
+    """Generate initial documents for a department via Claude."""
+    from agents.ai.claude_client import call_claude, parse_json_response
+    from agents.blueprints import DEPARTMENTS
+    from projects.models import Department, Document, Tag
+
+    try:
+        department = Department.objects.select_related("project").get(id=department_id)
+    except Department.DoesNotExist:
+        logger.error("Department %s not found", department_id)
+        return
+
+    project = department.project
+    department_type = department.department_type
+
+    if department_type not in DEPARTMENTS:
+        return
+
+    dept_config = DEPARTMENTS[department_type]
+
+    try:
+        sources_summary = get_sources_context(project)
+
+        existing_departments = []
+        for dept in project.departments.exclude(id=department.id).prefetch_related("agents"):
+            agents = [{"name": a.name, "agent_type": a.agent_type} for a in dept.agents.all()]
+            existing_departments.append({"name": dept.name, "agents": agents})
+
+        existing_text = ""
+        for ed in existing_departments:
+            existing_text += f"\n### {ed['name']}\n"
+            for a in ed["agents"]:
+                existing_text += f"- {a['name']} ({a['agent_type']})\n"
+
+        # Get locale from department config (set by configure_new_department)
+        locale = (department.config or {}).get("locale", "en")
+
+        # Get list of agents in this department for context
+        dept_agents = [
+            {
+                "name": a.name,
+                "type": a.agent_type,
+                "description": a.get_blueprint().description if a.get_blueprint() else "",
+            }
+            for a in department.agents.filter(is_leader=False)
+        ]
+        agents_text = "\n".join(f"- {a['name']} ({a['type']}): {a['description']}" for a in dept_agents)
+
+        user_message = f"""# Project: {project.name}
+
+<project_goal>
+{project.goal or "No goal set."}
+</project_goal>
+
+## Sources
+<sources>
+{sources_summary or "No sources available."}
+</sources>
+
+## Department: {dept_config['name']}
+{dept_config['description']}
+
+## Agents in this Department
+{agents_text or "No agents yet."}
+
+## Existing Departments
+{existing_text or "None"}
+
+{_context_section(context)}
+
+## Output Language: {locale}
+
+Generate foundational documents for this department. These documents will be read by the agents listed above to inform their work. They must be written in {locale} and reference specific details from the project sources — not generic templates.
+
+For a writers room: think series bible, character profiles, world-building guide, thematic framework.
+For engineering: think architecture decisions, coding standards, API contracts.
+For marketing: think brand guidelines, audience profiles, channel strategy."""
+
+        response, _usage = call_claude(
+            system_prompt=GENERATE_DOCUMENTS_SYSTEM_PROMPT,
+            user_message=user_message,
+            max_tokens=16384,
+        )
+
+        result = parse_json_response(response)
+        if not result:
+            logger.warning("Failed to parse documents response for department %s", department_id)
+            return
+
+        for doc_data in result.get("documents", []):
+            doc = Document.objects.create(
+                title=doc_data.get("title", "Untitled"),
+                content=doc_data.get("content", ""),
+                department=department,
+            )
+            for tag_name in doc_data.get("tags", []):
+                tag, _ = Tag.objects.get_or_create(name=tag_name.lower())
+                doc.tags.add(tag)
+
+        logger.info("Generated %d documents for department %s", len(result.get("documents", [])), department.name)
+
+    except Exception as e:
+        logger.warning("generate_department_documents attempt %d failed: %s", self.request.retries + 1, e)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e) from e
+        logger.exception(
+            "Failed to generate documents for department %s after %d retries", department_id, self.max_retries
+        )
+
+
+def _broadcast_agent(project_id, department_id, agent_id, agent_status, error_message=""):
+    """Send agent provisioning status update via WebSocket."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"project_{project_id}",
+            {
+                "type": "agent.status",
+                "agent_id": str(agent_id),
+                "department_id": str(department_id),
+                "status": agent_status,
+                "error_message": error_message,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast agent status")
+
+
+def _broadcast_department(project_id, department_id, dept_status, error_message="", phase=""):
+    """Send department configuration status update via WebSocket."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"project_{project_id}",
+            {
+                "type": "department.status",
+                "department_id": str(department_id),
+                "status": dept_status,
+                "error_message": error_message,
+                "phase": phase,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast department status")
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
+def provision_single_agent(self, agent_id: str):
+    """Generate tailored instructions for a single agent using Claude."""
+    from agents.ai.claude_client import call_claude, parse_json_response
+    from agents.models import Agent
+
+    try:
+        agent = Agent.objects.select_related("department__project").get(id=agent_id)
+    except Agent.DoesNotExist:
+        logger.error("Agent %s not found", agent_id)
+        return
+
+    department = agent.department
+    project = department.project
+    bp = agent.get_blueprint()
+
+    _broadcast_agent(project.id, department.id, agent_id, "provisioning")
+
+    try:
+        sources_summary = get_sources_context(project)
+
+        # Get the agent's locale from department config cascade
+        locale = agent.get_config_value("locale") or "en"
+
+        # Get the blueprint's actual system prompt for context
+        bp_system_prompt = ""
+        with contextlib.suppress(Exception):
+            bp_system_prompt = bp.system_prompt[:2000] if hasattr(bp, "system_prompt") else ""
+
+        user_message = f"""# Project: {project.name}
+
+<project_goal>
+{project.goal or "No goal set."}
+</project_goal>
+
+## Sources
+<sources>
+{sources_summary or "No sources available."}
+</sources>
+
+## Department: {department.name}
+Locale: {locale}
+
+## Agent to Configure
+- Type: {agent.agent_type}
+- Name: {bp.name}
+- Description: {bp.description}
+
+## Agent's Built-in System Prompt (for context — this is what the agent sees when executing tasks):
+<system_prompt>
+{bp_system_prompt or "Not available."}
+</system_prompt>
+
+## Your Task
+
+Write the agent's project-specific instructions. These instructions are prepended to every task the agent executes. They must:
+
+1. Ground the agent in THIS project — reference specific characters, settings, themes, plot arcs, tone references from the sources
+2. Define what this specific agent owns and delivers (not generic role descriptions)
+3. Set the quality bar — what "good" looks like for this agent's output in this project
+4. Specify the output language as {locale}
+5. Be written in {locale}
+
+Bad example: "Du recherchierst marktrelevante Grundlagen für die Serie."
+Good example: "Du recherchierst den Berliner Immobilienmarkt als Serienkulisse — insbesondere die Verflechtung von Politik, Bankenwesen und Familienimperien. Deine Kernaufgabe ist..."
+
+Write 3-5 substantial paragraphs. Also suggest a display name in {locale}.
+
+Respond with JSON only, no markdown fences:
+{{"instructions": "detailed project-specific instructions in {locale}...", "name": "Display Name in {locale}"}}"""
+
+        response, _usage = call_claude(
+            system_prompt=(
+                "You are a senior creative writing consultant configuring AI agents for a writers room. "
+                "Your job: write project-specific instructions that make each agent deeply knowledgeable about "
+                "THIS project's world, characters, themes, and goals. Generic role descriptions are unacceptable — "
+                "every instruction must reference concrete details from the source materials. "
+                "Write in the project's language. Respond with valid JSON only, no markdown fences."
+            ),
+            user_message=user_message,
+            max_tokens=4096,
+        )
+
+        result = parse_json_response(response)
+        if result:
+            if result.get("instructions"):
+                agent.instructions = result["instructions"]
+            if result.get("name"):
+                agent.name = result["name"]
+
+        agent.status = Agent.Status.INACTIVE
+        agent.save(update_fields=["instructions", "name", "status", "updated_at"])
+
+        _broadcast_agent(project.id, department.id, agent_id, agent.status)
+        logger.info("Agent %s provisioned for department %s", agent.name, department.name)
+
+    except Exception as e:
+        logger.warning("provision_single_agent attempt %d failed for %s: %s", self.request.retries + 1, agent_id, e)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e) from e
+        logger.exception("Failed to provision agent %s after %d retries", agent_id, self.max_retries)
+        agent.status = Agent.Status.FAILED
+        agent.save(update_fields=["status", "updated_at"])
+        _broadcast_agent(project.id, department.id, agent_id, "failed", str(e)[:200])

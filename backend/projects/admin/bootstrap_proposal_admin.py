@@ -4,9 +4,9 @@ import logging
 from django.contrib import admin
 from django.utils.html import format_html
 
-from projects.models import BootstrapProposal, Department, Document, Tag
-from agents.models import Agent
 from agents.blueprints import DEPARTMENTS, get_workforce_for_department
+from agents.models import Agent
+from projects.models import BootstrapProposal, Department, Document, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,15 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
     list_display = ("project", "status", "cost_display", "created_at", "updated_at")
     list_filter = ("status",)
     search_fields = ("project__name",)
-    readonly_fields = ("id", "project", "proposal_formatted", "token_usage", "error_message", "created_at", "updated_at")
+    readonly_fields = (
+        "id",
+        "project",
+        "proposal_formatted",
+        "token_usage",
+        "error_message",
+        "created_at",
+        "updated_at",
+    )
     ordering = ("-created_at",)
     fieldsets = (
         (None, {"fields": ("id", "project", "status")}),
@@ -61,12 +69,15 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
     @admin.action(description="Retry now — re-dispatch stuck/failed proposals")
     def retry_now(self, request, queryset):
         from projects.tasks import bootstrap_project
+
         retried = 0
-        for proposal in queryset.filter(status__in=[
-            BootstrapProposal.Status.PENDING,
-            BootstrapProposal.Status.PROCESSING,
-            BootstrapProposal.Status.FAILED,
-        ]):
+        for proposal in queryset.filter(
+            status__in=[
+                BootstrapProposal.Status.PENDING,
+                BootstrapProposal.Status.PROCESSING,
+                BootstrapProposal.Status.FAILED,
+            ]
+        ):
             proposal.status = BootstrapProposal.Status.PENDING
             proposal.error_message = ""
             proposal.save(update_fields=["status", "error_message", "updated_at"])
@@ -112,7 +123,7 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
                     agent_type="leader",
                     department=department,
                     is_leader=True,
-                    is_active=not leader_needs_config,
+                    status="inactive" if leader_needs_config else "active",
                     instructions=f"Lead the {department.name} department for project: {project.name}. Goal: {project.goal[:200]}",
                 )
 
@@ -121,7 +132,9 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
             for agent_data in dept_data.get("agents", []):
                 agent_type = agent_data["agent_type"]
                 if agent_type not in available_workforce:
-                    logger.warning("Skipping agent_type '%s' — not available in department '%s'", agent_type, department_type)
+                    logger.warning(
+                        "Skipping agent_type '%s' — not available in department '%s'", agent_type, department_type
+                    )
                     continue
                 bp = available_workforce[agent_type]
                 needs_config = any(s.get("required") for s in bp.config_schema.values())
@@ -130,6 +143,6 @@ class BootstrapProposalAdmin(admin.ModelAdmin):
                     agent_type=agent_type,
                     department=department,
                     is_leader=False,
-                    is_active=not needs_config,
+                    status="inactive" if needs_config else "active",
                     instructions=agent_data.get("instructions", ""),
                 )

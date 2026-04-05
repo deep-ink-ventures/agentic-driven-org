@@ -6,6 +6,48 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+def _broadcast_task(task, event_type="task.updated"):
+    """Send task update via WebSocket to the project channel."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    try:
+        project_id = str(task.agent.department.project_id)
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"project_{project_id}",
+            {
+                "type": event_type.replace(".", "_"),
+                "task": {
+                    "id": str(task.id),
+                    "agent": str(task.agent_id),
+                    "agent_name": task.agent.name,
+                    "agent_type": task.agent.agent_type,
+                    "created_by_agent": str(task.created_by_agent_id) if task.created_by_agent_id else None,
+                    "created_by_agent_name": task.created_by_agent.name if task.created_by_agent else None,
+                    "status": task.status,
+                    "auto_execute": task.auto_execute,
+                    "command_name": task.command_name,
+                    "blocked_by": str(task.blocked_by_id) if task.blocked_by_id else None,
+                    "blocked_by_summary": task.blocked_by.exec_summary if task.blocked_by else None,
+                    "exec_summary": task.exec_summary,
+                    "step_plan": task.step_plan,
+                    "report": task.report,
+                    "error_message": task.error_message,
+                    "proposed_exec_at": task.proposed_exec_at.isoformat() if task.proposed_exec_at else None,
+                    "scheduled_at": task.scheduled_at.isoformat() if task.scheduled_at else None,
+                    "started_at": task.started_at.isoformat() if task.started_at else None,
+                    "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                    "token_usage": task.token_usage,
+                    "created_at": task.created_at.isoformat(),
+                    "updated_at": task.updated_at.isoformat(),
+                },
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast task update")
+
+
 @shared_task
 def run_scheduled_actions(schedule: str):
     """
@@ -13,11 +55,11 @@ def run_scheduled_actions(schedule: str):
     Called by beat: hourly or daily.
 
     For each active agent, checks which commands with this schedule are enabled
-    in auto_actions, and creates + executes tasks for them.
+    with auto_approve enabled, and creates + executes tasks for them.
     """
     from agents.models import Agent, AgentTask
 
-    agents = Agent.objects.filter(is_active=True).select_related("department__project")
+    agents = Agent.objects.filter(status="active").select_related("department__project")
 
     for agent in agents:
         blueprint = agent.get_blueprint()
@@ -43,6 +85,12 @@ def run_scheduled_actions(schedule: str):
                     exec_summary=result.get("exec_summary", cmd["description"]),
                     step_plan=result.get("step_plan", ""),
                 )
+                task = AgentTask.objects.select_related(
+                    "agent__department__project",
+                    "blocked_by",
+                    "created_by_agent",
+                ).get(id=task.id)
+                _broadcast_task(task, "task.created")
                 execute_agent_task.delay(str(task.id))
                 logger.info("Auto-executed %s for %s: %s", cmd_name, agent.name, task.id)
 
@@ -74,7 +122,12 @@ def execute_agent_task(self, task_id: str):
 
     task = AgentTask.objects.select_related(
         "agent__department__project",
+        "blocked_by",
+        "created_by_agent",
     ).get(id=task_id)
+
+    # Broadcast processing status
+    _broadcast_task(task)
 
     try:
         blueprint = task.agent.get_blueprint()
@@ -85,7 +138,9 @@ def execute_agent_task(self, task_id: str):
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "report", "completed_at", "updated_at"])
 
+        _broadcast_task(task)
         _unblock_dependents(task)
+        _trigger_continuous_mode(task)
 
         logger.info("Task %s completed: %s", task_id, task.exec_summary[:80])
 
@@ -96,6 +151,8 @@ def execute_agent_task(self, task_id: str):
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
 
+        _broadcast_task(task)
+
 
 def _unblock_dependents(completed_task):
     """When a task completes, unblock any tasks waiting on it."""
@@ -104,18 +161,50 @@ def _unblock_dependents(completed_task):
     dependents = AgentTask.objects.filter(
         blocked_by=completed_task,
         status=AgentTask.Status.AWAITING_DEPENDENCIES,
-    ).select_related("agent")
+    ).select_related("agent", "agent__department__project", "blocked_by", "created_by_agent")
 
     for dep in dependents:
         if dep.command_name and dep.agent.is_action_enabled(dep.command_name):
             dep.status = AgentTask.Status.QUEUED
             dep.save(update_fields=["status", "updated_at"])
+            _broadcast_task(dep)
             execute_agent_task.delay(str(dep.id))
             logger.info("Auto-unblocked and queued task %s (command: %s)", dep.id, dep.command_name)
         else:
             dep.status = AgentTask.Status.AWAITING_APPROVAL
             dep.save(update_fields=["status", "updated_at"])
+            _broadcast_task(dep)
             logger.info("Unblocked task %s → awaiting approval", dep.id)
+
+
+def _trigger_continuous_mode(completed_task):
+    """In continuous mode, immediately trigger leader to evaluate next work."""
+    from agents.blueprints import DEPARTMENTS
+
+    department = completed_task.agent.department
+    dept_def = DEPARTMENTS.get(department.department_type, {})
+    default_mode = dept_def.get("execution_mode", "scheduled")
+    exec_mode = (department.config or {}).get("execution_mode", default_mode)
+
+    if exec_mode != "continuous":
+        return
+
+    delay = (department.config or {}).get(
+        "min_delay_seconds",
+        dept_def.get("min_delay_seconds", 0),
+    )
+
+    leader = department.agents.filter(is_leader=True, status="active").first()
+    if leader:
+        create_next_leader_task.apply_async(
+            args=[str(leader.id)],
+            countdown=delay,
+        )
+        logger.info(
+            "Continuous mode: triggering leader %s (delay=%ds)",
+            leader.name,
+            delay,
+        )
 
 
 @shared_task
@@ -124,14 +213,14 @@ def create_next_leader_task(leader_agent_id: str):
     Self-perpetuating chain: when a leader task is approved, this creates
     the next priority task proposal. Called from AgentTask.approve().
     """
-    from agents.models import Agent, AgentTask
     from agents.blueprints.base import LeaderBlueprint
+    from agents.models import Agent, AgentTask
 
     try:
         agent = Agent.objects.select_related("department__project").get(
             id=leader_agent_id,
             is_leader=True,
-            is_active=True,
+            status="active",
         )
     except Agent.DoesNotExist:
         logger.warning("Leader agent %s not found or inactive", leader_agent_id)
@@ -156,7 +245,7 @@ def create_next_leader_task(leader_agent_id: str):
                 a.agent_type: a
                 for a in Agent.objects.filter(
                     department=agent.department,
-                    is_active=True,
+                    status="active",
                     is_leader=False,
                 )
             }
@@ -192,6 +281,13 @@ def create_next_leader_task(leader_agent_id: str):
                     exec_summary=task_data.get("exec_summary", "Priority task"),
                     step_plan=task_data.get("step_plan", ""),
                 )
+                # Reload with relations for broadcast
+                new_task = AgentTask.objects.select_related(
+                    "agent__department__project",
+                    "blocked_by",
+                    "created_by_agent",
+                ).get(id=new_task.id)
+                _broadcast_task(new_task, "task.created")
 
                 if initial_status == AgentTask.Status.QUEUED:
                     execute_agent_task.delay(str(new_task.id))
@@ -203,13 +299,22 @@ def create_next_leader_task(leader_agent_id: str):
 
         # Fallback: single task on the leader itself
         if proposal.get("exec_summary"):
-            AgentTask.objects.create(
+            initial_status = AgentTask.Status.QUEUED if agent.auto_approve else AgentTask.Status.AWAITING_APPROVAL
+            new_task = AgentTask.objects.create(
                 agent=agent,
-                status=AgentTask.Status.AWAITING_APPROVAL,
+                status=initial_status,
                 auto_execute=False,
                 exec_summary=proposal.get("exec_summary", "Leader task"),
                 step_plan=proposal.get("step_plan", ""),
             )
+            new_task = AgentTask.objects.select_related(
+                "agent__department__project",
+                "blocked_by",
+                "created_by_agent",
+            ).get(id=new_task.id)
+            _broadcast_task(new_task, "task.created")
+            if initial_status == AgentTask.Status.QUEUED:
+                execute_agent_task.delay(str(new_task.id))
             logger.info("Leader %s proposed own task: %s", agent.name, proposal.get("exec_summary", "")[:80])
 
     except Exception as e:

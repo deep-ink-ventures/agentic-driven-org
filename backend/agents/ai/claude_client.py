@@ -60,6 +60,7 @@ def call_claude(
     input_tokens = message.usage.input_tokens
     output_tokens = message.usage.output_tokens
     from agents.ai.pricing import estimate_cost
+
     cost = estimate_cost(model, input_tokens, output_tokens)
 
     usage = {
@@ -74,18 +75,89 @@ def call_claude(
     return response_text, usage
 
 
+def stream_claude(
+    system_prompt: str,
+    user_message: str,
+    model: str = "claude-sonnet-4-6",
+    max_tokens: int = 8192,
+    on_progress: callable = None,
+) -> tuple[str, dict]:
+    """
+    Stream Claude API response, calling on_progress(accumulated_text, tokens_so_far) periodically.
+    Returns (response_text, usage_dict) same as call_claude.
+    """
+    client = _get_client()
+
+    logger.info("Streaming Claude: model=%s, system_len=%d, msg_len=%d", model, len(system_prompt), len(user_message))
+
+    accumulated = ""
+    input_tokens = 0
+    output_tokens = 0
+
+    with client.messages.stream(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    ) as stream:
+        for text in stream.text_stream:
+            accumulated += text
+            output_tokens += 1  # approximate token count
+            if on_progress and output_tokens % 10 == 0:
+                on_progress(accumulated, output_tokens)
+
+        # Get final message for accurate usage
+        final = stream.get_final_message()
+        input_tokens = final.usage.input_tokens
+        output_tokens = final.usage.output_tokens
+
+    # Final progress callback
+    if on_progress:
+        on_progress(accumulated, output_tokens)
+
+    from agents.ai.pricing import estimate_cost
+
+    cost = estimate_cost(model, input_tokens, output_tokens)
+
+    usage = {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": cost,
+    }
+
+    logger.info(
+        "Claude stream complete: model=%s input=%d output=%d cost=$%.4f", model, input_tokens, output_tokens, cost
+    )
+
+    return accumulated, usage
+
+
 def parse_json_response(response: str) -> dict | None:
     """
     Parse a JSON response from Claude, stripping markdown fences if present.
     Returns the parsed dict or None if parsing fails.
     """
+    import re
+
     cleaned = response.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-    cleaned = cleaned.strip()
+    # Strip markdown fences (```json ... ``` or ``` ... ```)
+    fence_match = re.match(r"^```(?:json)?\s*\n(.*?)```\s*$", cleaned, re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
     try:
         return json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Fallback: find the first { and try progressively larger substrings ending with }
+    first_brace = cleaned.find("{")
+    if first_brace == -1:
+        return None
+    # Try from the last } backwards
+    last_brace = cleaned.rfind("}")
+    if last_brace <= first_brace:
+        return None
+    try:
+        return json.loads(cleaned[first_brace : last_brace + 1])
     except (json.JSONDecodeError, ValueError):
         return None

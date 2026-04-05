@@ -1,9 +1,10 @@
-from .project_config import ProjectConfig
-from .project import Project
-from .department import Department
-from .tag import Tag
-from .document import Document
-from .source import Source
 from .bootstrap_proposal import BootstrapProposal
+from .briefing import Briefing
+from .department import Department
+from .document import Document
+from .project import Project
+from .project_config import ProjectConfig
+from .source import Source
+from .tag import Tag
 
-__all__ = ["ProjectConfig", "Project", "Department", "Tag", "Document", "Source", "BootstrapProposal"]
+__all__ = ["ProjectConfig", "Project", "Department", "Tag", "Document", "Source", "BootstrapProposal", "Briefing"]

@@ -1,7 +1,8 @@
 import uuid
 
 from django.db import models
-from jsonschema import validate, ValidationError as JsonSchemaError
+from jsonschema import ValidationError as JsonSchemaError
+from jsonschema import validate
 
 
 def get_proposal_json_schema() -> dict:
@@ -23,33 +24,28 @@ def get_proposal_json_schema() -> dict:
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "required": ["summary", "departments"],
-        "additionalProperties": False,
         "properties": {
             "summary": {
                 "type": "string",
                 "minLength": 10,
-                "description": "2-3 sentence analysis of the project and what was found in the sources",
+                "description": "2-3 sentence analysis of the project",
             },
             "departments": {
                 "type": "array",
                 "minItems": 1,
                 "items": {
                     "type": "object",
-                    "required": ["department_type", "documents", "agents"],
-                    "additionalProperties": False,
+                    "required": ["department_type", "agents"],
                     "properties": {
                         "department_type": {
                             "type": "string",
                             "enum": department_types,
-                            "description": "Must be one of the registered department types",
                         },
                         "documents": {
                             "type": "array",
-                            "minItems": 1,
                             "items": {
                                 "type": "object",
                                 "required": ["title", "content"],
-                                "additionalProperties": False,
                                 "properties": {
                                     "title": {"type": "string", "minLength": 1},
                                     "content": {"type": "string", "minLength": 1},
@@ -60,21 +56,21 @@ def get_proposal_json_schema() -> dict:
                                     },
                                 },
                             },
+                            "default": [],
                         },
                         "agents": {
                             "type": "array",
                             "minItems": 1,
                             "items": {
                                 "type": "object",
-                                "required": ["name", "agent_type", "instructions"],
-                                "additionalProperties": False,
+                                "required": ["name", "agent_type"],
                                 "properties": {
                                     "name": {"type": "string", "minLength": 1},
                                     "agent_type": {
                                         "type": "string",
                                         "enum": sorted(all_agent_types),
                                     },
-                                    "instructions": {"type": "string"},
+                                    "instructions": {"type": "string", "default": ""},
                                 },
                             },
                         },
@@ -85,8 +81,6 @@ def get_proposal_json_schema() -> dict:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "required": ["source_id", "source_name", "reason"],
-                    "additionalProperties": False,
                     "properties": {
                         "source_id": {"type": "string"},
                         "source_name": {"type": "string"},
@@ -144,6 +138,7 @@ class BootstrapProposal(models.Model):
 
         # Cross-validate: agent_types must be valid for their department
         from agents.blueprints import DEPARTMENTS
+
         errors = []
         for dept_data in self.proposal.get("departments", []):
             dept_type = dept_data.get("department_type")

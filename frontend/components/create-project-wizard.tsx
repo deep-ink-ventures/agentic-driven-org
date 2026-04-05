@@ -276,9 +276,7 @@ export function CreateProjectWizard({
         `/ws/bootstrap/${pid}/`,
         async (data) => {
           const status = data.status as string;
-          if (data.phase) {
-            setPhase(data.phase as string);
-          }
+          if (data.phase) setPhase(data.phase as string);
           if (status === "proposed" || status === "failed") {
             const latest = await api.getBootstrapLatest(pid);
             setProposal(latest);
@@ -306,6 +304,7 @@ export function CreateProjectWizard({
     if (!projectId) return;
     setError("");
     setProposal(null);
+    setPhase("");
     try {
       const result = await api.triggerBootstrap(projectId);
       setProposal(result);
@@ -678,7 +677,7 @@ export function CreateProjectWizard({
 
           {/* Step 4: Bootstrap Processing */}
           {step === 4 && (
-            <div className="flex flex-col items-center justify-center gap-4 h-full">
+            <div className="flex flex-col items-center justify-center gap-5 h-full">
               {proposal?.status === "failed" ? (
                 <>
                   <AlertCircle className="h-12 w-12 text-flag-critical" />
@@ -700,10 +699,7 @@ export function CreateProjectWizard({
                 <>
                   <Loader2 className="h-10 w-10 text-accent-gold animate-spin" />
                   <p className="text-text-heading font-medium text-lg">
-                    {phase || "Preparing..."}
-                  </p>
-                  <p className="text-text-secondary text-sm">
-                    This may take a moment.
+                    {phase || "Designing your organization"}
                   </p>
                 </>
               )}
@@ -783,7 +779,7 @@ export function CreateProjectWizard({
                       </div>
                     )}
 
-                    {dept.documents.length > 0 && (
+                    {dept.documents && dept.documents.length > 0 && (
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                           <FileCheck className="h-3 w-3" />

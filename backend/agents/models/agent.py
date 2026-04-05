@@ -33,12 +33,23 @@ class Agent(models.Model):
         blank=True,
         help_text="Agent-managed state (last_tweet_at, emails_sent_today, etc.). Read/written by blueprints.",
     )
-    auto_actions = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Maps command names to auto-execute booleans, e.g. {\"engage-tweets\": true, \"post-content\": false}. Defaults all false.",
+    auto_approve = models.BooleanField(
+        default=False,
+        help_text="When true, all tasks for this agent skip approval and execute immediately.",
     )
-    is_active = models.BooleanField(default=False)
+
+    class Status(models.TextChoices):
+        PROVISIONING = "provisioning"
+        ACTIVE = "active"
+        INACTIVE = "inactive"
+        FAILED = "failed"
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PROVISIONING,
+        help_text="Agent lifecycle status",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -53,8 +64,8 @@ class Agent(models.Model):
         ]
 
     def is_action_enabled(self, command_name: str) -> bool:
-        """Check if a scheduled command is enabled for auto-execution."""
-        return self.auto_actions.get(command_name, False)
+        """Check if tasks for this agent auto-execute."""
+        return self.auto_approve
 
     def get_config_value(self, key, default=None):
         """Look up config value with cascading: agent → department → project."""
@@ -73,6 +84,7 @@ class Agent(models.Model):
 
     def get_blueprint(self):
         from agents.blueprints import get_blueprint
+
         return get_blueprint(self.agent_type, self.department.department_type)
 
     def __str__(self):

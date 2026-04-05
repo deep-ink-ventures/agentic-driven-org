@@ -1,7 +1,7 @@
 """Leader command: plan a week of coordinated content."""
+
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -17,10 +17,7 @@ logger = logging.getLogger(__name__)
 def create_content_calendar(self, agent: Agent) -> dict:
     from agents.ai.claude_client import call_claude
 
-    workforce = list(
-        agent.department.agents.filter(is_active=True, is_leader=False)
-        .values_list("name", "agent_type")
-    )
+    workforce = list(agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type"))
     workforce_desc = "\n".join(f"- {name} ({atype})" for name, atype in workforce)
 
     context_msg = self.build_context_message(agent)
@@ -63,6 +60,7 @@ Respond with JSON:
     )
 
     from agents.ai.claude_client import parse_json_response
+
     data = parse_json_response(response)
     if not data:
         logger.warning("Failed to parse create-content-calendar response: %s", response[:200])

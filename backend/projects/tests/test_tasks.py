@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -44,9 +44,7 @@ _VALID_JSON = json.dumps(
         "departments": [
             {
                 "department_type": "marketing",
-                "documents": [
-                    {"title": "Brand Guide", "content": "# Brand", "tags": ["branding"]}
-                ],
+                "documents": [{"title": "Brand Guide", "content": "# Brand", "tags": ["branding"]}],
                 "agents": [
                     {
                         "name": "Twitter Bot",
@@ -66,8 +64,8 @@ VALID_RESPONSE = (_VALID_JSON, _USAGE)
 
 
 class TestBootstrapProject:
-    @patch("agents.ai.claude_client.call_claude", return_value=VALID_RESPONSE)
-    def test_success(self, mock_claude, proposal, source_with_text):
+    @patch("agents.ai.claude_client.stream_claude", return_value=VALID_RESPONSE)
+    def test_success(self, mock_stream, proposal, source_with_text):
         from projects.tasks import bootstrap_project
 
         bootstrap_project(str(proposal.id))
@@ -78,45 +76,47 @@ class TestBootstrapProject:
         assert "departments" in proposal.proposal
         assert proposal.error_message == ""
 
-    @patch("agents.ai.claude_client.call_claude", return_value=VALID_RESPONSE)
-    def test_status_transitions(self, mock_claude, proposal, source_with_text):
+    @patch("agents.ai.claude_client.stream_claude", return_value=VALID_RESPONSE)
+    def test_status_transitions(self, mock_stream, proposal, source_with_text):
         """Verify the proposal goes from pending -> processing -> proposed."""
         from projects.tasks import bootstrap_project
 
         assert proposal.status == "pending"
 
         # We can't easily observe the intermediate 'processing' state in a sync test,
-        # but we can verify the final state and that call_claude was called.
+        # but we can verify the final state and that stream_claude was called.
         bootstrap_project(str(proposal.id))
 
         proposal.refresh_from_db()
         assert proposal.status == "proposed"
-        mock_claude.assert_called_once()
+        mock_stream.assert_called_once()
 
-    @patch("agents.ai.claude_client.call_claude", return_value=("not valid json {{{", _USAGE))
-    def test_bad_json_fails(self, mock_claude, proposal, source_with_text):
+    @patch("agents.ai.claude_client.stream_claude", return_value=("not valid json {{{", _USAGE))
+    def test_bad_json_fails(self, mock_stream, proposal, source_with_text):
         from projects.tasks import bootstrap_project
 
-        bootstrap_project(str(proposal.id))
+        # With retries=max_retries, the task skips retrying and goes straight to failure.
+        bootstrap_project.apply(args=[str(proposal.id)], retries=bootstrap_project.max_retries)
 
         proposal.refresh_from_db()
         assert proposal.status == "failed"
         assert proposal.error_message != ""
 
-    @patch("agents.ai.claude_client.call_claude", return_value=VALID_RESPONSE)
-    def test_no_sources_fails(self, mock_claude, proposal):
-        """No sources at all -> failed."""
+    @patch("agents.ai.claude_client.stream_claude", return_value=VALID_RESPONSE)
+    def test_no_sources_proceeds(self, mock_stream, proposal):
+        """No sources — task proceeds without them (sources are optional for bootstrap)."""
         from projects.tasks import bootstrap_project
 
         bootstrap_project(str(proposal.id))
 
         proposal.refresh_from_db()
-        assert proposal.status == "failed"
-        assert "No sources" in proposal.error_message
+        # Task should succeed even without sources — Claude gets an empty sources list
+        assert proposal.status == "proposed"
+        mock_stream.assert_called_once()
 
-    @patch("agents.ai.claude_client.call_claude", return_value=VALID_RESPONSE)
-    def test_sources_without_text_fails(self, mock_claude, project, user, proposal):
-        """Sources exist but none have extracted_text or raw_content."""
+    @patch("agents.ai.claude_client.stream_claude", return_value=VALID_RESPONSE)
+    def test_sources_without_text_proceeds(self, mock_stream, project, user, proposal):
+        """Sources exist but none have text — task still proceeds (sources are optional)."""
         Source.objects.create(
             project=project,
             source_type="file",
@@ -129,8 +129,9 @@ class TestBootstrapProject:
         bootstrap_project(str(proposal.id))
 
         proposal.refresh_from_db()
-        assert proposal.status == "failed"
-        assert "No sources" in proposal.error_message
+        # Task should succeed — empty sources are silently skipped
+        assert proposal.status == "proposed"
+        mock_stream.assert_called_once()
 
     @pytest.mark.django_db
     def test_nonexistent_proposal(self):
@@ -140,10 +141,10 @@ class TestBootstrapProject:
         # Should not raise
         bootstrap_project(str(uuid.uuid4()))
 
-    @patch("agents.ai.claude_client.call_claude")
-    def test_markdown_fenced_json(self, mock_claude, proposal, source_with_text):
+    @patch("agents.ai.claude_client.stream_claude")
+    def test_markdown_fenced_json(self, mock_stream, proposal, source_with_text):
         """Claude sometimes wraps JSON in markdown fences."""
-        mock_claude.return_value = (f"```json\n{_VALID_JSON}\n```", _USAGE)
+        mock_stream.return_value = (f"```json\n{_VALID_JSON}\n```", _USAGE)
 
         from projects.tasks import bootstrap_project
 
@@ -153,11 +154,12 @@ class TestBootstrapProject:
         assert proposal.status == "proposed"
         assert proposal.proposal is not None
 
-    @patch("agents.ai.claude_client.call_claude", side_effect=Exception("API error"))
-    def test_claude_exception_fails(self, mock_claude, proposal, source_with_text):
+    @patch("agents.ai.claude_client.stream_claude", side_effect=Exception("API error"))
+    def test_claude_exception_fails(self, mock_stream, proposal, source_with_text):
         from projects.tasks import bootstrap_project
 
-        bootstrap_project(str(proposal.id))
+        # With retries=max_retries, the task skips retrying and goes straight to failure.
+        bootstrap_project.apply(args=[str(proposal.id)], retries=bootstrap_project.max_retries)
 
         proposal.refresh_from_db()
         assert proposal.status == "failed"
