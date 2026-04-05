@@ -224,6 +224,23 @@ def bootstrap_project(self, proposal_id: str):
         if proposal_data is None:
             raise ValueError(f"Failed to parse Claude response as JSON: {response[:200]}")
 
+        # Ensure ALL workforce agents are included for each department
+        # (Claude may cherry-pick despite instructions — enforce in code)
+        for dept_data in proposal_data.get("departments", []):
+            dept_type = dept_data.get("department_type")
+            if dept_type not in DEPARTMENTS:
+                continue
+            proposed_types = {a["agent_type"] for a in dept_data.get("agents", [])}
+            for slug, bp in DEPARTMENTS[dept_type]["workforce"].items():
+                if slug not in proposed_types:
+                    dept_data["agents"].append(
+                        {
+                            "name": bp.name,
+                            "agent_type": slug,
+                            "instructions": "",
+                        }
+                    )
+
         # Validate proposal against schema
         proposal.proposal = proposal_data
         validation_errors = proposal.validate_proposal()

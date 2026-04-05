@@ -10,7 +10,7 @@ You MUST respond with valid JSON matching the exact schema below. No markdown, n
 
 1. Only propose departments from the AVAILABLE DEPARTMENTS list provided.
 2. Only propose agent types from each department's available workforce agents.
-3. Include ALL available workforce agents for each proposed department — the user will remove any they don't need.
+3. Each department should have at least one workforce agent.
 4. Agent instructions should be ONE sentence — a brief role description derived from the sources.
 5. Do NOT generate documents — they will be created in a later step.
 6. Leaders are auto-created — do NOT include leaders in the agents list.
