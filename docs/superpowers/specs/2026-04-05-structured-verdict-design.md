@@ -60,14 +60,6 @@ No `summary` field — the report text already contains the full review. Keep th
 - If the tool response contains a `submit_verdict` call, store `review_verdict` and `review_score` on the task
 - If Claude doesn't call the tool (edge case), fall back to `parse_review_verdict` on the report text and log a warning
 
-### 3b. Writers room leader `_evaluate_feedback` — same tool
-
-The writers room leader currently uses `call_claude` + `parse_json_response` to extract `overall_score` from a JSON response body (and also asks for a redundant VERDICT line). Switch to `call_claude_with_tools` with `[VERDICT_TOOL]`. The score comes from the tool call; the JSON body with `fix_tasks` stays in the text response and continues to be parsed with `parse_json_response`.
-
-### 3c. Ecosystem analyst — drop custom JSON verdict
-
-The ecosystem analyst currently returns its own JSON schema with `verdict` and `overall_score` fields. Replace the verdict/score portion with the `submit_verdict` tool. The rest of the JSON body (`entity_reviews`, `missing_categories`, etc.) stays as text output.
-
 ### 4. `AgentTask` model — persist verdict
 
 Two new fields:
@@ -103,14 +95,16 @@ All reviewer agents currently say "End your report with exactly one of these lin
 
 Remove the text-format VERDICT instructions from system prompts and task suffixes. The tool definition itself documents the expected input.
 
-Affected files (all departments):
-- `marketing/workforce/content_reviewer/agent.py` — system prompt + task suffix
-- `sales/workforce/outreach_reviewer/agent.py` — system prompt + task suffix
-- `community/workforce/partnership_reviewer/agent.py` — system prompt + task suffix
-- `community/workforce/ecosystem_analyst/agent.py` — system prompt + task suffix (drop custom JSON verdict fields)
-- `engineering/workforce/review_engineer/agent.py` — system prompt
-- `engineering/leader/agent.py` — step_plan text in review chain
-- `writers_room/leader/agent.py` — `_evaluate_feedback` prompt (drop VERDICT line, score comes from tool)
+Every agent that produces a verdict — workforce reviewers, leader evaluation prompts — gets the same treatment: remove text-format VERDICT instructions, the `submit_verdict` tool definition speaks for itself.
+
+Affected files:
+- `marketing/workforce/content_reviewer/agent.py`
+- `sales/workforce/outreach_reviewer/agent.py`
+- `community/workforce/partnership_reviewer/agent.py`
+- `community/workforce/ecosystem_analyst/agent.py`
+- `engineering/workforce/review_engineer/agent.py`
+- `engineering/leader/agent.py`
+- `writers_room/leader/agent.py`
 - Corresponding command description strings
 
 ## What does NOT change
@@ -120,5 +114,3 @@ Affected files (all departments):
 - Quality gate logic (`should_accept_review`, `_apply_quality_gate`) — unchanged, just reads score from a different source
 - `EXCELLENCE_THRESHOLD`, `MAX_REVIEW_ROUNDS`, etc. — unchanged
 - Review pair definitions in leader blueprints — unchanged
-- Writers room `fix_tasks` JSON structure — still parsed from text response body
-- Ecosystem analyst `entity_reviews`/`missing_categories` — still in text response body
