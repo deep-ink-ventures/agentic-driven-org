@@ -8,10 +8,12 @@ import type {
   ProjectDetail,
   AgentSummary,
   DepartmentDetail,
+  Sprint,
 } from "@/lib/types";
 import { AddDepartmentWizard } from "@/components/add-department-wizard";
 import Logomark from "@/components/logomark";
 import { TaskQueue } from "@/components/task-queue";
+import { SprintSidebar } from "@/components/sprint-sidebar";
 import { DepartmentView } from "@/components/department-view";
 import { AgentDetailView } from "@/components/agent-detail-view";
 import {
@@ -55,6 +57,7 @@ export default function ProjectDetailPage() {
   );
   const [initialDeepLinkDone, setInitialDeepLinkDone] = useState(false);
   const [taskWsEvent, setTaskWsEvent] = useState<{ type: string; task: import("@/lib/types").AgentTask } | null>(null);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
 
   // Apply deep link from URL on first load
   useEffect(() => {
@@ -94,6 +97,7 @@ export default function ProjectDetailPage() {
       .getProjectDetail(projectSlug)
       .then((proj) => {
         setProject(proj);
+        api.listSprints(proj.id, { status: "running,paused" }).then(setSprints).catch(() => {});
         setSelectedDept((prev) => {
           if (!prev) return prev;
           return proj.departments.find((d) => d.id === prev.id) ?? prev;
@@ -123,6 +127,9 @@ export default function ProjectDetailPage() {
     connectWs(`/ws/project/${project.id}/`, (data) => {
       if (data.type === "task.created" || data.type === "task.updated") {
         setTaskWsEvent({ type: data.type, task: data.task as import("@/lib/types").AgentTask });
+      }
+      if (data.type === "sprint.created" || data.type === "sprint.updated") {
+        api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
       }
       if (data.type === "agent.status") {
         const agentId = data.agent_id as string;
@@ -179,6 +186,88 @@ export default function ProjectDetailPage() {
     );
   }
 
+  function SettingsView({ projectId: pid }: { projectId: string }) {
+    const [allSprints, setAllSprints] = useState<Sprint[]>([]);
+    const [settingsTab, setSettingsTab] = useState<"general" | "history">("general");
+
+    useEffect(() => {
+      if (settingsTab === "history") {
+        api.listSprints(pid).then(setAllSprints).catch(() => {});
+      }
+    }, [pid, settingsTab]);
+
+    return (
+      <div>
+        <h2 className="text-2xl font-semibold mb-4">Project Settings</h2>
+        <div className="flex gap-1 border-b border-border mb-6">
+          <button
+            onClick={() => setSettingsTab("general")}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+              settingsTab === "general"
+                ? "border-accent-violet text-accent-violet"
+                : "border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            General
+          </button>
+          <button
+            onClick={() => setSettingsTab("history")}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+              settingsTab === "history"
+                ? "border-accent-violet text-accent-violet"
+                : "border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            Sprint History
+          </button>
+        </div>
+        {settingsTab === "general" && (
+          <div className="rounded-lg border border-border bg-bg-surface p-6">
+            <p className="text-sm text-text-secondary">
+              Project configuration coming soon.
+            </p>
+          </div>
+        )}
+        {settingsTab === "history" && (
+          <div className="space-y-3">
+            {allSprints.length === 0 ? (
+              <p className="text-sm text-text-secondary">No sprints yet.</p>
+            ) : (
+              allSprints.map((sprint) => (
+                <div key={sprint.id} className="rounded-lg border border-border bg-bg-surface p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-text-heading">{sprint.text}</span>
+                    <span
+                      className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
+                        sprint.status === "running"
+                          ? "bg-flag-strength/15 text-flag-strength"
+                          : sprint.status === "paused"
+                            ? "bg-amber-500/15 text-amber-400"
+                            : "bg-bg-input text-text-secondary"
+                      }`}
+                    >
+                      {sprint.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-text-secondary">
+                    <span>{sprint.departments.map((d) => d.display_name).join(", ")}</span>
+                    <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
+                    <span>{sprint.task_count} tasks</span>
+                  </div>
+                  {sprint.completion_summary && (
+                    <p className="mt-2 text-xs text-text-secondary border-t border-border pt-2">
+                      {sprint.completion_summary}
+                    </p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const sidebarContent = (
     <>
       <button
@@ -230,6 +319,15 @@ export default function ProjectDetailPage() {
           );
         })}
       </div>
+      {sprints.length > 0 && (
+        <SprintSidebar
+          sprints={sprints}
+          onUpdate={() => {
+            api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+          }}
+          projectId={project.id}
+        />
+      )}
       <div className="px-2 py-2 border-t border-border space-y-1">
         <button
           onClick={() => { setShowAddDept(true); setSidebarOpen(false); }}
@@ -297,7 +395,18 @@ export default function ProjectDetailPage() {
       {/* Main area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {view === "dashboard" && (
-          <TaskQueue projectId={project.id} wsEvent={taskWsEvent} />
+          <>
+            <h2 className="text-2xl font-semibold mb-1">Task Queue</h2>
+            <p className="text-sm text-text-secondary mb-6">Monitor and manage your agents&apos; work</p>
+            <TaskQueue
+              projectId={project.id}
+              wsEvent={taskWsEvent}
+              departments={project.departments}
+              onSprintCreated={() => {
+                api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+              }}
+            />
+          </>
         )}
         {view === "department" && selectedDept && !selectedAgent && (
           <DepartmentView
@@ -326,17 +435,7 @@ export default function ProjectDetailPage() {
           />
         )}
         {view === "settings" && (
-          <div>
-            <h2 className="text-2xl font-semibold mb-4">Project Settings</h2>
-            <p className="text-sm text-text-secondary mb-6">
-              Configure project-level settings that apply to all departments.
-            </p>
-            <div className="rounded-lg border border-border bg-bg-surface p-6">
-              <p className="text-sm text-text-secondary">
-                Project configuration coming soon.
-              </p>
-            </div>
-          </div>
+          <SettingsView projectId={project.id} />
         )}
       </div>
 
