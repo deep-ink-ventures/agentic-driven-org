@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Agentic Driven Org — Session Sync",
+  "name": "AgentDriven — Session Sync",
   "version": "1.0.0",
   "description": "Sync browser session cookies to your Agentic Company project",
   "permissions": ["cookies", "activeTab", "storage"],

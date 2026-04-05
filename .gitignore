@@ -36,6 +36,7 @@ htmlcov/
 *.png
 !frontend/public/**/*.png
 !landing-page/public/**/*.png
+!chrome-ext/icons/**/*.png
 
 # Worktrees
 .worktrees/

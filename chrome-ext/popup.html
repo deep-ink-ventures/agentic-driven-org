@@ -2,60 +2,76 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       width: 320px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0a0a0f;
-      color: #e0e0e0;
+      font-family: "Inter", system-ui, sans-serif;
+      background: #0a0e1a;
+      color: #e2e8f0;
       font-size: 13px;
     }
     .header {
       padding: 16px;
-      border-bottom: 1px solid #1a1a2e;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+    }
+    .header-logo {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
     }
     .header h1 {
+      font-family: "DM Sans", system-ui, sans-serif;
       font-size: 14px;
-      font-weight: 600;
-      color: #d4a843;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: -0.01em;
     }
     .header .dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #444;
+      background: #94a3b8;
+      margin-left: auto;
+      flex-shrink: 0;
     }
-    .header .dot.connected { background: #4ade80; }
+    .header .dot.connected { background: #22c55e; }
 
     .section {
       padding: 16px;
-      border-bottom: 1px solid #1a1a2e;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
     }
     .section:last-child { border-bottom: none; }
 
     label {
       display: block;
       font-size: 11px;
-      color: #888;
+      color: #94a3b8;
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      font-weight: 500;
     }
     input {
       width: 100%;
       padding: 8px 10px;
-      background: #12121f;
-      border: 1px solid #1a1a2e;
+      background: #0f1629;
+      border: 1px solid rgba(148, 163, 184, 0.12);
       border-radius: 6px;
-      color: #e0e0e0;
+      color: #e2e8f0;
+      font-family: "Inter", system-ui, sans-serif;
       font-size: 13px;
       outline: none;
+      transition: border-color 0.15s;
     }
-    input:focus { border-color: #d4a843; }
+    input::placeholder { color: #475569; }
+    input:focus { border-color: #7c6aef; }
     input + input { margin-top: 8px; }
 
     button {
@@ -63,6 +79,7 @@
       padding: 10px;
       border: none;
       border-radius: 6px;
+      font-family: "DM Sans", system-ui, sans-serif;
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
@@ -73,13 +90,13 @@
     button:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .btn-primary {
-      background: #d4a843;
-      color: #0a0a0f;
+      background: #7c6aef;
+      color: #fff;
     }
     .btn-save {
-      background: #1a1a2e;
-      color: #e0e0e0;
-      border: 1px solid #2a2a3e;
+      background: #111827;
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.12);
     }
 
     .platform-badge {
@@ -87,8 +104,8 @@
       align-items: center;
       gap: 6px;
       padding: 6px 12px;
-      background: #12121f;
-      border: 1px solid #1a1a2e;
+      background: #111827;
+      border: 1px solid rgba(148, 163, 184, 0.12);
       border-radius: 6px;
       font-size: 13px;
       margin-bottom: 8px;
@@ -104,25 +121,25 @@
     }
     .status.success {
       display: block;
-      background: #0f2b1a;
-      border: 1px solid #166534;
-      color: #4ade80;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      color: #22c55e;
     }
     .status.error {
       display: block;
-      background: #2b0f0f;
-      border: 1px solid #7f1d1d;
-      color: #f87171;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #ef4444;
     }
     .status.info {
       display: block;
-      background: #0f1a2b;
-      border: 1px solid #1e3a5f;
-      color: #60a5fa;
+      background: rgba(124, 106, 239, 0.1);
+      border: 1px solid rgba(124, 106, 239, 0.25);
+      color: #a78bfa;
     }
 
     .no-platform {
-      color: #666;
+      color: #94a3b8;
       font-size: 12px;
       text-align: center;
       padding: 12px;
@@ -131,8 +148,18 @@
 </head>
 <body>
   <div class="header">
+    <svg class="header-logo" width="22" height="22" viewBox="0 0 40 40" fill="none">
+      <path d="M4 20 H14" stroke="#7c6aef" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="14" cy="20" r="3" fill="#7c6aef"/>
+      <path d="M14 20 C20 20, 22 10, 28 10 L36 10" stroke="#7c6aef" stroke-width="3" stroke-linecap="round"/>
+      <path d="M14 20 H36" stroke="#7c6aef" stroke-width="3" stroke-linecap="round"/>
+      <path d="M14 20 C20 20, 22 30, 28 30 L36 30" stroke="#7c6aef" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="36" cy="10" r="2.1" fill="#7c6aef" opacity="0.5"/>
+      <circle cx="36" cy="20" r="2.1" fill="#7c6aef" opacity="0.5"/>
+      <circle cx="36" cy="30" r="2.1" fill="#7c6aef" opacity="0.5"/>
+    </svg>
+    <h1>Session Sync</h1>
     <div class="dot" id="statusDot"></div>
-    <h1>Agentic Session Sync</h1>
   </div>
 
   <!-- Setup section -->
