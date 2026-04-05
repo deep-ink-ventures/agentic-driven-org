@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.marketing.workforce.web_researcher.commands import research_analyze, research_gather
-from agents.blueprints.marketing.workforce.web_researcher.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,16 @@ class WebResearcherBlueprint(WorkforceBlueprint):
     slug = "web_researcher"
     description = "Researches trends, competitors, and content opportunities via web search"
     tags = ["research", "intelligence", "trends"]
+    skills = [
+        {
+            "name": "Gather Research",
+            "description": "Search the web and collect raw findings, URLs, and data points on a topic",
+        },
+        {
+            "name": "Analyze Research",
+            "description": "Synthesize raw research findings into strategic recommendations with suggested angles",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -32,10 +41,6 @@ When executing tasks, respond with a JSON object:
     ],
     "report": "Summary of research conducted and key takeaways"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     research_gather = research_gather

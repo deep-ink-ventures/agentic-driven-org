@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.engineering.workforce.backend_engineer.commands import implement
-from agents.blueprints.engineering.workforce.backend_engineer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +50,20 @@ class BackendEngineerBlueprint(WorkforceBlueprint):
     slug = "backend_engineer"
     description = "Implements backend code by crafting detailed prompts and triggering GitHub Actions workflows"
     tags = ["engineering", "backend", "implementation", "python", "django"]
+    skills = [
+        {
+            "name": "Build Implementation Prompt",
+            "description": "Constructs a spec-grade prompt with structured TASK, CONTEXT, REQUIREMENTS, CONSTRAINTS, TESTS, and DEFINITION OF DONE sections for backend implementation",
+        },
+        {
+            "name": "Read Codebase Context",
+            "description": "Fetches relevant files via GitHub API to understand existing patterns before crafting the implementation prompt",
+        },
+        {
+            "name": "Verify Result",
+            "description": "When a webhook returns with a PR URL, reads the diff and validates it matches the original requirements",
+        },
+    ]
     config_schema = {
         "github_repos": {
             "type": "list",
@@ -90,10 +103,6 @@ When executing tasks, respond with a JSON object:
     "file_paths": ["path/to/file.py"],
     "report": "Summary of what will be implemented"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     implement = implement

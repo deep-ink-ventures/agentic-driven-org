@@ -13,7 +13,6 @@ from agents.blueprints.writers_room.workforce.dialog_writer.commands import (
     write_content,
     write_scene_dialogue,
 )
-from agents.blueprints.writers_room.workforce.dialog_writer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,28 @@ class DialogWriterBlueprint(WorkforceBlueprint):
     slug = "dialog_writer"
     description = "Writes the actual content -- dialogue, prose, scenes -- for every stage and format"
     tags = ["writers-room", "dialog", "writing", "content", "scenes", "prose"]
+    skills = [
+        {
+            "name": "Voice Fingerprinting",
+            "description": "Gives each character a unique speech pattern through vocabulary, sentence length, verbal tics, and cultural references.",
+        },
+        {
+            "name": "Subtext Layering",
+            "description": "Writes dialogue where characters never say what they mean. Encodes wants and fears beneath surface conversation.",
+        },
+        {
+            "name": "Conflict Escalation Rhythm",
+            "description": "Structures dialogue exchanges as micro-negotiations where each line shifts the power balance.",
+        },
+        {
+            "name": "Silence and Non-Verbal Scripting",
+            "description": "Writes the pauses, interruptions, and action lines that carry as much meaning as words.",
+        },
+        {
+            "name": "Exposition Laundering",
+            "description": "Buries necessary information inside character conflict so it never reads as the author explaining.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -117,10 +138,6 @@ class DialogWriterBlueprint(WorkforceBlueprint):
             "- Vary sentence length dramatically -- a 3-word sentence after a 30-word one\n"
             "- Use the voice profile from the Story Researcher as your north star"
         )
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     write_content = write_content
     fix_content = fix_content

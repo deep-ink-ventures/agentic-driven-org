@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.workforce.prospector.commands import research_targets, revise_prospects
-from agents.blueprints.sales.workforce.prospector.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,20 @@ class ProspectorBlueprint(WorkforceBlueprint):
     slug = "prospector"
     description = "Researches and qualifies potential targets — builds structured lead lists with company profiles, key contacts, and scoring"
     tags = ["research", "prospecting", "lead-gen", "qualification"]
+    skills = [
+        {
+            "name": "Company Profiling",
+            "description": "Build structured profiles: size, industry, key contacts, recent news, decision makers",
+        },
+        {
+            "name": "Qualification Scoring",
+            "description": "Assess prospect fit based on configurable criteria — budget signals, need indicators, timing",
+        },
+        {
+            "name": "Web Intelligence",
+            "description": "Extract actionable intelligence from public sources — websites, press releases, job postings, social media",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -46,10 +59,6 @@ When executing tasks, respond with JSON:
     ],
     "report": "Summary of research conducted and key findings"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     research_targets = research_targets
     revise_prospects = revise_prospects

@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.engineering.workforce.review_engineer.commands import review_pr
-from agents.blueprints.engineering.workforce.review_engineer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +57,20 @@ class ReviewEngineerBlueprint(WorkforceBlueprint):
     controls = ["backend_engineer", "frontend_engineer"]
     description = "Reviews PRs with structured criteria, severity-tagged comments, and iterative re-review capability"
     tags = ["engineering", "review", "quality", "code-review"]
+    skills = [
+        {
+            "name": "Structured Review",
+            "description": "Reviews PRs against team standards with signal/noise filtering, targeting >80% comment acceptance rate",
+        },
+        {
+            "name": "Incremental Re-review",
+            "description": "On fix commits, reviews only the new diff and auto-resolves previously addressed comments",
+        },
+        {
+            "name": "Judge Filter",
+            "description": "Self-filters review output before posting: removes style nitpicks, theoretical concerns, and comments on unchanged code",
+        },
+    ]
     review_dimensions = ["correctness", "test_coverage", "security", "design_quality", "accessibility", "code_quality"]
     config_schema = {
         "github_repos": {
@@ -112,10 +125,6 @@ When consolidating feedback from test_engineer, security_auditor, design_qa, and
 End your consolidated report with exactly one of:
 VERDICT: APPROVED (score: N.N/10)
 VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     review_pr = review_pr

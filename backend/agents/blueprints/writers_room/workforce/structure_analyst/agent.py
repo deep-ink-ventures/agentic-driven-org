@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.structure_analyst.commands import analyze
-from agents.blueprints.writers_room.workforce.structure_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +122,28 @@ class StructureAnalystBlueprint(WorkforceBlueprint):
     controls = "story_architect"
     description = "Analyzes narrative structure against established frameworks (Save the Cat, McKee, Truby, Field, Vogler, Harmon, etc.)"
     tags = ["analysis", "structure", "narrative", "feedback"]
+    skills = [
+        {
+            "name": "Pacing Heat Map",
+            "description": "Measures scene-by-scene pacing by analyzing action-to-reflection and dialogue-to-description ratios.",
+        },
+        {
+            "name": "Scene Necessity Audit",
+            "description": "Applies the cut test to every scene: if removed, does the story still make sense?",
+        },
+        {
+            "name": "Transition Flow Scoring",
+            "description": "Evaluates scene-to-scene transitions for logical flow, temporal clarity, and emotional continuity.",
+        },
+        {
+            "name": "Structural Symmetry Analysis",
+            "description": "Evaluates mirroring, echoes, and callbacks between beginning and end.",
+        },
+        {
+            "name": "Point-of-View Discipline Check",
+            "description": "Verifies consistent POV handling within scenes — catches head-hopping and knowledge leaks.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -134,10 +155,6 @@ class StructureAnalystBlueprint(WorkforceBlueprint):
     @property
     def system_prompt(self) -> str:
         return SYSTEM_PROMPT
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     cmd_analyze = analyze
 

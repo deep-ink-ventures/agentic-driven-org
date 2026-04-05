@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.workforce.outreach_writer.commands import draft_outreach, revise_outreach
-from agents.blueprints.sales.workforce.outreach_writer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,20 @@ class OutreachWriterBlueprint(WorkforceBlueprint):
     slug = "outreach_writer"
     description = "Drafts personalized outreach — cold emails, partnership proposals, follow-ups — tailored to each prospect's context"
     tags = ["writing", "outreach", "email", "personalization"]
+    skills = [
+        {
+            "name": "Personalization",
+            "description": "Tailor messaging to recipient's context, company, and likely pain points",
+        },
+        {
+            "name": "Value Proposition",
+            "description": "Articulate why the prospect should care, framed in their terms not ours",
+        },
+        {
+            "name": "Call to Action",
+            "description": "Craft specific, low-friction next steps that advance the relationship",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -40,10 +53,6 @@ When executing tasks, respond with JSON:
     },
     "report": "Rationale for approach, angle chosen, and key decisions"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     draft_outreach = draft_outreach
     revise_outreach = revise_outreach

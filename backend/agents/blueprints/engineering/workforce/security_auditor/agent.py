@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.engineering.workforce.security_auditor.commands import security_review
-from agents.blueprints.engineering.workforce.security_auditor.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,16 @@ class SecurityAuditorBlueprint(WorkforceBlueprint):
     controls = ["backend_engineer", "frontend_engineer"]
     description = "Audits PRs for security vulnerabilities using claude-code-security-review with confidence filtering"
     tags = ["engineering", "security", "audit", "vulnerabilities"]
+    skills = [
+        {
+            "name": "Assess Risk",
+            "description": "Reads PR diff and determines if security review is needed based on file paths (auth, crypto, API, dependencies, user input)",
+        },
+        {
+            "name": "Interpret Findings",
+            "description": "Interprets security action results, filters by confidence threshold (>= 0.8), and posts structured comments",
+        },
+    ]
     config_schema = {
         "github_repos": {
             "type": "list",
@@ -104,10 +113,6 @@ When executing tasks, respond with a JSON object:
     "target_repo": "org/repo",
     "report": "Risk assessment summary"
 }}"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     security_review = security_review

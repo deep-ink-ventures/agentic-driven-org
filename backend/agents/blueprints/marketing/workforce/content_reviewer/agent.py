@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.marketing.workforce.content_reviewer.commands import review_content
-from agents.blueprints.marketing.workforce.content_reviewer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +23,20 @@ class ContentReviewerBlueprint(WorkforceBlueprint):
         "channel_conventions",
         "messaging_clarity",
         "cta_effectiveness",
+    ]
+    skills = [
+        {
+            "name": "Brand Alignment Analysis",
+            "description": "Evaluate content against the project's established brand voice, positioning, and values. Check consistency with prior approved content. Flag tone shifts, off-brand messaging, and misaligned positioning.",
+        },
+        {
+            "name": "Audience Resonance",
+            "description": "Evaluate whether content will resonate with the target audience. Check language register, cultural references, pain points addressed, and emotional triggers. Flag content that talks AT the audience instead of TO them.",
+        },
+        {
+            "name": "Channel Optimization",
+            "description": "Assess whether content follows platform-specific best practices. Twitter: conciseness, hooks, hashtag strategy. Reddit: community norms, value-first approach, no overt promotion. Email: subject line effectiveness, scannable layout, mobile readiness.",
+        },
     ]
     config_schema = {}
 
@@ -61,10 +74,6 @@ VERDICT: CHANGES_REQUESTED (score: N.N/10)
 
 For CHANGES_REQUESTED: list ONLY the issues preventing excellence with specific fix suggestions.
 Every issue must reference the specific content and suggest a concrete improvement."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     review_content = review_content
 

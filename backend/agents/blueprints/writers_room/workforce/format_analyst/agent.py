@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.format_analyst.commands import analyze
-from agents.blueprints.writers_room.workforce.format_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,28 @@ class FormatAnalystBlueprint(WorkforceBlueprint):
     essential = True
     description = "Reviews creative material for formatting conventions, craft quality, and format-specific standards"
     tags = ["analysis", "format", "craft", "feedback"]
+    skills = [
+        {
+            "name": "Manuscript Standards Compliance",
+            "description": "Validates formatting against industry-standard submission guidelines.",
+        },
+        {
+            "name": "Dialogue Punctuation and Attribution",
+            "description": "Verifies correct dialogue punctuation, tag usage, and attribution clarity.",
+        },
+        {
+            "name": "Scene Break and Chapter Logic",
+            "description": "Evaluates whether scene and chapter breaks are placed for maximum dramatic effect.",
+        },
+        {
+            "name": "Typographical Consistency Audit",
+            "description": "Checks for consistent handling of em dashes, ellipsis style, quotation marks, and number formatting.",
+        },
+        {
+            "name": "Whitespace and Density Balance",
+            "description": "Analyzes visual rhythm: dialogue-to-description ratio, paragraph length variation, and whitespace distribution.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -97,10 +118,6 @@ class FormatAnalystBlueprint(WorkforceBlueprint):
     @property
     def system_prompt(self) -> str:
         return SYSTEM_PROMPT
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     cmd_analyze = analyze
 

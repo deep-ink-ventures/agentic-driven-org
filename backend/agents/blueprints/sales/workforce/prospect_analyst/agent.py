@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.workforce.prospect_analyst.commands import review_prospects
-from agents.blueprints.sales.workforce.prospect_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,20 @@ class ProspectAnalystBlueprint(WorkforceBlueprint):
     slug = "prospect_analyst"
     description = "Reviews prospect lists for quality, relevance, and strategic fit — scores and returns verdict with specific feedback"
     tags = ["review", "analysis", "quality", "prospects"]
+    skills = [
+        {
+            "name": "Quality Scoring",
+            "description": "Score prospect lists on completeness, relevance, and actionability (1-10 scale)",
+        },
+        {
+            "name": "Gap Detection",
+            "description": "Identify missing information that would be needed before outreach can proceed",
+        },
+        {
+            "name": "Strategic Fit",
+            "description": "Assess alignment between prospects and the project's goals and target market",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -43,10 +56,6 @@ When reviewing, respond with JSON:
 }
 
 Approve threshold: overall score >= 7 and no prospect has critical gaps."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     review_prospects = review_prospects
 

@@ -13,7 +13,6 @@ from agents.blueprints.writers_room.workforce.character_designer.commands import
     fix_characters,
     write_characters,
 )
-from agents.blueprints.writers_room.workforce.character_designer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,28 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
     slug = "character_designer"
     description = "Designs and develops character ensembles -- profiles, arcs, relationships, and voice"
     tags = ["writers-room", "character", "ensemble", "arcs", "voice"]
+    skills = [
+        {
+            "name": "Wound-Want-Need Triangle",
+            "description": "Designs characters from the inside out: wound, want, need. Every decision traces back to this triangle.",
+        },
+        {
+            "name": "Contradiction Mapping",
+            "description": "Builds characters with deliberate internal contradictions. Maps which surfaces in which context.",
+        },
+        {
+            "name": "Relationship Web Dynamics",
+            "description": "Maps every character relationship as a power dynamic with history, debt, and tension.",
+        },
+        {
+            "name": "Arc Milestone Design",
+            "description": "Plots character transformation as concrete behavioral changes, not abstract growth.",
+        },
+        {
+            "name": "Behavioral Pressure Testing",
+            "description": "Stress-tests characters by placing them in scenarios that force impossible choices.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -109,10 +130,6 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
             "- Vary sentence length dramatically -- a 3-word sentence after a 30-word one\n"
             "- Use the voice profile from the Story Researcher as your north star"
         )
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     def _get_voice_constraint(self, agent: Agent) -> str:
         """Fetch Voice DNA and return it as an inviolable constraint block."""

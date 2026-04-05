@@ -15,7 +15,6 @@ from agents.blueprints.writers_room.workforce.story_architect.commands import (
     outline_act_structure,
     write_structure,
 )
-from agents.blueprints.writers_room.workforce.story_architect.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +24,25 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
     slug = "story_architect"
     description = "Master of narrative structure -- builds story frameworks across all formats and stages"
     tags = ["writers-room", "structure", "story", "beats", "architecture"]
+    skills = [
+        {
+            "name": "Three-Act Tension Mapping",
+            "description": "Maps tension curves across act structure. Identifies flat zones and recommends compression.",
+        },
+        {
+            "name": "Setup-Payoff Ledger",
+            "description": "Tracks every planted setup and verifies each has a satisfying payoff.",
+        },
+        {
+            "name": "Structural Reversal Engineering",
+            "description": "Designs plot reversals that recontextualize earlier scenes rather than merely surprising.",
+        },
+        {"name": "Premise-to-Theme Ladder", "description": "Traces whether premise consistently escalates into theme."},
+        {
+            "name": "Narrative Clock Design",
+            "description": "Designs ticking-clock urgency structures that create forward momentum.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -105,10 +123,6 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
             "- Vary sentence length dramatically -- a 3-word sentence after a 30-word one\n"
             "- Use the voice profile from the Story Researcher as your north star"
         )
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands from commands/ folder
     write_structure = write_structure

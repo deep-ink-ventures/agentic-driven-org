@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.engineering.workforce.accessibility_engineer.commands import a11y_audit
-from agents.blueprints.engineering.workforce.accessibility_engineer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +66,20 @@ class AccessibilityEngineerBlueprint(WorkforceBlueprint):
     controls = "frontend_engineer"
     description = "Audits frontend PRs for WCAG 2.1 AA compliance using axe-core, Lighthouse, and manual checks"
     tags = ["engineering", "accessibility", "a11y", "wcag", "frontend"]
+    skills = [
+        {
+            "name": "WCAG Checklist",
+            "description": "Full WCAG 2.1 AA audit organized by principle: Perceivable, Operable, Understandable, Robust",
+        },
+        {
+            "name": "axe-core Analysis",
+            "description": "Triggers axe-core via workflow for automated WCAG testing (~57% automated coverage) and interprets results",
+        },
+        {
+            "name": "Manual Checks",
+            "description": "Prompts for the ~43% of WCAG checks that cannot be automated: heading hierarchy, focus management, screen reader announcements, keyboard trap detection",
+        },
+    ]
     config_schema = {
         "github_repos": {
             "type": "list",
@@ -112,10 +125,6 @@ When executing tasks, respond with a JSON object:
     "wcag_criteria_in_scope": ["1.1.1", "2.1.1", "4.1.2"],
     "report": "Summary of audit scope and approach"
 }}"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     a11y_audit = a11y_audit

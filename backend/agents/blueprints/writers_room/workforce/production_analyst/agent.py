@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.production_analyst.commands import analyze
-from agents.blueprints.writers_room.workforce.production_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +120,28 @@ class ProductionAnalystBlueprint(WorkforceBlueprint):
     essential = True
     description = "Analyzes production feasibility, budget implications, cast-ability, and IP potential"
     tags = ["analysis", "production", "feasibility", "feedback"]
+    skills = [
+        {
+            "name": "Production Complexity Scoring",
+            "description": "Evaluates practical production requirements: location count, cast size, VFX needs.",
+        },
+        {
+            "name": "Submission Package Readiness",
+            "description": "Evaluates whether the manuscript meets complete submission requirements.",
+        },
+        {
+            "name": "Publication Timeline Planning",
+            "description": "Maps the realistic path from current manuscript state to publication.",
+        },
+        {
+            "name": "Rights and Adaptation Potential",
+            "description": "Assesses the story's potential for adaptation across media.",
+        },
+        {
+            "name": "Revision Prioritization Matrix",
+            "description": "Synthesizes findings into a prioritized revision plan by severity and effort.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -132,10 +153,6 @@ class ProductionAnalystBlueprint(WorkforceBlueprint):
     @property
     def system_prompt(self) -> str:
         return SYSTEM_PROMPT
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     cmd_analyze = analyze
 

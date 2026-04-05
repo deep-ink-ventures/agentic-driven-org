@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.dialogue_analyst.commands import analyze
-from agents.blueprints.writers_room.workforce.dialogue_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +125,25 @@ class DialogueAnalystBlueprint(WorkforceBlueprint):
     controls = "dialog_writer"
     description = "Analyzes dialogue authenticity, voice differentiation, scene construction, and pacing"
     tags = ["analysis", "dialogue", "scene", "feedback"]
+    skills = [
+        {
+            "name": "Voice Distinctiveness Scoring",
+            "description": "Evaluates whether each speaker remains identifiable from speech patterns alone with names removed.",
+        },
+        {
+            "name": "Subtext Density Test",
+            "description": "Measures the ratio of surface meaning to underlying meaning in dialogue exchanges.",
+        },
+        {"name": "Power Dynamic Mapping", "description": "Analyzes status shifts within each dialogue exchange."},
+        {
+            "name": "On-the-Nose Detection",
+            "description": "Identifies dialogue where characters explicitly state theme or emotion that should be conveyed through behavior.",
+        },
+        {
+            "name": "Information Control Analysis",
+            "description": "Evaluates who knows what and whether characters appropriately protect, reveal, or trade information.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -137,10 +155,6 @@ class DialogueAnalystBlueprint(WorkforceBlueprint):
     @property
     def system_prompt(self) -> str:
         return SYSTEM_PROMPT
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     cmd_analyze = analyze
 

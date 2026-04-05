@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.community.workforce.partnership_reviewer.commands import review_proposal
-from agents.blueprints.community.workforce.partnership_reviewer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,20 @@ class PartnershipReviewerBlueprint(WorkforceBlueprint):
     description = "Reviews partnership proposals for mutual value, tone, specificity, and actionability — quality gate before outreach"
     tags = ["review", "quality", "partnerships", "editing"]
     review_dimensions = ["mutual_value", "specificity", "tone", "structure", "next_steps"]
+    skills = [
+        {
+            "name": "Value Balance",
+            "description": "Ensure proposals aren't one-sided — the partner must see clear, specific benefit",
+        },
+        {
+            "name": "Professionalism",
+            "description": "Check tone is collaborative and confident, not desperate or transactional",
+        },
+        {
+            "name": "Actionability",
+            "description": "Verify proposed next steps are concrete and low-friction for both parties",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -35,10 +48,6 @@ VERDICT: CHANGES_REQUESTED (score: N.N/10)
 
 Score dimensions: mutual_value, specificity, tone, structure, next_steps.
 For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific fix suggestions."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     review_proposal = review_proposal
 

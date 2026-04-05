@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import LeaderBlueprint
 from agents.blueprints.sales.leader.commands import check_progress, plan_pipeline
-from agents.blueprints.sales.leader.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +20,20 @@ class SalesLeaderBlueprint(LeaderBlueprint):
         "Sales department leader — orchestrates prospecting, outreach, and review cycles to build a qualified pipeline"
     )
     tags = ["leadership", "strategy", "sales", "pipeline", "prospecting"]
+    skills = [
+        {
+            "name": "Pipeline Management",
+            "description": "Track prospects through stages: identified → researched → contacted → negotiating → closed",
+        },
+        {
+            "name": "Target Prioritization",
+            "description": "Score and rank targets by strategic fit, revenue potential, and reachability",
+        },
+        {
+            "name": "Review Orchestration",
+            "description": "Manage writer/reviewer ping-pong loops — route drafts to reviewers, route feedback to writers, enforce quality thresholds",
+        },
+    ]
     config_schema = {}
 
     def get_review_pairs(self):
@@ -55,10 +68,6 @@ When an outreach_writer task completes, the system automatically:
 Do NOT manually create review tasks — the system handles the loop.
 
 You don't prospect or write outreach directly — you create tasks for your workforce."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     plan_pipeline = plan_pipeline

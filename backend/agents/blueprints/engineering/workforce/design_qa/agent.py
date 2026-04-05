@@ -13,7 +13,6 @@ from agents.blueprints.engineering.workforce.design_qa.commands import (
     check_responsive,
     review_design,
 )
-from agents.blueprints.engineering.workforce.design_qa.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -214,10 +213,6 @@ When executing tasks, respond with a JSON object:
     "persona_friction": {{"alex": [], "jordan": [], "sam": [], "riley": [], "casey": []}},
     "report": "Executive summary"
 }}"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     review_design = review_design

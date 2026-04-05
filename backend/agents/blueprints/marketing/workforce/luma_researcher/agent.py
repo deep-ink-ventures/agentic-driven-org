@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.marketing.workforce.luma_researcher.commands import find_opportunities, scan_events
-from agents.blueprints.marketing.workforce.luma_researcher.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,17 @@ class LumaResearcherBlueprint(WorkforceBlueprint):
     slug = "luma_researcher"
     description = "Monitors Lu.ma event calendars for networking and speaking opportunities"
     tags = ["research", "events", "networking"]
+    skills = [
+        {"name": "Query Event Calendars", "description": "Check configured Lu.ma calendars for upcoming events"},
+        {
+            "name": "Extract Event Details",
+            "description": "Get detailed information about specific events (speakers, topics, dates)",
+        },
+        {
+            "name": "Identify Opportunities",
+            "description": "Find events matching project goals for networking, speaking, or sponsorship",
+        },
+    ]
     config_schema = {
         "calendar_urls": {
             "type": "list",
@@ -39,10 +49,6 @@ When executing tasks, respond with a JSON object:
     ],
     "report": "Summary of events found and recommended actions"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     scan_events = scan_events

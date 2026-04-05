@@ -13,7 +13,6 @@ from agents.blueprints.marketing.workforce.email_marketing.commands import (
     draft_campaign,
     send_campaign,
 )
-from agents.blueprints.marketing.workforce.email_marketing.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,21 @@ class EmailMarketingBlueprint(WorkforceBlueprint):
     slug = "email_marketing"
     description = "Designs and sends email campaigns via SendGrid with strict approval gates"
     tags = ["email", "campaigns", "outreach", "nurture"]
+    skills = [
+        {
+            "name": "Design Email Campaigns",
+            "description": "Create email campaigns with A/B subject lines, compelling body, and clear CTAs",
+        },
+        {"name": "Segment Audience", "description": "Choose the right mailing list and segment for each campaign"},
+        {
+            "name": "Schedule Sends",
+            "description": "Determine optimal send times based on audience and past performance",
+        },
+        {
+            "name": "Analyze Campaign Performance",
+            "description": "Review opens, clicks, unsubscribes, and bounces to improve future campaigns",
+        },
+    ]
     config_schema = {
         "sendgrid_api_key": {
             "type": "str",
@@ -78,10 +92,6 @@ When executing tasks, respond with a JSON object:
     },
     "report": "Summary of what was done and key metrics"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     check_campaign_performance = check_campaign_performance

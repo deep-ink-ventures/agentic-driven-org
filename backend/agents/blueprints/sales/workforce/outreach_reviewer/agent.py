@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
 from agents.blueprints.sales.workforce.outreach_reviewer.commands import review_outreach
-from agents.blueprints.sales.workforce.outreach_reviewer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,20 @@ class OutreachReviewerBlueprint(WorkforceBlueprint):
     description = "Reviews outreach drafts for personalization, tone, value prop clarity, and CTA effectiveness — quality gate before sending"
     tags = ["review", "quality", "outreach", "editing"]
     review_dimensions = ["personalization", "value_proposition", "tone", "cta", "length"]
+    skills = [
+        {
+            "name": "Tone Analysis",
+            "description": "Assess professional tone — confidence without pushiness, authenticity without informality",
+        },
+        {
+            "name": "Personalization Depth",
+            "description": "Check that messaging references specific prospect details, not generic templates",
+        },
+        {
+            "name": "Effectiveness Scoring",
+            "description": "Score likelihood of response based on outreach best practices — subject line, opening, CTA strength",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -35,10 +48,6 @@ VERDICT: CHANGES_REQUESTED (score: N.N/10)
 
 Score dimensions: personalization, value_proposition, tone, cta, length.
 For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific fix suggestions."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     review_outreach = review_outreach
 

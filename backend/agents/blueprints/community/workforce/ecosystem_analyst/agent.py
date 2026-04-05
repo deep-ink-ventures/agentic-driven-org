@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.community.workforce.ecosystem_analyst.commands import review_ecosystem
-from agents.blueprints.community.workforce.ecosystem_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,20 @@ class EcosystemAnalystBlueprint(WorkforceBlueprint):
     slug = "ecosystem_analyst"
     description = "Reviews ecosystem research for completeness, strategic fit, and missed opportunities — quality gate before partnership outreach"
     tags = ["review", "analysis", "ecosystem", "strategy"]
+    skills = [
+        {
+            "name": "Strategic Prioritization",
+            "description": "Rank ecosystem entities by reach, alignment, and effort-to-engage",
+        },
+        {
+            "name": "Gap Analysis",
+            "description": "Identify ecosystem categories or entities that should have been included but weren't",
+        },
+        {
+            "name": "Competitive Landscape",
+            "description": "Assess whether competitors already have relationships with identified entities",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -42,10 +55,6 @@ When reviewing, respond with JSON:
 }
 
 Approve threshold: overall score >= 7 and no critical gaps in coverage."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     review_ecosystem = review_ecosystem
 

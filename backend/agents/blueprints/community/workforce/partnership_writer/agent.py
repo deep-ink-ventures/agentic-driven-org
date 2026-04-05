@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.community.workforce.partnership_writer.commands import draft_proposal, revise_proposal
-from agents.blueprints.community.workforce.partnership_writer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,20 @@ class PartnershipWriterBlueprint(WorkforceBlueprint):
     slug = "partnership_writer"
     description = "Drafts partnership proposals — mutual value framing, concrete structures, and actionable next steps"
     tags = ["writing", "partnerships", "proposals", "collaboration"]
+    skills = [
+        {
+            "name": "Mutual Value",
+            "description": "Frame partnerships as win-win, emphasizing what the partner gains not just what we need",
+        },
+        {
+            "name": "Specificity",
+            "description": "Ground proposals in concrete actions rather than vague 'let's collaborate' language",
+        },
+        {
+            "name": "Proposal Structure",
+            "description": "Organize proposals: context → opportunity → proposed structure → next steps",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -41,10 +54,6 @@ When executing tasks, respond with JSON:
     },
     "report": "Rationale for approach and key decisions"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     draft_proposal = draft_proposal
     revise_proposal = revise_proposal

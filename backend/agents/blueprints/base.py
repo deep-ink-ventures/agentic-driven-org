@@ -90,6 +90,8 @@ class BaseBlueprint(ABC):
     slug: str = ""
     description: str = ""
     tags: list[str] = []
+    skills: list[dict] = []  # [{"name": "...", "description": "..."}]
+    outputs: list[str] = []  # metadata: what persistent artifacts this agent produces
     default_model: str = "claude-sonnet-4-6"
     config_schema: dict[str, dict] = {}  # {"key": {"type": "str", "required": bool, "description": "..."}}
     essential: bool = False  # always pre-selected when department is added
@@ -101,9 +103,18 @@ class BaseBlueprint(ABC):
         """The agent's persona, role, and capabilities."""
 
     @property
-    @abstractmethod
     def skills_description(self) -> str:
-        """Formatted skills text injected into system prompt."""
+        """Formatted skills text injected into system prompt.
+
+        Default reads from the ``skills`` class attribute.
+        """
+        return self.format_skills()
+
+    def format_skills(self) -> str:
+        """Format the skills list attribute into markdown bullet points."""
+        if not self.skills:
+            return "No special skills."
+        return "\n".join(f"- **{s['name']}**: {s['description']}" for s in self.skills)
 
     def get_bootstrap_command(self, agent: Agent) -> dict | None:
         """

@@ -14,7 +14,6 @@ from agents.blueprints.writers_room.workforce.story_researcher.commands import (
     research_setting,
     revise_research,
 )
-from agents.blueprints.writers_room.workforce.story_researcher.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +23,28 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
     slug = "story_researcher"
     description = "Researches market trends, comps, platform appetites, audience demographics, and cultural zeitgeist to inform creative decisions"
     tags = ["writers-room", "research", "market", "comps", "zeitgeist"]
+    skills = [
+        {
+            "name": "Lived-Detail Extraction",
+            "description": "Researches the sensory, social, and emotional texture of a setting — what people ate, complained about, took for granted.",
+        },
+        {
+            "name": "World-Building Consistency Check",
+            "description": "Maintains an internal logic ledger for fictional worlds. Catches rule violations.",
+        },
+        {
+            "name": "Cultural Sensitivity Audit",
+            "description": "Evaluates portrayals of cultures and identities for accuracy, nuance, and potential harm.",
+        },
+        {
+            "name": "Expert Knowledge Scaffolding",
+            "description": "Translates domain expertise into character-appropriate dialogue and behavior.",
+        },
+        {
+            "name": "Anachronism Detection",
+            "description": "Cross-references language, technology, and social norms against the story's time period.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -90,10 +111,6 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             "- Vary sentence length dramatically -- a 3-word sentence after a 30-word one\n"
             "- Use the voice profile from the Story Researcher as your north star"
         )
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     research = research
     revise_research = revise_research

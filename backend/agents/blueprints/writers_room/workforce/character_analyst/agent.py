@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.character_analyst.commands import analyze
-from agents.blueprints.writers_room.workforce.character_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,28 @@ class CharacterAnalystBlueprint(WorkforceBlueprint):
     controls = "character_designer"
     description = "Analyzes character consistency, motivation, arcs, want vs. need, and logic across creative material"
     tags = ["analysis", "character", "logic", "feedback"]
+    skills = [
+        {
+            "name": "Consistency Drift Detection",
+            "description": "Tracks character traits and emotional state across the full manuscript. Catches contradictions.",
+        },
+        {
+            "name": "Motivation Chain Validation",
+            "description": "Traces every character decision back to established motivation. Flags plot convenience.",
+        },
+        {
+            "name": "Agency Audit",
+            "description": "Measures whether each significant character drives events or merely reacts to them.",
+        },
+        {
+            "name": "Emotional Arc Tracking",
+            "description": "Maps each character's emotional state scene-by-scene to verify the arc feels earned.",
+        },
+        {
+            "name": "Distinctiveness Index",
+            "description": "Evaluates whether each character occupies a unique narrative role, voice, and thematic position.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -97,10 +118,6 @@ class CharacterAnalystBlueprint(WorkforceBlueprint):
     @property
     def system_prompt(self) -> str:
         return SYSTEM_PROMPT
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     cmd_analyze = analyze
 

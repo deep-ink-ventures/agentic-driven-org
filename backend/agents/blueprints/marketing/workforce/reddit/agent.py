@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.marketing.workforce.reddit.commands import monitor_mentions, place_content, post_content
-from agents.blueprints.marketing.workforce.reddit.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +19,17 @@ class RedditBlueprint(WorkforceBlueprint):
     slug = "reddit"
     description = "Strategic brand placement on Reddit — finds trending posts and adds value-driven content"
     tags = ["social-media", "reddit", "placement", "brand-visibility"]
+    skills = [
+        {
+            "name": "Strategic Placement",
+            "description": "Add one well-crafted post on trending content that angles toward the project goal",
+        },
+        {
+            "name": "Find Trending Posts",
+            "description": "Identify high-performing posts in relevant subreddits for strategic placement",
+        },
+        {"name": "Monitor Mentions", "description": "Search Reddit for brand, project, or keyword mentions"},
+    ]
     config_schema = {
         "reddit_username": {
             "type": "str",
@@ -69,10 +79,6 @@ When executing tasks, respond with a JSON object:
     ],
     "report": "Summary of what was done and why"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     place_content = place_content

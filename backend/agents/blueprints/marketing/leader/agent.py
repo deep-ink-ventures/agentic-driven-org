@@ -14,7 +14,6 @@ from agents.blueprints.marketing.leader.commands import (
     create_content_calendar,
     create_priority_task,
 )
-from agents.blueprints.marketing.leader.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +25,24 @@ class MarketingLeaderBlueprint(LeaderBlueprint):
         "Marketing department leader — orchestrates campaigns, coordinates research and execution across all channels"
     )
     tags = ["leadership", "strategy", "campaigns", "coordination", "marketing"]
+    skills = [
+        {
+            "name": "Prioritize Tasks",
+            "description": "Analyze workforce activity and propose the highest-value initiative — coordinating one or multiple agents as needed",
+        },
+        {
+            "name": "Design Campaigns",
+            "description": "Create multi-channel campaigns with consistent branding, timing, and channel-appropriate messaging",
+        },
+        {
+            "name": "Content Calendar",
+            "description": "Plan coordinated content across all channels with day-by-day schedule and specific briefs",
+        },
+        {
+            "name": "Analyze Performance",
+            "description": "Compile reports from all agents, identify what's working, flag underperformers, suggest strategy adjustments",
+        },
+    ]
     config_schema = {}
 
     def get_review_pairs(self):
@@ -97,10 +114,6 @@ You don't post directly — you create tasks for your workforce. Each task you c
 - What angle to take and what to drive traffic toward
 
 When creating campaigns, stagger content across channels for maximum impact. Research first, then execute."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     create_priority_task = create_priority_task

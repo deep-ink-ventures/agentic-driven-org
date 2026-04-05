@@ -16,7 +16,6 @@ from agents.blueprints.base import (
     LeaderBlueprint,
 )
 from agents.blueprints.writers_room.leader.commands import check_progress, plan_room
-from agents.blueprints.writers_room.leader.skills import format_skills
 from projects.models import Document
 
 logger = logging.getLogger(__name__)
@@ -191,10 +190,6 @@ FLAG ROUTING (which creative agent fixes which feedback):
 - production_analyst flags \u2192 relevant creative agent based on flag content
 
 LOCALE: All agents output in the configured locale. This is non-negotiable."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # ── Register commands ────────────────────────────────────────────────
     plan_room = plan_room

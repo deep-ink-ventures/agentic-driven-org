@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import LeaderBlueprint
 from agents.blueprints.community.leader.commands import check_progress, plan_community
-from agents.blueprints.community.leader.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,20 @@ class CommunityLeaderBlueprint(LeaderBlueprint):
     slug = "leader"
     description = "Community & partnerships leader — orchestrates ecosystem research, partnership proposals, and relationship building"
     tags = ["leadership", "strategy", "community", "partnerships", "ecosystem"]
+    skills = [
+        {
+            "name": "Ecosystem Mapping",
+            "description": "Categorize and track organizations, communities, events, and influencers by relevance and relationship stage",
+        },
+        {
+            "name": "Partnership Strategy",
+            "description": "Identify mutually beneficial partnership structures — referrals, co-marketing, cross-promotion, bundled offerings",
+        },
+        {
+            "name": "Review Orchestration",
+            "description": "Manage writer/reviewer ping-pong loops for partnership proposals — route drafts to reviewers, route feedback to writers",
+        },
+    ]
     config_schema = {}
 
     def get_review_pairs(self):
@@ -53,10 +66,6 @@ When a partnership_writer task completes, the system automatically:
 Do NOT manually create review tasks — the system handles the loop.
 
 Community building is slower than sales — weekly planning, daily checks. Focus on quality relationships over volume."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     plan_community = plan_community

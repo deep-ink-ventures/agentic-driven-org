@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.marketing.workforce.twitter.commands import place_content, post_content, search_trends
-from agents.blueprints.marketing.workforce.twitter.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +19,20 @@ class TwitterBlueprint(WorkforceBlueprint):
     slug = "twitter"
     description = "Strategic brand placement on Twitter — finds trending tweets and adds value-driven content"
     tags = ["social-media", "twitter", "placement", "content-creation"]
+    skills = [
+        {
+            "name": "Strategic Placement",
+            "description": "Add one strategic reply or quote tweet on trending content that angles toward the project",
+        },
+        {
+            "name": "Post Original Content",
+            "description": "Create and post an original tweet aligned with project goals and optimal timing",
+        },
+        {
+            "name": "Find Trending Tweets",
+            "description": "Identify high-performing tweets in the project's niche for strategic placement",
+        },
+    ]
     config_schema = {
         "twitter_session": {
             "type": "str",
@@ -64,10 +77,6 @@ When executing tasks, respond with a JSON object:
     ],
     "report": "Summary of what was done and why"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     place_content = place_content

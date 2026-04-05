@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.writers_room.workforce.market_analyst.commands import analyze
-from agents.blueprints.writers_room.workforce.market_analyst.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +97,28 @@ class MarketAnalystBlueprint(WorkforceBlueprint):
     controls = "story_researcher"
     description = "Analyzes market fit, comparable titles, competitive landscape, and positioning for creative material"
     tags = ["analysis", "market", "research", "feedback"]
+    skills = [
+        {
+            "name": "Comp Title Analysis",
+            "description": "Identifies the 3-5 most relevant comparable titles by genre positioning, audience overlap, tone, and recency.",
+        },
+        {
+            "name": "Genre Convention Mapping",
+            "description": "Catalogs expected conventions and evaluates which the manuscript fulfills, subverts, or ignores.",
+        },
+        {
+            "name": "Commercial Hook Assessment",
+            "description": "Evaluates the story's elevator pitch potential and unique selling proposition.",
+        },
+        {
+            "name": "Audience Expectation Profiling",
+            "description": "Builds a reader profile based on genre, tone, and comp titles.",
+        },
+        {
+            "name": "Trend Positioning",
+            "description": "Analyzes current market trends and emerging themes in the target genre.",
+        },
+    ]
     config_schema = {
         "locale": {
             "type": "str",
@@ -109,10 +130,6 @@ class MarketAnalystBlueprint(WorkforceBlueprint):
     @property
     def system_prompt(self) -> str:
         return SYSTEM_PROMPT
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     cmd_analyze = analyze
 

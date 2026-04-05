@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.engineering.workforce.frontend_engineer.commands import implement
-from agents.blueprints.engineering.workforce.frontend_engineer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +70,20 @@ class FrontendEngineerBlueprint(WorkforceBlueprint):
     slug = "frontend_engineer"
     description = "Implements frontend UI by crafting detailed prompts with design spec and accessibility requirements, then triggering GitHub Actions workflows"
     tags = ["engineering", "frontend", "implementation", "typescript", "react"]
+    skills = [
+        {
+            "name": "Build UI Prompt",
+            "description": "Constructs implementation prompts with additional DESIGN SPEC, ACCESSIBILITY, and RESPONSIVE sections for frontend work",
+        },
+        {
+            "name": "Read Codebase Context",
+            "description": "Fetches relevant UI component files via GitHub API to understand existing design patterns and tokens",
+        },
+        {
+            "name": "Verify Result",
+            "description": "When a webhook returns with a PR URL, reads the diff and validates UI implementation matches design spec and accessibility requirements",
+        },
+    ]
     config_schema = {
         "github_repos": {
             "type": "list",
@@ -117,10 +130,6 @@ When executing tasks, respond with a JSON object:
     "file_paths": ["path/to/component.tsx"],
     "report": "Summary of what will be implemented"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     implement = implement

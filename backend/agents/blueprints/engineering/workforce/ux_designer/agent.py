@@ -14,7 +14,6 @@ from agents.blueprints.engineering.workforce.ux_designer.commands import (
     design_system,
     polish,
 )
-from agents.blueprints.engineering.workforce.ux_designer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -276,10 +275,6 @@ Your design specs must be IMPLEMENTABLE. For every design decision:
 
 Your output is a SPECIFICATION. It should be precise enough that two different frontend engineers
 would produce visually identical results from your spec. Ambiguity is failure."""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         if task.command_name == "design_component":

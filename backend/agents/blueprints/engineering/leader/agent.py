@@ -19,7 +19,6 @@ from agents.blueprints.engineering.leader.commands import (
     check_progress,
     plan_sprint,
 )
-from agents.blueprints.engineering.leader.skills import format_skills
 from agents.blueprints.engineering.leader.workflows import WORKFLOW_FILES
 
 logger = logging.getLogger(__name__)
@@ -39,6 +38,33 @@ class EngineeringLeaderBlueprint(LeaderBlueprint):
     slug = "leader"
     description = "Engineering department leader — decomposes goals into implementable tasks, orchestrates specialist agents, tracks progress across repos"
     tags = ["leadership", "engineering", "orchestration", "github", "code-review"]
+    skills = [
+        {
+            "name": "Decompose Goal",
+            "description": "Break high-level goals into Epic -> Story -> Task hierarchy. Each task scoped to 4-8 hours of junior engineer work.",
+        },
+        {"name": "Route Task", "description": "Route tasks to specialist agents based on file paths and issue labels."},
+        {
+            "name": "Manage Dependencies",
+            "description": "Create task chains with blocked_by relationships. Track progress in internal_state.",
+        },
+        {
+            "name": "Manage File Locks",
+            "description": "Maintain files_claimed map in internal_state. Prevents two agents from editing the same file simultaneously.",
+        },
+        {
+            "name": "Incremental Context",
+            "description": "Store and retrieve context summaries per codebase area. Avoids re-discovering patterns across stateless workflow runs.",
+        },
+        {
+            "name": "Setup Repo",
+            "description": "Push GitHub Actions workflow files and generate CLAUDE.md for target repos via GitHub API during bootstrap.",
+        },
+        {
+            "name": "Escalate",
+            "description": "After 10 review iterations or agent failure, escalate to human with full context.",
+        },
+    ]
     config_schema = {
         "github_repos": {
             "type": "list",
@@ -119,10 +145,6 @@ Each task you create should include:
 - Relevant file paths for routing and lock checking
 - Reference to existing patterns in the codebase
 - Dependencies on other tasks where applicable"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # ── Register commands ────────────────────────────────────────────────
     bootstrap = bootstrap

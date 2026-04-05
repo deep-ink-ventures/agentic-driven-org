@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.engineering.workforce.test_engineer.commands import check_coverage
-from agents.blueprints.engineering.workforce.test_engineer.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +62,20 @@ class TestEngineerBlueprint(WorkforceBlueprint):
     controls = ["backend_engineer", "frontend_engineer"]
     description = "Analyzes PRs for test coverage gaps, writes comprehensive tests, and enforces quality standards"
     tags = ["engineering", "testing", "coverage", "quality"]
+    skills = [
+        {
+            "name": "Analyze Coverage Gaps",
+            "description": "Reads the PR diff to identify untested branches, edge cases, and error paths that need test coverage",
+        },
+        {
+            "name": "Build Test Prompt",
+            "description": "Constructs a test generation prompt with explicit quality rules, anti-patterns to avoid, and coverage targets",
+        },
+        {
+            "name": "Verify Coverage",
+            "description": "Validates that differential coverage meets the >80% branch coverage threshold on changed lines",
+        },
+    ]
     config_schema = {
         "github_repos": {
             "type": "list",
@@ -108,10 +121,6 @@ When executing tasks, respond with a JSON object:
     "changed_files": ["path/to/changed.py"],
     "report": "Coverage gap analysis and what tests will be written"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     check_coverage = check_coverage

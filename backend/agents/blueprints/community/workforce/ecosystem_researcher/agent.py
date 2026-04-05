@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.community.workforce.ecosystem_researcher.commands import map_ecosystem, revise_research
-from agents.blueprints.community.workforce.ecosystem_researcher.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +19,20 @@ class EcosystemResearcherBlueprint(WorkforceBlueprint):
         "Maps local and industry ecosystems — organizations, communities, events, influencers, complementary businesses"
     )
     tags = ["research", "ecosystem", "communities", "partnerships"]
+    skills = [
+        {
+            "name": "Organization Profiling",
+            "description": "Build structured profiles of organizations, communities, and event series",
+        },
+        {
+            "name": "Relationship Mapping",
+            "description": "Identify connections between ecosystem entities — who partners with whom, shared audiences",
+        },
+        {
+            "name": "Opportunity Detection",
+            "description": "Spot partnership openings — upcoming events, new programs, expansion announcements",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -42,10 +55,6 @@ When researching, respond with JSON:
     ],
     "report": "Summary of ecosystem mapped and key opportunities identified"
 }"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     map_ecosystem = map_ecosystem
     revise_research = revise_research

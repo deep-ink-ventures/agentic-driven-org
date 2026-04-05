@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.engineering.workforce.ticket_manager.commands import create_issues, triage_issue
-from agents.blueprints.engineering.workforce.ticket_manager.skills import format_skills
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +63,24 @@ class TicketManagerBlueprint(WorkforceBlueprint):
     essential = True
     description = "Creates GitHub issues, applies labels, detects duplicates, and links dependencies"
     tags = ["engineering", "tickets", "github", "triage"]
+    skills = [
+        {
+            "name": "Write Issue",
+            "description": "Structures GitHub issues following the standard template with problem statement, acceptance criteria, technical notes, and scope boundaries",
+        },
+        {
+            "name": "Detect Duplicates",
+            "description": "Searches existing GitHub issues before creating new ones to prevent duplicate work",
+        },
+        {
+            "name": "Label and Prioritize",
+            "description": "Applies structured labels: type (feature/bug/chore), component (api/frontend/auth), size (S/M/L), priority (P0-P3)",
+        },
+        {
+            "name": "Link Dependencies",
+            "description": "Cross-references related issues and notes blocking relationships between tickets",
+        },
+    ]
     config_schema = {}
 
     @property
@@ -96,10 +113,6 @@ When executing tasks, respond with a JSON object:
     ],
     "report": "Summary of issues created"
 }}"""
-
-    @property
-    def skills_description(self) -> str:
-        return format_skills()
 
     # Register commands
     create_issues = create_issues
