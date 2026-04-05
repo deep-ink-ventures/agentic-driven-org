@@ -204,6 +204,38 @@ class TestTaskRejectView:
         assert resp.status_code == 400
 
 
+# ── Broadcast WebSocket on approve/reject ────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestTaskBroadcast:
+    @patch("agents.views.agent_task_view._broadcast_task")
+    @patch("agents.tasks.create_next_leader_task.delay")
+    @patch("agents.tasks.execute_agent_task.delay")
+    def test_approve_calls_broadcast(
+        self, mock_exec_delay, mock_next_leader_delay, mock_broadcast, authed_client, project, agent
+    ):
+        task = AgentTask.objects.create(
+            agent=agent, exec_summary="Broadcast on approve", status=AgentTask.Status.AWAITING_APPROVAL
+        )
+        resp = authed_client.post(f"/api/projects/{project.id}/tasks/{task.id}/approve/")
+        assert resp.status_code == 200
+        mock_broadcast.assert_called_once()
+        broadcast_arg = mock_broadcast.call_args[0][0]
+        assert broadcast_arg.id == task.id
+
+    @patch("agents.views.agent_task_view._broadcast_task")
+    def test_reject_calls_broadcast(self, mock_broadcast, authed_client, project, agent):
+        task = AgentTask.objects.create(
+            agent=agent, exec_summary="Broadcast on reject", status=AgentTask.Status.AWAITING_APPROVAL
+        )
+        resp = authed_client.post(f"/api/projects/{project.id}/tasks/{task.id}/reject/")
+        assert resp.status_code == 200
+        mock_broadcast.assert_called_once()
+        broadcast_arg = mock_broadcast.call_args[0][0]
+        assert broadcast_arg.id == task.id
+
+
 # ── TaskRetryView ─────────────────────────────────────────────────────────────
 
 

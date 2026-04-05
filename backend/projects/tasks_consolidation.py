@@ -82,7 +82,11 @@ def consolidate_sprint_documents(sprint_id):
     """Merge all sprint progress documents into one summary per department."""
     from projects.models import Document, Sprint
 
-    sprint = Sprint.objects.get(id=sprint_id)
+    try:
+        sprint = Sprint.objects.get(id=sprint_id)
+    except Sprint.DoesNotExist:
+        logger.warning("Sprint %s not found — skipping consolidation", sprint_id)
+        return
 
     for department in sprint.departments.all():
         docs = list(

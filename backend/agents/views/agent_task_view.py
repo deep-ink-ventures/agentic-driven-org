@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from agents.models import AgentTask
 from agents.serializers import AgentTaskSerializer
+from agents.tasks import _broadcast_task
 
 
 class ProjectTaskListView(ListAPIView):
@@ -104,6 +105,12 @@ class TaskApproveView(APIView):
             task.save(update_fields=update_fields + ["updated_at"])
 
         task.approve()
+        broadcast_task = AgentTask.objects.select_related(
+            "agent__department__project",
+            "blocked_by",
+            "created_by_agent",
+        ).get(id=task.id)
+        _broadcast_task(broadcast_task)
         task.refresh_from_db()
         return Response(AgentTaskSerializer(task).data)
 
@@ -129,6 +136,18 @@ class TaskRejectView(APIView):
         task.error_message = "Rejected"
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+        task = AgentTask.objects.select_related(
+            "agent__department__project",
+            "blocked_by",
+            "created_by_agent",
+        ).get(id=task.id)
+        _broadcast_task(task)
+
+        from agents.tasks import _fail_dependents, _trigger_next_sprint_work
+
+        _fail_dependents(task)
+        _trigger_next_sprint_work(task)
+
         return Response(AgentTaskSerializer(task).data)
 
 

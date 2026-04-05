@@ -768,7 +768,7 @@ export function CreateProjectWizard({
                               {agent.name}
                               <button
                                 onClick={() => removeAgent(i, j)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-flag-critical"
+                                className="text-accent-gold/60 hover:text-flag-critical transition-colors"
                                 title="Remove agent"
                               >
                                 <X className="h-3 w-3" />

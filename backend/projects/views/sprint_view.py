@@ -62,7 +62,7 @@ class SprintListCreateView(generics.ListCreateAPIView):
 
         from agents.models import Agent
 
-        for dept_id in department_ids:
+        for dept_id in valid_dept_ids:
             leader = Agent.objects.filter(
                 department_id=dept_id,
                 is_leader=True,
@@ -197,13 +197,17 @@ Suggest 3 specific, actionable next steps. Return as JSON array of 3 strings."""
 
 
 def _broadcast_sprint(sprint, event_type="sprint.updated"):
+    import json
+
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
+    from rest_framework.utils.encoders import JSONEncoder
 
     try:
         from projects.serializers import SprintSerializer
 
-        data = SprintSerializer(sprint).data
+        # Serialize to JSON-safe dict (converts UUIDs, datetimes, etc.)
+        data = json.loads(json.dumps(SprintSerializer(sprint).data, cls=JSONEncoder))
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"project_{sprint.project_id}",
