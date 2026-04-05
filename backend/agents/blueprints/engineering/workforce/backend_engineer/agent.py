@@ -202,7 +202,7 @@ When executing tasks, respond with a JSON object:
                     import base64
 
                     content = base64.b64decode(resp.json().get("content", "")).decode("utf-8", errors="replace")
-                    context_parts.append(f"--- {fp} ---\n{content[:3000]}")
+                    context_parts.append(f"--- {fp} ---\n{content}")
             except Exception as e:
                 logger.warning("Failed to fetch %s from %s: %s", fp, repo, e)
         return "\n\n".join(context_parts)

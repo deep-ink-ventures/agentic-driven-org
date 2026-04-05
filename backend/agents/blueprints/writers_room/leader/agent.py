@@ -1019,7 +1019,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         feedback_text = ""
         for agent_type, report in recent_feedback:
             if report:
-                feedback_text += f"\n\n## {agent_type}\n{report[:3000]}"
+                feedback_text += f"\n\n## {agent_type}\n{report}"
 
         internal_state = agent.internal_state or {}
         stage_status = internal_state.get("stage_status", {})
@@ -1070,7 +1070,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         agent.internal_state = internal_state
         agent.save(update_fields=["internal_state"])
 
-        review_snippet = (review_task.report or "")[:3000]
+        review_snippet = review_task.report or ""
         polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
 
         return {
@@ -1182,10 +1182,7 @@ def _run_entry_detection(agent) -> str:
         if not text:
             continue
         name = s.original_filename or s.url or "Text input"
-        snippet = text[:2000]
-        if len(text) > 2000:
-            snippet += f"\n[... truncated, {len(text)} chars total ...]"
-        sources_summary += f"\n### {name} ({s.source_type})\n{snippet}\n"
+        sources_summary += f"\n### {name} ({s.source_type})\n{text}\n"
 
     if not sources_summary:
         sources_summary = "No source material uploaded."

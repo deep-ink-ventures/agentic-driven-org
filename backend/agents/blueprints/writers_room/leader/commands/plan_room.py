@@ -51,9 +51,7 @@ def plan_room(self, agent: Agent) -> dict | None:
         .order_by("-completed_at")[:30]
         .values_list("exec_summary", "agent__agent_type", "report")
     )
-    completed_text = (
-        "\n".join(f"- ({at}) {es[:150]}" for es, at, _ in completed) if completed else "No completed tasks yet."
-    )
+    completed_text = "\n".join(f"- ({at}) {es}" for es, at, _ in completed) if completed else "No completed tasks yet."
 
     # Gather active work
     active = list(
@@ -67,7 +65,7 @@ def plan_room(self, agent: Agent) -> dict | None:
             ],
         ).values_list("exec_summary", "status", "agent__agent_type")
     )
-    active_text = "\n".join(f"- [{st}] ({at}) {es[:150]}" for es, st, at in active) if active else "No active tasks."
+    active_text = "\n".join(f"- [{st}] ({at}) {es}" for es, st, at in active) if active else "No active tasks."
 
     # Workforce agents
     workforce = list(agent.department.agents.filter(status="active", is_leader=False).values_list("name", "agent_type"))
