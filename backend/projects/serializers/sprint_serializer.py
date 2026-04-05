@@ -46,6 +46,11 @@ class SprintSerializer(serializers.ModelSerializer):
             "completed_at",
         ]
 
+    def create(self, validated_data):
+        validated_data.pop("department_ids", None)
+        validated_data.pop("source_ids", None)
+        return super().create(validated_data)
+
     def get_departments(self, obj):
         return [
             {"id": str(d.id), "department_type": d.department_type, "display_name": d.display_name}
