@@ -23,11 +23,13 @@ export function AgentDetailView({
   projectId,
   onBack,
   onAgentUpdated,
+  taskWsEvent,
 }: {
   agent: AgentSummary;
   projectId: string;
   onBack: () => void;
   onAgentUpdated: () => void;
+  taskWsEvent?: { type: string; task: import("@/lib/types").AgentTask } | null;
 }) {
   const [tab, setTab] = useState<"overview" | "instructions" | "config" | "tasks">(
     "overview",
@@ -223,7 +225,7 @@ export function AgentDetailView({
       {/* Tasks tab */}
       {tab === "tasks" && (
         <div className="flex-1 overflow-y-auto min-h-0">
-          <TaskQueue projectId={projectId} agent={agent.id} />
+          <TaskQueue projectId={projectId} agent={agent.id} wsEvent={taskWsEvent} />
         </div>
       )}
     </div>

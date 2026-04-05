@@ -13,11 +13,13 @@ export function DepartmentView({
   projectId,
   onSelectAgent,
   onRefresh,
+  taskWsEvent,
 }: {
   dept: DepartmentDetail;
   projectId: string;
   onSelectAgent: (a: AgentSummary) => void;
   onRefresh: () => void;
+  taskWsEvent?: { type: string; task: import("@/lib/types").AgentTask } | null;
 }) {
   const leader = dept.agents.find((a) => a.is_leader);
   const workforce = dept.agents.filter((a) => !a.is_leader);
@@ -164,7 +166,7 @@ export function DepartmentView({
 
       {/* Department task queue */}
       <div className="mt-8">
-        <TaskQueue projectId={projectId} department={dept.id} />
+        <TaskQueue projectId={projectId} department={dept.id} wsEvent={taskWsEvent} />
       </div>
     </div>
   );

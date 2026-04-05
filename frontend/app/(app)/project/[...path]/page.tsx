@@ -54,6 +54,7 @@ export default function ProjectDetailPage() {
     null,
   );
   const [initialDeepLinkDone, setInitialDeepLinkDone] = useState(false);
+  const [taskWsEvent, setTaskWsEvent] = useState<{ type: string; task: import("@/lib/types").AgentTask } | null>(null);
 
   // Apply deep link from URL on first load
   useEffect(() => {
@@ -120,6 +121,9 @@ export default function ProjectDetailPage() {
     if (!project) return;
     let cancelled = false;
     connectWs(`/ws/project/${project.id}/`, (data) => {
+      if (data.type === "task.created" || data.type === "task.updated") {
+        setTaskWsEvent({ type: data.type, task: data.task as import("@/lib/types").AgentTask });
+      }
       if (data.type === "agent.status") {
         const agentId = data.agent_id as string;
         const newStatus = data.status as string;
@@ -293,7 +297,7 @@ export default function ProjectDetailPage() {
       {/* Main area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {view === "dashboard" && (
-          <TaskQueue projectId={project.id} />
+          <TaskQueue projectId={project.id} wsEvent={taskWsEvent} />
         )}
         {view === "department" && selectedDept && !selectedAgent && (
           <DepartmentView
@@ -305,6 +309,7 @@ export default function ProjectDetailPage() {
               router.push(`/project/${projectSlug}/${selectedDept.department_type}/${slugifyName(agent.name)}`);
             }}
             onRefresh={load}
+            taskWsEvent={taskWsEvent}
           />
         )}
         {view === "agent" && selectedAgent && (
@@ -317,6 +322,7 @@ export default function ProjectDetailPage() {
               if (selectedDept) router.push(`/project/${projectSlug}/${selectedDept.department_type}`);
             }}
             onAgentUpdated={load}
+            taskWsEvent={taskWsEvent}
           />
         )}
         {view === "settings" && (

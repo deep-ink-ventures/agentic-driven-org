@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import type { AgentTask } from "@/lib/types";
 import {
@@ -297,11 +297,13 @@ function TaskLane({
   projectId,
   department,
   agent,
+  wsEvent,
 }: {
   config: LaneConfig;
   projectId: string;
   department?: string;
   agent?: string;
+  wsEvent?: { type: string; task: AgentTask } | null;
 }) {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -342,6 +344,44 @@ function TaskLane({
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [fetchTasks, expanded]);
+
+  // Handle WebSocket task events
+  const prevWsEvent = useRef(wsEvent);
+  useEffect(() => {
+    if (!wsEvent || wsEvent === prevWsEvent.current) return;
+    prevWsEvent.current = wsEvent;
+
+    const task = wsEvent.task;
+    const laneStatuses = config.statuses.split(",");
+    const belongsInLane =
+      laneStatuses.includes(task.status) &&
+      (!department || task.agent === department) &&
+      (!agent || task.agent === agent);
+
+    if (wsEvent.type === "task.created") {
+      if (belongsInLane) {
+        setTasks((prev) => {
+          if (prev.some((t) => t.id === task.id)) return prev;
+          return [task, ...prev];
+        });
+        setTotalCount((prev) => prev + 1);
+      }
+    } else if (wsEvent.type === "task.updated") {
+      const wasInLane = tasks.some((t) => t.id === task.id);
+      if (wasInLane && !belongsInLane) {
+        // Task moved out of this lane
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+        setTotalCount((prev) => Math.max(0, prev - 1));
+      } else if (wasInLane && belongsInLane) {
+        // Task updated within this lane
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+      } else if (!wasInLane && belongsInLane) {
+        // Task moved into this lane from another
+        setTasks((prev) => [task, ...prev]);
+        setTotalCount((prev) => prev + 1);
+      }
+    }
+  }, [wsEvent, config.statuses, department, agent, tasks]);
 
   async function loadMore() {
     if (tasks.length === 0) return;
@@ -459,10 +499,12 @@ export function TaskQueue({
   projectId,
   department,
   agent,
+  wsEvent,
 }: {
   projectId: string;
   department?: string;
   agent?: string;
+  wsEvent?: { type: string; task: AgentTask } | null;
 }) {
   return (
     <div>
@@ -476,12 +518,14 @@ export function TaskQueue({
           projectId={projectId}
           department={department}
           agent={agent}
+          wsEvent={wsEvent}
         />
         <TaskLane
           config={{ title: "In Progress", statuses: "processing,awaiting_dependencies" }}
           projectId={projectId}
           department={department}
           agent={agent}
+          wsEvent={wsEvent}
         />
       </div>
 
@@ -491,6 +535,7 @@ export function TaskQueue({
         projectId={projectId}
         department={department}
         agent={agent}
+        wsEvent={wsEvent}
       />
     </div>
   );
