@@ -59,14 +59,15 @@ FRONTEND_URL=https://{domain}
 ONLY_ALLOWLIST_CAN_SIGN_UP=true
 ENVEOF
 
-# Rolling restart: start new, wait, stop old
+# Rolling restart: start new worker, wait, drain old worker, then restart beat
 docker run -d \
     --name celery-worker-new \
     --restart=always \
     --network=host \
     --env-file /tmp/celery.env \
+    -e REMAP_SIGTERM=SIGQUIT \
     ${{IMAGE}} \
-    celery -A config worker -B --loglevel=info --concurrency=2 --schedule=/tmp/celerybeat-schedule
+    celery -A config worker --loglevel=info --concurrency=2 --without-heartbeat
 
 echo "Waiting 20s for new worker to stabilize..."
 sleep 20
@@ -80,6 +81,20 @@ fi
 
 # Rename new to active
 docker rename celery-worker-new celery-worker
+
+# Restart beat separately
+if docker ps --format '{{{{.Names}}}}' | grep -q '^celery-beat$'; then
+    docker stop --time=10 celery-beat || true
+    docker rm celery-beat || true
+fi
+
+docker run -d \
+    --name celery-beat \
+    --restart=always \
+    --network=host \
+    --env-file /tmp/celery.env \
+    ${{IMAGE}} \
+    celery -A config beat --loglevel=info --schedule=/tmp/celerybeat-schedule
 
 # Cleanup
 rm -f /tmp/celery.env
