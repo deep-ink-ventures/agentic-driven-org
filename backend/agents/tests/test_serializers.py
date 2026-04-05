@@ -62,6 +62,8 @@ class TestAgentTaskSerializer:
             "token_usage",
             "created_at",
             "updated_at",
+            "review_verdict",
+            "review_score",
         }
         assert set(data.keys()) == expected_fields
 

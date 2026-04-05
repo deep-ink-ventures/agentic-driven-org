@@ -144,13 +144,7 @@ class StructureAnalystBlueprint(WorkforceBlueprint):
             "description": "Verifies consistent POV handling within scenes — catches head-hopping and knowledge leaks.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "description": "Output language code (e.g. 'en', 'de', 'fr'). Default: 'en'",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:

@@ -46,14 +46,7 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
         },
     ]
     outputs = ["document"]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "label": "Output Language",
-            "description": "ISO locale for all creative output (e.g. 'en', 'de', 'fr'). Defaults to 'en'.",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:

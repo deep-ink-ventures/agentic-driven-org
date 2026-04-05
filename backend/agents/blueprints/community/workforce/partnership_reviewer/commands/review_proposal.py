@@ -7,8 +7,7 @@ from agents.blueprints.base import command
     name="review-proposal",
     description=(
         "Review a partnership proposal for mutual value clarity, professional tone, "
-        "specificity, realistic structure, and clear next steps. Return verdict: approved "
-        "or revision_needed with specific feedback."
+        "specificity, realistic structure, and clear next steps. Submit verdict via tool call."
     ),
     model="claude-sonnet-4-6",
 )

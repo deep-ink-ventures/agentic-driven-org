@@ -17,6 +17,7 @@ class EcosystemAnalystBlueprint(WorkforceBlueprint):
     slug = "ecosystem_analyst"
     description = "Reviews ecosystem research for completeness, strategic fit, and missed opportunities — quality gate before partnership outreach"
     tags = ["review", "analysis", "ecosystem", "strategy"]
+    review_dimensions = ["coverage_completeness", "strategic_prioritization", "partnership_potential_accuracy"]
     skills = [
         {
             "name": "Strategic Prioritization",
@@ -39,8 +40,6 @@ class EcosystemAnalystBlueprint(WorkforceBlueprint):
 
 When reviewing, respond with JSON:
 {
-    "verdict": "approved" or "revision_needed",
-    "overall_score": 1-10,
     "entity_reviews": [
         {
             "entity_name": "...",
@@ -54,7 +53,8 @@ When reviewing, respond with JSON:
     "report": "Detailed review summary"
 }
 
-Approve threshold: overall score >= 7 and no critical gaps in coverage."""
+Score each review dimension 1.0-10.0 (use decimals). The overall score is the MINIMUM of all dimension scores.
+After your review, call the submit_verdict tool with your verdict and score."""
 
     review_ecosystem = review_ecosystem
 
@@ -72,5 +72,8 @@ Approve threshold: overall score >= 7 and no critical gaps in coverage."""
 - Are any low-potential entities over-scored?
 
 ## Verdict Rules
+The overall score is the MINIMUM of all dimension scores.
 - Score >= 7 with no major coverage gaps: APPROVED
-- Otherwise: REVISION_NEEDED with specific feedback on what to add or fix"""
+- Otherwise: CHANGES_REQUESTED with specific feedback on what to add or fix
+
+After your review, call the submit_verdict tool with your verdict and score."""

@@ -7,8 +7,7 @@ from agents.blueprints.base import command
     name="review-ecosystem",
     description=(
         "Review ecosystem research for completeness, strategic prioritization, and missed "
-        "opportunities. Score each entity on partnership potential. Return verdict: approved "
-        "or revision_needed with specific feedback."
+        "opportunities. Score each entity on partnership potential. Submit verdict via tool call."
     ),
     model="claude-sonnet-4-6",
 )

@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Review a marketing content draft (tweet, Reddit post, email campaign) for brand alignment, "
         "audience fit, channel conventions, messaging clarity, and call-to-action effectiveness. "
         "Score each dimension 1-10, overall = minimum. Threshold: 9.5/10. "
-        "Return VERDICT: APPROVED or CHANGES_REQUESTED with specific, actionable feedback."
+        "Submit verdict via tool call."
     ),
     model="claude-sonnet-4-6",
 )

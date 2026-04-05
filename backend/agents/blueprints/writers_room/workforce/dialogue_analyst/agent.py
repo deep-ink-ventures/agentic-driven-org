@@ -144,13 +144,7 @@ class DialogueAnalystBlueprint(WorkforceBlueprint):
             "description": "Evaluates who knows what and whether characters appropriately protect, reveal, or trade information.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "description": "Output language code (e.g. 'en', 'de', 'fr'). Default: 'en'",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:

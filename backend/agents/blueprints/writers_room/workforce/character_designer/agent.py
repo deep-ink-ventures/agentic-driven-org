@@ -44,14 +44,7 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
             "description": "Stress-tests characters by placing them in scenarios that force impossible choices.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "label": "Output Language",
-            "description": "ISO locale for all creative output (e.g. 'en', 'de', 'fr'). Defaults to 'en'.",
-        },
-    }
+    config_schema = {}
 
     write_characters = write_characters
     fix_characters = fix_characters
@@ -95,6 +88,30 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
             "- **First Draft**: complete voice profiles, knowledge tracking, "
             "beat-by-beat character decisions\n"
             "- **Revised Draft**: consistency check, arc refinement, voice polish\n\n"
+            "## Fidelity to the Creator's Vision\n"
+            "Read the project goal and existing material carefully. If the creator specified "
+            "characters, relationships, conflicts, or real-world inspirations:\n"
+            "- BUILD ON their specific characters -- don't replace them with generic archetypes\n"
+            "- Honor the central conflict they described\n"
+            "- Use their character dynamics as the foundation, adding psychological depth\n"
+            "- If inspired by real people: create DISTINCT fictional versions that capture "
+            "the same dynamics without legal risk (different names, different details, same energy)\n\n"
+            "## ORIGINALITY MANDATE (CRITICAL)\n"
+            "NEVER copy character archetypes from referenced shows. If the creator says "
+            "'like Succession', do NOT create Logan Roy / Kendall Roy / Shiv Roy clones "
+            "with German names. The creator's OWN character descriptions are the source material.\n"
+            "- Character Swap Test: Could you rename your characters to match a referenced "
+            "show's cast and it still works? If yes, you've written derivative characters.\n"
+            "- Build characters from the creator's SPECIFIC world and conflict, not from "
+            "the referenced show's character dynamics.\n\n"
+            "## Character Naming (CRITICAL)\n"
+            "- Names must be realistic for the setting's milieu, social class, and culture\n"
+            "- NEVER use project codenames, working titles, or joke names as character names\n"
+            "- For prestige TV / literary fiction: names should feel authentic, not comedic\n"
+            "- For German-language projects: use authentic German names appropriate to the "
+            "characters' social milieu (old money vs. nouveau riche vs. working class)\n"
+            "- When inspired by real people: different names, different initials, but same "
+            "cultural register and social positioning\n\n"
             "## Format Awareness\n"
             "You work with ANY format: screenplay, novel, theatre, series, film, short story. "
             "Character depth scales with the medium -- a film protagonist needs different "

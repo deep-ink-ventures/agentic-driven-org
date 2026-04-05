@@ -105,41 +105,17 @@ class WritersRoomLeaderBlueprint(LeaderBlueprint):
     description = "Writers Room showrunner — orchestrates creative/feedback ping-pong loop across stages from logline to revised draft"
     tags = ["leadership", "writers-room", "orchestration", "screenplay", "novel", "creative-writing"]
     config_schema = {
-        "target_stage": {
-            "type": "str",
-            "required": False,
-            "label": "Target Stage",
-            "description": "Final stage: logline, expose, treatment, step_outline, first_draft, revised_draft (default: revised_draft)",
-        },
-        "target_format": {
-            "type": "str",
-            "required": False,
-            "label": "Format",
-            "description": "screenplay, novel, theatre, series, film, short_story",
-        },
-        "target_platform": {
-            "type": "str",
-            "required": False,
-            "label": "Platform",
-            "description": "netflix, hbo, bbc, film, indie, theatre, publisher, etc.",
-        },
-        "genre": {
-            "type": "str",
-            "required": False,
-            "label": "Genre",
-            "description": "drama, comedy, thriller, horror, sci-fi, etc.",
-        },
-        "tone": {
-            "type": "str",
-            "required": False,
-            "label": "Tone",
-            "description": "dark, light, prestige, pulp, literary, etc.",
-        },
         "locale": {
             "type": "str",
             "required": False,
             "label": "Language",
             "description": "Output language code: en, de, fr, es, etc. (default: en)",
+        },
+        "target_stage": {
+            "type": "str",
+            "required": False,
+            "label": "Target Stage",
+            "description": "Final stage: logline, expose, treatment, step_outline, first_draft, revised_draft (default: revised_draft)",
         },
     }
 
@@ -300,9 +276,27 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             # Step 1: Assign creative agents to write
             return self._propose_creative_tasks(agent, current_stage, config)
 
+        if status == "writing_in_progress":
+            # All creative tasks completed (no active tasks remain) → advance
+            logger.info("Writers Room: stage '%s' writing complete — advancing to feedback", current_stage)
+            stage_status[current_stage]["status"] = "writing_done"
+            internal_state["stage_status"] = stage_status
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            return self._propose_feedback_tasks(agent, current_stage, config)
+
         if status == "writing_done":
             # Step 3: Assign feedback agents to analyze
             return self._propose_feedback_tasks(agent, current_stage, config)
+
+        if status == "feedback_in_progress":
+            # All feedback tasks completed (no active tasks remain) → evaluate
+            logger.info("Writers Room: stage '%s' feedback complete — evaluating", current_stage)
+            stage_status[current_stage]["status"] = "feedback_done"
+            internal_state["stage_status"] = stage_status
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            return self._evaluate_feedback(agent, current_stage, config)
 
         if status == "feedback_done":
             # Step 4/5: Check feedback results and decide
@@ -656,14 +650,17 @@ Evaluate the quality of the current stage output based on ALL analyst feedback.
 
 ## Scoring (REQUIRED)
 Score each dimension 1.0-10.0 (use decimals — 8.5, 9.0, 9.5 etc.):
+- **Concept fidelity**: Does the output honor the creator's original pitch? Are specific characters, conflicts, arcs, and references from the project goal preserved and developed (not replaced with generic alternatives)? Score 1-3 if the creator's vision was ignored or replaced with generic alternatives.
+- **Originality**: Is this concept genuinely original, or is it a structural clone of a referenced show with a cosmetic setting change? Apply the Setting Swap Test: if you change the setting back to the referenced show's setting, is the story essentially the same? If yes, score 1-3. A concept inspired by Succession's QUALITY should not copy Succession's PLOT. Check the market analyst's derivative risk flags carefully.
 - **Market fit**: Commercial viability, positioning, audience appeal
 - **Structure**: Story architecture, beats, pacing, act breaks
-- **Character**: Consistency, arcs, motivation, relationships, voice
+- **Character**: Consistency, arcs, motivation, relationships, voice. Also: are character names realistic for the milieu (not joke names, codenames, or derivatives of the project title)?
 - **Dialogue**: Voice, subtext, scene construction, exposition balance
 - **Craft**: Format conventions, technical quality, polish
 - **Feasibility**: Budget, cast-ability, production practicality
 
 Only score dimensions that were analyzed by feedback agents this round.
+Always score **concept fidelity** and **originality** — they apply at every stage.
 Compute the **overall score** as the MINIMUM of all scored dimensions.
 
 ## Fix routing (if score < {EXCELLENCE_THRESHOLD})
@@ -674,10 +671,13 @@ Group issues by which creative agent should fix them:
 - dialogue_analyst flags → dialog_writer
 - format_analyst flags → story_architect (structural) or dialog_writer (craft)
 - production_analyst flags → most relevant creative agent
+- concept_fidelity / originality flags → story_architect (premise/structure) AND character_designer (characters)
 
 Respond with JSON:
 {{
     "scores": {{
+        "concept_fidelity": 0.0,
+        "originality": 0.0,
         "market_fit": 0.0,
         "structure": 0.0,
         "character": 0.0,

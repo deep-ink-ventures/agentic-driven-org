@@ -33,8 +33,19 @@ Select and present 4-6 comparable titles. For each comp, write a short paragraph
 DO NOT use markdown tables for comps — write flowing text, one paragraph per title.
 DO NOT repeat titles — each comp must be unique across all checks.
 
-### Check 3 — Competitive Landscape
+### Check 3 — Competitive Landscape & Derivative Risk
 Identify directly overlapping or adjacent projects in development or recently released. Flag direct overlaps as critical.
+
+CRITICAL SUB-CHECK — Derivative Content Detection:
+Compare the proposed concept STRUCTURALLY against the comparable titles from Check 2 and any shows/films referenced in the project goal. For each comp, assess:
+- Premise similarity: Does this concept share the same dramatic setup? (e.g. "patriarch incapacitated, children fight for control" = Succession clone)
+- Character archetype overlap: Are the main characters structurally identical to an existing show's characters, just with different names?
+- Plot engine similarity: Does the story use the same dramatic engine as a reference show?
+- Setting swap test: If you change the setting back to the original show's setting, is the story essentially the same?
+
+If the concept fails the setting swap test for ANY referenced show, flag as 🔴 CRITICAL: "Concept is structurally derivative of [show name] — same premise with a cosmetic setting change. Must develop a genuinely original dramatic engine that could NOT exist in [show name]."
+
+A concept can be INSPIRED BY a show's tone, ambition, or audience sophistication without copying its plot structure. "Like Succession but in Berlin real estate" should mean "same prestige quality and family dynamics complexity" — NOT "same patriarch-collapses-children-fight plot with German names."
 
 ### Check 4 — Genre & Format Saturation
 Assess current market saturation for this genre/format combination. Rate: strong demand, mixed, saturated, being passed on.
@@ -119,13 +130,7 @@ class MarketAnalystBlueprint(WorkforceBlueprint):
             "description": "Analyzes current market trends and emerging themes in the target genre.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "description": "Output language code (e.g. 'en', 'de', 'fr'). Default: 'en'",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:

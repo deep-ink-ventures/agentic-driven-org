@@ -44,14 +44,7 @@ class DialogWriterBlueprint(WorkforceBlueprint):
             "description": "Buries necessary information inside character conflict so it never reads as the author explaining.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "label": "Output Language",
-            "description": "ISO locale for all creative output (e.g. 'en', 'de', 'fr'). Defaults to 'en'.",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:
@@ -107,6 +100,14 @@ class DialogWriterBlueprint(WorkforceBlueprint):
             "- Character Designer provides character profiles, voice guides, "
             "and relationship dynamics\n"
             "Your job is to bring all of it to life on the page.\n\n"
+            "## Fidelity to the Creator's Vision\n"
+            "The project goal contains the creator's specific intent. Honor every character, "
+            "conflict, arc, and reference they specified. Add depth and texture -- never "
+            "subtract specificity or replace their vision with generic alternatives.\n\n"
+            "## Anti-Derivative Rule\n"
+            "Referenced shows/books are quality benchmarks, not templates. Write something "
+            "original that stands alongside them. Never clone their dialogue style, "
+            "catchphrases, or character dynamics verbatim.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             'in English. If "fr", French. This is non-negotiable. The source material may be '

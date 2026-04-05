@@ -420,14 +420,8 @@ Each task you create should include:
                         "Compute the **overall score** as the MINIMUM of all dimension scores.\n"
                         "An implementation is only as strong as its weakest dimension.\n"
                         "The bar is EXCELLENCE — 9.5/10 is the threshold. We don't ship 'good enough'.\n\n"
-                        "## Verdict (REQUIRED)\n"
-                        f"- If overall score >= {EXCELLENCE_THRESHOLD}: **APPROVED** (score: N/10)\n"
-                        f"- If overall score < {EXCELLENCE_THRESHOLD}: **CHANGES_REQUESTED** (score: N/10)\n\n"
-                        "For CHANGES_REQUESTED: list ONLY the issues that need fixing to reach the threshold. "
-                        "Do not list nice-to-haves. Every issue must have a file path and fix suggestion.\n\n"
-                        "End your report with exactly one of these lines:\n"
-                        "VERDICT: APPROVED (score: N.N/10)\n"
-                        "VERDICT: CHANGES_REQUESTED (score: N.N/10)"
+                        "## Verdict\n"
+                        "After your review, call the submit_verdict tool with your verdict and score."
                     ),
                     "depends_on_previous": True,
                 }

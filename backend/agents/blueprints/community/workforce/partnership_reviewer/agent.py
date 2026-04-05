@@ -42,9 +42,7 @@ When reviewing, score each dimension 1.0-10.0 (use decimals).
 The overall score is the MINIMUM of all dimension scores.
 The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold.
 
-End your report with exactly one of these lines:
-VERDICT: APPROVED (score: N.N/10)
-VERDICT: CHANGES_REQUESTED (score: N.N/10)
+After your review, call the submit_verdict tool with your verdict and score.
 
 Score dimensions: mutual_value, specificity, tone, structure, next_steps.
 For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific fix suggestions."""
@@ -71,7 +69,7 @@ For CHANGES_REQUESTED, list ONLY the issues preventing excellence with specific 
 
 ## Verdict Rules
 The overall score is the MINIMUM of all dimension scores.
-- Score >= {EXCELLENCE_THRESHOLD}: VERDICT: APPROVED (score: N.N/10)
-- Score < {EXCELLENCE_THRESHOLD}: VERDICT: CHANGES_REQUESTED (score: N.N/10) with actionable feedback
+- Score >= {EXCELLENCE_THRESHOLD}: APPROVED
+- Score < {EXCELLENCE_THRESHOLD}: CHANGES_REQUESTED with actionable feedback
 
-End your report with exactly one VERDICT line."""
+After your review, call the submit_verdict tool with your verdict and score."""

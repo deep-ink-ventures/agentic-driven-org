@@ -68,9 +68,7 @@ SCORING:
 - The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold
 - We don't ship "good enough"
 
-End your report with exactly one of these lines:
-VERDICT: APPROVED (score: N.N/10)
-VERDICT: CHANGES_REQUESTED (score: N.N/10)
+After your review, call the submit_verdict tool with your verdict and score.
 
 For CHANGES_REQUESTED: list ONLY the issues preventing excellence with specific fix suggestions.
 Every issue must reference the specific content and suggest a concrete improvement."""
@@ -97,7 +95,7 @@ Every issue must reference the specific content and suggest a concrete improveme
 
 ## Verdict Rules
 The overall score is the MINIMUM of all dimension scores.
-- Score >= {EXCELLENCE_THRESHOLD}: VERDICT: APPROVED (score: N.N/10)
-- Score < {EXCELLENCE_THRESHOLD}: VERDICT: CHANGES_REQUESTED (score: N.N/10) with actionable feedback
+- Score >= {EXCELLENCE_THRESHOLD}: APPROVED
+- Score < {EXCELLENCE_THRESHOLD}: CHANGES_REQUESTED with actionable feedback
 
-End your report with exactly one VERDICT line."""
+After your review, call the submit_verdict tool with your verdict and score."""

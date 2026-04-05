@@ -7,8 +7,7 @@ from agents.blueprints.base import command
     name="review-outreach",
     description=(
         "Review an outreach draft for personalization depth, value proposition clarity, "
-        "professional tone, appropriate length, and clear CTA. Return verdict: approved or "
-        "revision_needed with line-level feedback."
+        "professional tone, appropriate length, and clear CTA. Submit verdict via tool call."
     ),
     model="claude-sonnet-4-6",
 )

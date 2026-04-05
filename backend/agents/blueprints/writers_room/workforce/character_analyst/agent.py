@@ -107,13 +107,7 @@ class CharacterAnalystBlueprint(WorkforceBlueprint):
             "description": "Evaluates whether each character occupies a unique narrative role, voice, and thematic position.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "description": "Output language code (e.g. 'en', 'de', 'fr'). Default: 'en'",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:

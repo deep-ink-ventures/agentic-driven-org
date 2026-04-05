@@ -107,13 +107,7 @@ class FormatAnalystBlueprint(WorkforceBlueprint):
             "description": "Analyzes visual rhythm: dialogue-to-description ratio, paragraph length variation, and whitespace distribution.",
         },
     ]
-    config_schema = {
-        "locale": {
-            "type": "str",
-            "required": False,
-            "description": "Output language code (e.g. 'en', 'de', 'fr'). Default: 'en'",
-        },
-    }
+    config_schema = {}
 
     @property
     def system_prompt(self) -> str:

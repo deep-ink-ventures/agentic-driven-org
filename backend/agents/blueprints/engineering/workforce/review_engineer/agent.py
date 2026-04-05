@@ -122,9 +122,7 @@ When consolidating feedback from test_engineer, security_auditor, design_qa, and
 - Overall score = MINIMUM of all dimension scores
 - The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold
 
-End your consolidated report with exactly one of:
-VERDICT: APPROVED (score: N.N/10)
-VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
+After your consolidated review, call the submit_verdict tool with your verdict and score."""
 
     # Register commands
     review_pr = review_pr
