@@ -1,6 +1,7 @@
 from .add_department_view import AddDepartmentView, AvailableAgentsView, AvailableDepartmentsView
 from .bootstrap_view import BootstrapApproveView, BootstrapLatestView, BootstrapSchemaView, BootstrapTriggerView
 from .department_config_view import DepartmentConfigView
+from .document_view import DocumentListView
 from .project_config_view import ProjectConfigView
 from .project_detail_view import ProjectDetailView
 from .project_view import ProjectListView
@@ -19,6 +20,7 @@ __all__ = [
     "AvailableAgentsView",
     "AddDepartmentView",
     "DepartmentConfigView",
+    "DocumentListView",
     "ProjectConfigView",
     "SprintListCreateView",
     "SprintDetailView",

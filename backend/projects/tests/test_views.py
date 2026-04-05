@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from agents.models import Agent
-from projects.models import BootstrapProposal, Department, Project, ProjectConfig, Source
+from projects.models import BootstrapProposal, Department, Document, Project, ProjectConfig, Source
 
 User = get_user_model()
 
@@ -469,3 +469,48 @@ class TestBootstrapEssentialAgents:
         dept = Department.objects.get(project=project, department_type="engineering")
         # ticket_manager should exist exactly once (not duplicated)
         assert dept.agents.filter(agent_type="ticket_manager").count() == 1
+
+
+# ── DocumentListView ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestDocumentListView:
+    def test_list_active_documents(self, authed_client, department):
+        Document.objects.create(title="Active", content="content", department=department)
+        Document.objects.create(title="Archived", content="old", department=department, is_archived=True)
+
+        response = authed_client.get(f"/api/projects/{department.project.id}/departments/{department.id}/documents/")
+        assert response.status_code == 200
+        titles = [d["title"] for d in response.data]
+        assert "Active" in titles
+        assert "Archived" not in titles
+
+    def test_list_all_documents_with_show_archived(self, authed_client, department):
+        Document.objects.create(title="Active", content="content", department=department)
+        Document.objects.create(title="Archived", content="old", department=department, is_archived=True)
+
+        response = authed_client.get(
+            f"/api/projects/{department.project.id}/departments/{department.id}/documents/?show_archived=true"
+        )
+        assert response.status_code == 200
+        titles = [d["title"] for d in response.data]
+        assert "Active" in titles
+        assert "Archived" in titles
+
+    def test_archived_docs_include_consolidated_into(self, authed_client, department):
+        summary = Document.objects.create(title="Summary", content="merged", department=department)
+        Document.objects.create(
+            title="Original",
+            content="old",
+            department=department,
+            is_archived=True,
+            consolidated_into=summary,
+        )
+
+        response = authed_client.get(
+            f"/api/projects/{department.project.id}/departments/{department.id}/documents/?show_archived=true"
+        )
+        assert response.status_code == 200
+        original = next(d for d in response.data if d["title"] == "Original")
+        assert original["consolidated_into"] == str(summary.id)
