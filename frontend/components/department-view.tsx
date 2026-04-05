@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { AgentSummary, DepartmentDetail, AvailableAgent } from "@/lib/types";
 import { AgentCard } from "@/components/agent-card";
 import { TaskQueue } from "@/components/task-queue";
-import { Loader2, CheckCircle, Plus, Users, ListTodo, Settings2 } from "lucide-react";
+import { Loader2, CheckCircle, Plus, Zap, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function DepartmentView({
@@ -26,11 +26,12 @@ export function DepartmentView({
   const leader = dept.agents.find((a) => a.is_leader);
   const workforce = dept.agents.filter((a) => !a.is_leader);
 
+  const [tab, setTab] = useState<"agents" | "tasks" | "sprints" | "config">("agents");
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>([]);
   const [provisioning, setProvisioning] = useState<Set<string>>(new Set());
-  const [tab, setTab] = useState<"agents" | "tasks" | "config">("agents");
   const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
   const [configSaving, setConfigSaving] = useState(false);
+  const [deptSprints, setDeptSprints] = useState<import("@/lib/types").Sprint[]>([]);
 
   async function toggleAgent(agent: AgentSummary) {
     const newStatus = agent.status === "active" ? "inactive" : "active";
@@ -66,6 +67,12 @@ export function DepartmentView({
       .then((res) => setAvailableAgents(res.agents))
       .catch(() => {});
   }, [projectId, dept.id]);
+
+  useEffect(() => {
+    if (tab === "sprints") {
+      api.listSprints(projectId, { department: dept.id }).then(setDeptSprints).catch(() => {});
+    }
+  }, [tab, projectId, dept.id]);
 
   async function handleAddAgent(agentType: string) {
     setProvisioning((prev) => new Set(prev).add(agentType));
@@ -119,7 +126,7 @@ export function DepartmentView({
         {dept.description || `${dept.agents.length} agent${dept.agents.length !== 1 ? "s" : ""} in this department`}
       </p>
 
-      {/* Tabs */}
+      {/* Tab navigation */}
       <div className="flex gap-1 border-b border-border mb-6">
         <button
           onClick={() => setTab("agents")}
@@ -129,7 +136,6 @@ export function DepartmentView({
               : "border-transparent text-text-secondary hover:text-text-primary"
           }`}
         >
-          <Users className="h-3.5 w-3.5" />
           Agents
         </button>
         <button
@@ -140,8 +146,18 @@ export function DepartmentView({
               : "border-transparent text-text-secondary hover:text-text-primary"
           }`}
         >
-          <ListTodo className="h-3.5 w-3.5" />
           Tasks
+        </button>
+        <button
+          onClick={() => setTab("sprints")}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            tab === "sprints"
+              ? "border-accent-violet text-accent-violet"
+              : "border-transparent text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          Sprints
         </button>
         <button
           onClick={() => setTab("config")}
@@ -156,7 +172,7 @@ export function DepartmentView({
         </button>
       </div>
 
-      {/* Agents tab */}
+
       {tab === "agents" && (
         <>
           {leader && (
@@ -236,12 +252,61 @@ export function DepartmentView({
         </>
       )}
 
-      {/* Tasks tab */}
       {tab === "tasks" && (
-        <TaskQueue projectId={projectId} department={dept.id} wsEvent={taskWsEvent} />
+        <TaskQueue
+          projectId={projectId}
+          department={dept.id}
+          wsEvent={taskWsEvent}
+          departments={[dept]}
+        />
       )}
 
-      {/* Config tab */}
+      {tab === "sprints" && (
+        <div className="space-y-3">
+          {deptSprints.length === 0 ? (
+            <p className="text-sm text-text-secondary">No sprints for this department yet.</p>
+          ) : (
+            deptSprints.map((sprint) => (
+              <div
+                key={sprint.id}
+                className={`rounded-lg border p-4 ${
+                  sprint.status === "running"
+                    ? "border-flag-strength/20 bg-flag-strength/4"
+                    : sprint.status === "paused"
+                      ? "border-border bg-bg-surface"
+                      : "border-border bg-bg-surface opacity-60"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-text-heading">{sprint.text}</span>
+                  <span
+                    className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
+                      sprint.status === "running"
+                        ? "bg-flag-strength/15 text-flag-strength"
+                        : sprint.status === "paused"
+                          ? "bg-bg-input text-text-secondary"
+                          : "bg-bg-input text-text-secondary"
+                    }`}
+                  >
+                    {sprint.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-text-secondary">
+                  <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
+                  <span>{sprint.task_count} tasks</span>
+                  <span>{sprint.created_by_email}</span>
+                </div>
+                {sprint.status === "done" && sprint.completion_summary && (
+                  <p className="mt-2 text-xs text-text-secondary border-t border-border pt-2">
+                    {sprint.completion_summary}
+                  </p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {tab === "config" && (
         <div className="max-w-lg">
           {(() => {

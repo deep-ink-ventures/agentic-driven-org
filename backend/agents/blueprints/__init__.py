@@ -50,8 +50,6 @@ DEPARTMENTS = {
     "marketing": {
         "name": "Marketing",
         "description": "Full-stack marketing — research, social media, email campaigns, content coordination",
-        "execution_mode": "scheduled",
-        "min_delay_seconds": 0,
         "leader": MarketingLeaderBlueprint(),
         "workforce": {
             "web_researcher": WebResearcherBlueprint(),
@@ -98,8 +96,6 @@ if WritersRoomLeaderBlueprint is not None:
     DEPARTMENTS["writers_room"] = {
         "name": "Writers Room",
         "description": "AI-powered writers room — creative writing and professional coverage analysis for screenplays, novels, theatre, series, and any narrative format",
-        "execution_mode": "continuous",
-        "min_delay_seconds": 0,
         "leader": _writers_room_leader,
         "workforce": _writers_room_workforce,
         "config_schema": _writers_room_leader.config_schema,
@@ -111,8 +107,6 @@ _engineering_leader = EngineeringLeaderBlueprint()
 DEPARTMENTS["engineering"] = {
     "name": "Engineering",
     "description": "Autonomous software engineering — goal decomposition, implementation, testing, code review, security audits, and accessibility checks",
-    "execution_mode": "continuous",
-    "min_delay_seconds": 0,
     "leader": _engineering_leader,
     "workforce": _engineering_workforce,
     "config_schema": _engineering_leader.config_schema,
@@ -144,8 +138,6 @@ if SalesLeaderBlueprint is not None:
     DEPARTMENTS["sales"] = {
         "name": "Sales",
         "description": "Outbound prospecting and outreach — target research, qualification, personalized outreach with quality review loops",
-        "execution_mode": "scheduled",
-        "min_delay_seconds": 0,
         "leader": _sales_leader,
         "workforce": _sales_workforce,
         "config_schema": _sales_leader.config_schema,
@@ -183,8 +175,6 @@ if CommunityLeaderBlueprint is not None:
     DEPARTMENTS["community"] = {
         "name": "Community & Partnerships",
         "description": "Ecosystem mapping and partnership development — research communities, propose collaborations, build relationships with quality review loops",
-        "execution_mode": "scheduled",
-        "min_delay_seconds": 0,
         "leader": _community_leader,
         "workforce": _community_workforce,
         "config_schema": _community_leader.config_schema,

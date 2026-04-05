@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import type { AgentTask } from "@/lib/types";
+import { SprintInput } from "@/components/sprint-input";
 import {
   Loader2,
   Check,
@@ -501,14 +502,30 @@ export function TaskQueue({
   department,
   agent,
   wsEvent,
+  departments,
+  onSprintCreated,
 }: {
   projectId: string;
   department?: string;
   agent?: string;
   wsEvent?: { type: string; task: AgentTask } | null;
+  departments?: import("@/lib/types").DepartmentDetail[];
+  onSprintCreated?: () => void;
 }) {
   return (
     <div>
+      {/* Sprint input — show when on department or dashboard view (not agent) */}
+      {!agent && departments && departments.length > 0 && (
+        <>
+          <SprintInput
+            projectId={projectId}
+            departments={departments}
+            defaultDepartmentId={department}
+            onCreated={onSprintCreated}
+          />
+          <div className="border-t border-border mb-6" />
+        </>
+      )}
 
       {/* Two lanes side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

@@ -29,8 +29,14 @@ class Department(models.Model):
     def name(self):
         """Display name from blueprint registry."""
         from agents.blueprints import DEPARTMENTS
+
         dept = DEPARTMENTS.get(self.department_type)
         return dept["name"] if dept else self.department_type
+
+    @property
+    def display_name(self):
+        """Alias for name — used by serializers."""
+        return self.name
 
     def __str__(self):
         return f"{self.project.name} / {self.name}"

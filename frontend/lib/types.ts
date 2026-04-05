@@ -91,6 +91,26 @@ export interface ProjectDetail {
   updated_at: string;
 }
 
+export interface SprintDepartment {
+  id: string;
+  department_type: string;
+  display_name: string;
+}
+
+export interface Sprint {
+  id: string;
+  project: string;
+  text: string;
+  status: "running" | "paused" | "done";
+  completion_summary: string;
+  departments: SprintDepartment[];
+  task_count: number;
+  created_by_email: string;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
 export interface AgentTask {
   id: string;
   agent: string;
@@ -103,6 +123,7 @@ export interface AgentTask {
   command_name: string;
   blocked_by: string | null;
   blocked_by_summary: string | null;
+  sprint: string | null;
   exec_summary: string;
   step_plan: string;
   report: string;

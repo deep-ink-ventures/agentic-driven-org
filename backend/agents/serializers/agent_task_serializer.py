@@ -23,6 +23,7 @@ class AgentTaskSerializer(serializers.ModelSerializer):
             "command_name",
             "blocked_by",
             "blocked_by_summary",
+            "sprint",
             "exec_summary",
             "step_plan",
             "report",

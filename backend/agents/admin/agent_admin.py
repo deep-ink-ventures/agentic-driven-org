@@ -26,14 +26,3 @@ class AgentAdmin(admin.ModelAdmin):
         ("Internal State", {"fields": ("internal_state",), "classes": ("collapse",)}),
     )
     inlines = [AgentTaskInline]
-    actions = ["seed_first_task"]
-
-    @admin.action(description="Seed first leader task — kick off the chain")
-    def seed_first_task(self, request, queryset):
-        from agents.tasks import create_next_leader_task
-
-        seeded = 0
-        for agent in queryset.filter(is_leader=True, status=Agent.Status.ACTIVE):
-            create_next_leader_task.delay(str(agent.id))
-            seeded += 1
-        self.message_user(request, f"Seeded first task for {seeded} leader(s).")
