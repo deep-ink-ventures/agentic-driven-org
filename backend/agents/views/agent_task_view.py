@@ -138,35 +138,35 @@ class TaskRetryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, project_id, task_id):
-        task = get_object_or_404(
-            AgentTask,
+        from agents.tasks import execute_agent_task
+
+        # Atomic guard: only retry if task is still FAILED
+        updated = AgentTask.objects.filter(
             id=task_id,
+            status=AgentTask.Status.FAILED,
             agent__department__project_id=project_id,
             agent__department__project__members=request.user,
+        ).update(
+            status=AgentTask.Status.QUEUED,
+            error_message="",
+            report="",
+            started_at=None,
+            completed_at=None,
         )
-        if task.status != AgentTask.Status.FAILED:
+
+        if updated == 0:
+            task = AgentTask.objects.filter(
+                id=task_id,
+                agent__department__project_id=project_id,
+                agent__department__project__members=request.user,
+            ).first()
+            if task is None:
+                return Response(status=status.HTTP_404_NOT_FOUND)
             return Response(
                 {"error": f"Task is {task.status}, not failed"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        from agents.tasks import execute_agent_task
-
-        task.status = AgentTask.Status.QUEUED
-        task.error_message = ""
-        task.report = ""
-        task.started_at = None
-        task.completed_at = None
-        task.save(
-            update_fields=[
-                "status",
-                "error_message",
-                "report",
-                "started_at",
-                "completed_at",
-                "updated_at",
-            ]
-        )
-
+        task = AgentTask.objects.select_related("agent", "created_by_agent").get(id=task_id)
         execute_agent_task.delay(str(task.id))
         return Response(AgentTaskSerializer(task).data)

@@ -50,9 +50,6 @@ logger = logging.getLogger(__name__)
 # ── Command decorator ────────────────────────────────────────────────────────
 
 
-_command_registry: dict[str, dict] = {}
-
-
 def command(
     name: str, description: str, schedule: str | None = None, model: str | None = None, max_tokens: int | None = None
 ):
@@ -947,7 +944,7 @@ Respond with JSON:
         completed_tasks = list(
             AgentTask.objects.filter(
                 agent__department=department,
-                status__in=["completed", "processing"],
+                status__in=[AgentTask.Status.DONE, AgentTask.Status.PROCESSING],
             )
             .order_by("-created_at")
             .values_list("exec_summary", flat=True)[:20]
