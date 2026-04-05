@@ -274,21 +274,26 @@ class BaseBlueprint(ABC):
         sibling_text = ""
         if sibling_ids:
             sib_id_list = [s[0] for s in sibling_ids]
+            # Include reports from completed sibling tasks so agents see each other's output
             all_sib_tasks = list(
                 AgentTask.objects.filter(agent_id__in=sib_id_list)
                 .order_by("agent_id", "-created_at")
-                .values_list("agent_id", "exec_summary", "status")
+                .values_list("agent_id", "exec_summary", "status", "report")
             )
             tasks_by_agent = defaultdict(list)
-            for aid, es, st in all_sib_tasks:
+            for aid, es, st, rp in all_sib_tasks:
                 if len(tasks_by_agent[aid]) < 5:
-                    tasks_by_agent[aid].append((es, st))
+                    tasks_by_agent[aid].append((es, st, rp))
 
             for sib_id, sib_name, sib_type in sibling_ids:
                 recent = tasks_by_agent.get(sib_id, [])
                 if recent:
-                    task_lines = "\n".join(f"  - [{s}] {e}" for e, s in recent)
-                    sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:\n{task_lines}"
+                    task_lines = ""
+                    for es, st, rp in recent:
+                        task_lines += f"\n  - [{st}] {es}"
+                        if rp and st == "done":
+                            task_lines += f"\n    Report: {rp}"
+                    sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:{task_lines}"
 
         own_recent = list(agent.tasks.order_by("-created_at")[:10].values_list("exec_summary", "status", "report"))
         own_text = ""
