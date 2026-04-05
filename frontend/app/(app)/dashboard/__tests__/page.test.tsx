@@ -66,8 +66,8 @@ describe("DashboardPage", () => {
     mockListProjects.mockReturnValue(new Promise(() => {})); // never resolves
     render(<DashboardPage />);
     expect(screen.getByText("Projects")).toBeInTheDocument();
-    // The Loader2 spinner is rendered as an SVG with animate-spin class
-    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    // Loading state renders CardSkeleton placeholders with animate-pulse class
+    expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 
   it("shows project list after loading", async () => {

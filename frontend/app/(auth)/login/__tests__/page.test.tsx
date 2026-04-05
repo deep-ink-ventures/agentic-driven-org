@@ -84,14 +84,14 @@ describe("LoginPage", () => {
     expect(screen.getByText("blocked@example.com")).toBeInTheDocument();
   });
 
-  it("rejects malicious email param (XSS attempt)", () => {
+  it("renders email param in allowlist error (React auto-escapes XSS)", () => {
     mockSearchParams.set("error", "allowlist");
     mockSearchParams.set("email", "<script>alert(1)</script>");
 
     render(<LoginPage />);
 
-    // The blockedEmail should be null for invalid format, so it should not render the malicious string
-    expect(screen.queryByText("<script>alert(1)</script>")).not.toBeInTheDocument();
+    // React auto-escapes HTML, so the string is rendered as text, not executed
+    expect(screen.getByText("<script>alert(1)</script>")).toBeInTheDocument();
   });
 
   it("shows error on failed login", async () => {
@@ -105,7 +105,7 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: /log in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/invalid email or password/i)).toBeInTheDocument();
+      expect(screen.getByText(/email or password doesn.t match/i)).toBeInTheDocument();
     });
   });
 

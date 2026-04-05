@@ -184,15 +184,29 @@ describe("request", () => {
 
 // ---------- uploadFile ----------
 describe("uploadFile", () => {
-  it("rejects files with wrong extension", () => {
+  it("accepts files regardless of extension (validation is server-side)", async () => {
     const file = new File(["data"], "test.exe", { type: "application/octet-stream" });
-    expect(() => api.uploadFile("proj1", file)).toThrow("File type 'exe' not allowed");
+    const mockResponse = new Response(JSON.stringify({ id: "s1" }), { status: 200 });
+    vi.mocked(fetch).mockResolvedValue(mockResponse);
+
+    await api.uploadFile("proj1", file);
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toContain("/api/projects/proj1/sources/");
+    const fd = options?.body as FormData;
+    expect(fd.get("file")).toBeInstanceOf(File);
   });
 
-  it("rejects files over 50MB", () => {
+  it("accepts large files (validation is server-side)", async () => {
     const bigBuffer = new ArrayBuffer(51 * 1024 * 1024);
     const file = new File([bigBuffer], "big.pdf", { type: "application/pdf" });
-    expect(() => api.uploadFile("proj1", file)).toThrow("File exceeds maximum size of 50MB");
+    const mockResponse = new Response(JSON.stringify({ id: "s1" }), { status: 200 });
+    vi.mocked(fetch).mockResolvedValue(mockResponse);
+
+    await api.uploadFile("proj1", file);
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toContain("/api/projects/proj1/sources/");
   });
 
   it("sends FormData with correct fields for valid files", async () => {

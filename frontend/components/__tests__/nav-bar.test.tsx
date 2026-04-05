@@ -48,7 +48,8 @@ beforeEach(() => {
 describe("NavBar", () => {
   it("renders brand logo", () => {
     render(<NavBar />);
-    expect(screen.getByText("AgentDriven")).toBeInTheDocument();
+    // BrandLogo splits the name across multiple span elements, so search within the nav
+    expect(screen.getAllByText("AgentDriven").length).toBeGreaterThan(0);
   });
 
   it("shows user email when menu is opened", async () => {

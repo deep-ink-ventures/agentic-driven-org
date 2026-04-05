@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("connectWs", () => {
-  it("connects to correct WS URL (http→ws replacement)", async () => {
+  it("connects to correct WS URL with ticket as query param", async () => {
     const { connectWs } = await import("../ws");
 
     const onMessage = vi.fn();
@@ -67,10 +67,10 @@ describe("connectWs", () => {
     // Allow the promise to resolve (getWsTicket is async)
     const ws = await promise;
 
-    expect(ws.url).toBe("ws://localhost:8000/ws/test/");
+    expect(ws.url).toBe("ws://localhost:8000/ws/test/?ticket=test-ticket-123");
   });
 
-  it("sends authenticate message with ticket as first message on open", async () => {
+  it("does not send any authenticate message on open (ticket is in URL)", async () => {
     const { connectWs } = await import("../ws");
 
     const onMessage = vi.fn();
@@ -80,11 +80,8 @@ describe("connectWs", () => {
     // Simulate open
     mockWs.simulateOpen();
 
-    expect(mockWs.sent).toHaveLength(1);
-    expect(JSON.parse(mockWs.sent[0])).toEqual({
-      type: "authenticate",
-      ticket: "test-ticket-123",
-    });
+    // No messages should be sent — auth is via query param
+    expect(mockWs.sent).toHaveLength(0);
   });
 
   it("calls onMessage callback with parsed JSON data", async () => {

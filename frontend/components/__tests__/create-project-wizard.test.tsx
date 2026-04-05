@@ -237,7 +237,7 @@ describe("CreateProjectWizard", () => {
       });
 
       // Should show loading/processing UI
-      expect(screen.getByText("This may take a moment.")).toBeInTheDocument();
+      expect(screen.getByText("Designing your organization")).toBeInTheDocument();
     });
   });
 
