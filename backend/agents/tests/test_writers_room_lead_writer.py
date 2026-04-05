@@ -62,3 +62,53 @@ class TestLeadWriterBlueprint:
     def test_skills_defined(self):
         bp = get_blueprint("lead_writer", "writers_room")
         assert len(bp.skills) >= 3
+
+
+class TestNewStagesAndMatrices:
+    def test_stages_are_four(self):
+        from agents.blueprints.writers_room.leader.agent import STAGES
+
+        assert STAGES == ["pitch", "expose", "treatment", "first_draft"]
+
+    def test_creative_matrix_all_stages(self):
+        from agents.blueprints.writers_room.leader.agent import CREATIVE_MATRIX
+
+        for stage in ["pitch", "expose", "treatment", "concept", "first_draft"]:
+            assert stage in CREATIVE_MATRIX, f"Missing creative matrix for {stage}"
+
+    def test_creative_matrix_excludes_lead_writer(self):
+        from agents.blueprints.writers_room.leader.agent import CREATIVE_MATRIX
+
+        for stage, agents in CREATIVE_MATRIX.items():
+            assert "lead_writer" not in agents, f"lead_writer should not be in CREATIVE_MATRIX[{stage}]"
+
+    def test_feedback_matrix_all_stages(self):
+        from agents.blueprints.writers_room.leader.agent import FEEDBACK_MATRIX
+
+        for stage in ["pitch", "expose", "treatment", "concept", "first_draft"]:
+            assert stage in FEEDBACK_MATRIX, f"Missing feedback matrix for {stage}"
+
+    def test_flag_routing_removed(self):
+        """FLAG_ROUTING should no longer exist."""
+        import agents.blueprints.writers_room.leader.agent as mod
+
+        assert not hasattr(mod, "FLAG_ROUTING"), "FLAG_ROUTING should be removed"
+
+    def test_old_stages_removed(self):
+        from agents.blueprints.writers_room.leader.agent import STAGES
+
+        for old in ["ideation", "concept", "logline", "step_outline", "revised_draft"]:
+            assert old not in STAGES, f"Old stage '{old}' should not be in STAGES"
+
+
+class TestFormatDetection:
+    def test_format_detection_prompt_exists(self):
+        from agents.blueprints.writers_room.leader.agent import FORMAT_DETECTION_PROMPT
+
+        assert "format_type" in FORMAT_DETECTION_PROMPT
+        assert "terminal_stage" in FORMAT_DETECTION_PROMPT
+
+    def test_format_detection_function_exists(self):
+        from agents.blueprints.writers_room.leader.agent import _run_format_detection
+
+        assert callable(_run_format_detection)

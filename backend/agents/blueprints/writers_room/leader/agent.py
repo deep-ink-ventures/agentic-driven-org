@@ -22,80 +22,53 @@ logger = logging.getLogger(__name__)
 
 # ── Stage pipeline ──────────────────────────────────────────────────────────
 
-STAGES = ["ideation", "concept", "logline", "expose", "treatment", "step_outline", "first_draft", "revised_draft"]
+STAGES = ["pitch", "expose", "treatment", "first_draft"]
 
 # ── Depth matrix: which FEEDBACK agents run at which stage ──────────────────
 
 FEEDBACK_MATRIX: dict[str, list[tuple[str, str]]] = {
-    "ideation": [
-        ("market_analyst", "full"),
-        ("structure_analyst", "lite"),
-        ("production_analyst", "lite"),
-    ],
-    "concept": [
+    "pitch": [
         ("market_analyst", "full"),
         ("structure_analyst", "lite"),
         ("character_analyst", "lite"),
-        ("production_analyst", "lite"),
-    ],
-    "logline": [
-        ("market_analyst", "full"),
-        ("production_analyst", "lite"),
     ],
     "expose": [
         ("market_analyst", "full"),
-        ("structure_analyst", "lite"),
+        ("structure_analyst", "full"),
+        ("character_analyst", "lite"),
         ("production_analyst", "lite"),
     ],
     "treatment": [
-        ("market_analyst", "full"),
-        ("structure_analyst", "full"),
-        ("character_analyst", "lite"),
-        ("production_analyst", "full"),
-    ],
-    "step_outline": [
-        ("market_analyst", "lite"),
-        ("structure_analyst", "full"),
-        ("character_analyst", "full"),
-        ("production_analyst", "full"),
-    ],
-    "first_draft": [
-        ("market_analyst", "lite"),
         ("structure_analyst", "full"),
         ("character_analyst", "full"),
         ("dialogue_analyst", "full"),
         ("production_analyst", "full"),
+        ("market_analyst", "lite"),
     ],
-    "revised_draft": [
+    "concept": [
+        ("structure_analyst", "full"),
+        ("character_analyst", "full"),
+        ("market_analyst", "full"),
+        ("production_analyst", "full"),
+    ],
+    "first_draft": [
         ("structure_analyst", "full"),
         ("character_analyst", "full"),
         ("dialogue_analyst", "full"),
         ("format_analyst", "full"),
         ("production_analyst", "lite"),
+        ("market_analyst", "lite"),
     ],
 }
 
 # ── Creative matrix: which CREATIVE agents write at which stage ─────────────
 
 CREATIVE_MATRIX: dict[str, list[str]] = {
-    "ideation": ["story_researcher", "story_architect"],
-    "concept": ["story_researcher", "story_architect", "character_designer"],
-    "logline": ["story_researcher", "dialog_writer"],
-    "expose": ["story_researcher", "story_architect", "dialog_writer"],
+    "pitch": ["story_researcher", "story_architect", "character_designer", "dialog_writer"],
+    "expose": ["story_researcher", "story_architect", "character_designer", "dialog_writer"],
     "treatment": ["story_researcher", "story_architect", "character_designer", "dialog_writer"],
-    "step_outline": ["story_architect", "character_designer", "dialog_writer"],
+    "concept": ["story_researcher", "story_architect", "character_designer", "dialog_writer"],
     "first_draft": ["story_architect", "character_designer", "dialog_writer"],
-    "revised_draft": ["story_architect", "character_designer", "dialog_writer"],
-}
-
-# ── Flag routing: which creative agent fixes which feedback ─────────────────
-
-FLAG_ROUTING: dict[str, str] = {
-    "market_analyst": "story_researcher",
-    "structure_analyst": "story_architect",
-    "character_analyst": "character_designer",
-    "dialogue_analyst": "dialog_writer",
-    # format_analyst and production_analyst are context-dependent — resolved in code
 }
 
 
@@ -1099,7 +1072,134 @@ def _get_merged_config(agent: Agent) -> dict:
     return {**project_config, **dept_config, **agent_config}
 
 
-ENTRY_DETECTION_PROMPT = """\
+FORMAT_DETECTION_PROMPT = """\
+You are the showrunner of a professional writers room. Analyze the sprint text and project input to determine:
+1. Whether this is a standalone piece or a series
+2. What the terminal stage should be
+3. Where the pipeline should start based on existing material
+
+## Sprint Text
+{sprint_text}
+
+## Project Goal
+{goal}
+
+## Source Material
+{sources_summary}
+
+## Rules
+- Determine format_type from the sprint text. The user says what they want: "Write a series concept", \
+"Schreib mir ein Treatment", "I want a screenplay", etc. Understand ANY language.
+- standalone = movie, play, book, single audio drama, short story, etc.
+- series = TV series, Filmreihe, Serie, Hörspielserie, web series, etc.
+- terminal_stage depends on what the user asked for:
+  - If they want a pitch/logline only → "pitch"
+  - If they want an expose → "expose"
+  - If they want a treatment (standalone) → "treatment"
+  - If they want a series concept/bible/Serienkonzept → "concept"
+  - If they want a screenplay/manuscript/first draft → "first_draft"
+  - If unclear, default to the natural terminal: "concept" for series, "treatment" for standalone
+- entry_stage: where to START the pipeline based on existing material:
+  - If no existing material → "pitch"
+  - If a pitch/logline already exists → "expose"
+  - If an expose exists → "treatment" (or "concept" for series)
+  - If a treatment/concept exists → "first_draft"
+
+Respond with JSON only:
+{{
+    "format_type": "standalone|series",
+    "terminal_stage": "pitch|expose|treatment|concept|first_draft",
+    "entry_stage": "pitch|expose|treatment|first_draft",
+    "reasoning": "Brief explanation"
+}}"""
+
+
+def _run_format_detection(agent, sprint_text: str) -> dict:
+    """
+    Classify the sprint to determine format type, terminal stage, and entry point.
+    Returns dict with format_type, terminal_stage, entry_stage.
+    """
+    project = agent.department.project
+    goal = project.goal or "No goal specified"
+
+    # Gather source summaries
+    sources = project.sources.all()
+    sources_summary = ""
+    for s in sources:
+        text = s.extracted_text or s.raw_content or ""
+        if not text:
+            continue
+        name = s.original_filename or s.url or "Text input"
+        sources_summary += f"\n### {name} ({s.source_type})\n{text[:2000]}\n"
+
+    if not sources_summary:
+        sources_summary = "No source material uploaded."
+
+    prompt = FORMAT_DETECTION_PROMPT.format(
+        sprint_text=sprint_text,
+        goal=goal,
+        sources_summary=sources_summary,
+    )
+
+    response, _usage = call_claude(
+        system_prompt="You are a project classification system. Respond with JSON only.",
+        user_message=prompt,
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+    )
+
+    data = parse_json_response(response)
+    if not data or "format_type" not in data:
+        logger.warning("Format detection failed to parse, defaulting: %s", response[:200])
+        return {"format_type": "standalone", "terminal_stage": "treatment", "entry_stage": "pitch"}
+
+    result = {
+        "format_type": data.get("format_type", "standalone"),
+        "terminal_stage": data.get("terminal_stage", "treatment"),
+        "entry_stage": data.get("entry_stage", "pitch"),
+        "reasoning": data.get("reasoning", ""),
+    }
+
+    # Validate terminal_stage
+    valid_terminals = {"pitch", "expose", "treatment", "concept", "first_draft"}
+    if result["terminal_stage"] not in valid_terminals:
+        result["terminal_stage"] = "concept" if result["format_type"] == "series" else "treatment"
+
+    # Validate entry_stage
+    if result["entry_stage"] not in STAGES:
+        result["entry_stage"] = "pitch"
+
+    # Store in internal_state
+    internal_state = agent.internal_state or {}
+    internal_state["format_type"] = result["format_type"]
+    internal_state["terminal_stage"] = result["terminal_stage"]
+    internal_state["detection_reasoning"] = result["reasoning"]
+    internal_state["entry_detected"] = True
+    agent.internal_state = internal_state
+    agent.save(update_fields=["internal_state"])
+
+    logger.info(
+        "Writers Room format detection: format=%s terminal=%s entry=%s reason=%s",
+        result["format_type"],
+        result["terminal_stage"],
+        result["entry_stage"],
+        result["reasoning"][:100],
+    )
+
+    return result
+
+
+def _run_entry_detection(agent) -> str:
+    """
+    DEPRECATED: kept temporarily for generate_task_proposal compatibility.
+    Will be removed in Task 4 when generate_task_proposal switches to _run_format_detection.
+
+    One-shot Claude call to classify project input and determine the starting stage.
+    Runs exactly once — stores result in internal_state.
+    Returns the detected stage name.
+    """
+    # Legacy prompt kept inline since the module-level constant was replaced
+    _LEGACY_PROMPT = """\
 You are the showrunner of a professional writers room. Analyze the project input to determine where the creative pipeline should start.
 
 ## Project Goal
@@ -1112,51 +1212,22 @@ You are the showrunner of a professional writers room. Analyze the project input
 {config_summary}
 
 ## Stage Options (earliest to latest)
-- ideation: No concrete story idea. Just a vague theme, genre preference, or "write me something good."
-- concept: A rough idea or premise exists but needs development. e.g. "a thriller about a cop who discovers his partner is a serial killer"
-- logline: A logline or clear story concept exists, ready for structural work
+- pitch: A rough idea or premise exists. e.g. "a thriller about a cop who discovers his partner is a serial killer"
 - expose: An expose, pitch document, or series bible is provided
-- treatment: A treatment, Serienkonzept, or detailed narrative outline is provided
-- step_outline: A step outline or beat sheet exists
+- treatment: A treatment or detailed narrative outline is provided
 - first_draft: A complete draft (screenplay, manuscript, etc.) is provided
-- revised_draft: A draft with revision notes or previous feedback is provided
-
-## Format Detection
-Identify the format from the material. Understand German industry terms:
-- Serienkonzept = series concept/bible
-- Filmreihe = film series / franchise (multiple connected films)
-- Drehbuch = screenplay
-- Expose/Exposé = pitch document
-- Treatment = detailed narrative outline
 
 ## Rules
-- Pick the EARLIEST stage that matches the material quality. If someone uploaded a weak treatment, start at treatment — feedback agents will catch the weaknesses.
-- If NO story idea is present at all, pick ideation.
-- If a vague idea exists but no developed concept, pick concept.
+- Pick the EARLIEST stage that matches the material quality.
+- If NO story idea is present at all, pick pitch.
 - Only skip stages if the material genuinely covers them.
 
 Respond with JSON only:
 {{
     "detected_stage": "stage_name",
-    "detected_format": "film|series|limited_series|filmreihe|novel|theatre|short_story",
-    "format_confidence": "high|medium|low",
-    "reasoning": "Brief explanation of why this stage was chosen",
-    "recommended_config": {{
-        "target_format": "...",
-        "genre": "...",
-        "tone": "..."
-    }}
-}}
+    "reasoning": "Brief explanation"
+}}"""
 
-Only include keys in recommended_config that you can confidently infer. Omit keys you're unsure about."""
-
-
-def _run_entry_detection(agent) -> str:
-    """
-    One-shot Claude call to classify project input and determine the starting stage.
-    Runs exactly once — stores result in internal_state.
-    Returns the detected stage name.
-    """
     project = agent.department.project
     goal = project.goal or "No goal specified"
 
@@ -1180,7 +1251,7 @@ def _run_entry_detection(agent) -> str:
     if not config_summary:
         config_summary = "No config set."
 
-    prompt = ENTRY_DETECTION_PROMPT.format(
+    prompt = _LEGACY_PROMPT.format(
         goal=goal,
         sources_summary=sources_summary,
         config_summary=config_summary,
@@ -1195,13 +1266,13 @@ def _run_entry_detection(agent) -> str:
 
     data = parse_json_response(response)
     if not data or "detected_stage" not in data:
-        logger.warning("Entry detection failed to parse, defaulting to ideation: %s", response[:200])
-        return "ideation"
+        logger.warning("Entry detection failed to parse, defaulting to pitch: %s", response[:200])
+        return "pitch"
 
     detected_stage = data["detected_stage"]
     if detected_stage not in STAGES:
-        logger.warning("Entry detection returned unknown stage '%s', defaulting to ideation", detected_stage)
-        detected_stage = "ideation"
+        logger.warning("Entry detection returned unknown stage '%s', defaulting to pitch", detected_stage)
+        detected_stage = "pitch"
 
     # Store detection results in internal_state
     internal_state = agent.internal_state or {}
