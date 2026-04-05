@@ -108,7 +108,7 @@ function SignupContent() {
             <label className="flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="mt-0.5 rounded border-border accent-accent-gold" />
               <span className="text-xs text-text-secondary leading-relaxed">
-                I agree to the <Link href="/terms" className="text-accent-gold hover:text-accent-gold-hover underline">Terms of Service</Link> and <Link href="/privacy" className="text-accent-gold hover:text-accent-gold-hover underline">Privacy Policy</Link>
+                I agree to the <Link href="/terms" className="text-accent-violet hover:text-accent-violet-light underline">Terms of Service</Link> and <Link href="/privacy" className="text-accent-violet hover:text-accent-violet-light underline">Privacy Policy</Link>
               </span>
             </label>
 
@@ -121,7 +121,7 @@ function SignupContent() {
 
           <p className="text-center text-text-secondary text-sm mt-6">
             Already have an account?{" "}
-            <Link href="/login" className="text-accent-gold hover:text-accent-gold-hover">Log In</Link>
+            <Link href="/login" className="text-accent-violet hover:text-accent-violet-light">Log In</Link>
           </p>
         </CardContent>
       </Card>

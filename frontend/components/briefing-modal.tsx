@@ -127,7 +127,7 @@ export function BriefingModal({
               onChange={(e) => setContent(e.target.value)}
               placeholder="What should the team focus on?"
               rows={5}
-              className="w-full rounded-lg border border-border bg-bg-input px-2.5 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none"
+              className="w-full rounded-lg border border-border bg-bg-input px-2.5 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-violet focus-visible:ring-1 focus-visible:ring-accent-violet/50 resize-none"
             />
           </div>
 
@@ -137,7 +137,7 @@ export function BriefingModal({
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleFileDrop}
               onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border hover:border-accent-gold/50 p-4 text-center cursor-pointer transition-colors"
+              className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border hover:border-accent-violet/50 p-4 text-center cursor-pointer transition-colors"
             >
               <input
                 ref={fileInputRef}

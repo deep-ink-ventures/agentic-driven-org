@@ -70,7 +70,7 @@ export default function DashboardPage() {
         </div>
         <button
           onClick={openNewWizard}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-accent-gold/50 transition-colors text-sm"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-accent-violet/50 transition-colors text-sm"
         >
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">New Project</span>
@@ -86,8 +86,8 @@ export default function DashboardPage() {
         </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-4">
-          <div className="h-16 w-16 rounded-2xl bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-6">
-            <Logomark size={32} className="text-accent-gold" />
+          <div className="h-16 w-16 rounded-2xl bg-accent-violet/10 border border-accent-violet/20 flex items-center justify-center mb-6">
+            <Logomark size={32} className="text-accent-violet" />
           </div>
           <h2 className="text-lg font-semibold text-text-heading mb-2">No projects yet</h2>
           <p className="text-text-secondary text-sm text-center max-w-sm mb-6">

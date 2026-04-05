@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 
 const statusColors: Record<AgentTask["status"], string> = {
   awaiting_approval:
-    "bg-accent-gold/15 text-accent-gold border-accent-gold/30",
+    "bg-accent-violet/15 text-accent-violet border-accent-violet/30",
   awaiting_dependencies: "bg-bg-surface text-text-secondary border-border",
   planned: "bg-bg-surface text-text-secondary border-border",
   queued: "bg-bg-surface text-text-secondary border-border",
@@ -165,12 +165,12 @@ function TaskCard({
                     value={editedPlan}
                     onChange={(e) => setEditedPlan(e.target.value)}
                     rows={Math.max(6, editedPlan.split("\n").length + 2)}
-                    className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-xs text-text-primary font-mono outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-y"
+                    className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-xs text-text-primary font-mono outline-none focus-visible:border-accent-violet focus-visible:ring-1 focus-visible:ring-accent-violet/50 resize-y"
                   />
                 ) : (
                   <div
                     onClick={isApproval ? () => setEditing(true) : undefined}
-                    className={`rounded-lg border border-dashed border-border p-3 text-sm text-text-primary max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&>*:last-child]:mb-0 ${isApproval ? "cursor-pointer hover:border-accent-gold/40 transition-colors" : ""}`}
+                    className={`rounded-lg border border-dashed border-border p-3 text-sm text-text-primary max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&>*:last-child]:mb-0 ${isApproval ? "cursor-pointer hover:border-accent-violet/40 transition-colors" : ""}`}
                   >
                     <ReactMarkdown>{task.step_plan}</ReactMarkdown>
                   </div>
@@ -394,7 +394,7 @@ function TaskLane({
             <select
               value={statusFilter || ""}
               onChange={(e) => setStatusFilter(e.target.value || null)}
-              className="text-xs bg-bg-input border border-border rounded px-1.5 py-0.5 text-text-secondary outline-none focus:border-accent-gold"
+              className="text-xs bg-bg-input border border-border rounded px-1.5 py-0.5 text-text-secondary outline-none focus:border-accent-violet"
             >
               <option value="">All</option>
               {statusOptions.map((s) => (

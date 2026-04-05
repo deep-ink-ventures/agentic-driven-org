@@ -125,7 +125,7 @@ function LoginContent() {
 
           <p className="text-center text-text-secondary text-sm mt-6">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-accent-gold hover:text-accent-gold-hover">Sign Up</Link>
+            <Link href="/signup" className="text-accent-violet hover:text-accent-violet-light">Sign Up</Link>
           </p>
         </CardContent>
       </Card>

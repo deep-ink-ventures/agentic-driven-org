@@ -42,8 +42,8 @@ export function BriefingPills({ briefings, onArchive, onNewBriefing }: BriefingP
             onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors border group ${
               expandedId === b.id
-                ? "bg-accent-gold/15 text-accent-gold border-accent-gold/30"
-                : "bg-bg-surface text-text-primary border-border hover:border-accent-gold/30"
+                ? "bg-accent-violet/15 text-accent-violet border-accent-violet/30"
+                : "bg-bg-surface text-text-primary border-border hover:border-accent-violet/30"
             }`}
           >
             <span className="truncate max-w-[200px]">{truncate(b.title, 30)}</span>
@@ -68,7 +68,7 @@ export function BriefingPills({ briefings, onArchive, onNewBriefing }: BriefingP
         ))}
         <button
           onClick={onNewBriefing}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs text-text-secondary border border-dashed border-border hover:border-accent-gold/50 hover:text-accent-gold transition-colors"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs text-text-secondary border border-dashed border-border hover:border-accent-violet/50 hover:text-accent-violet transition-colors"
         >
           <Plus className="h-3 w-3" />
           New Briefing

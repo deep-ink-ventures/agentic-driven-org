@@ -14,14 +14,14 @@ export function ProjectCard({ project, onSetup }: ProjectCardProps) {
   const isSetup = project.status === "setup";
 
   const card = (
-    <Card className="bg-bg-surface border-border hover:border-accent-gold/50 transition-colors cursor-pointer group flex flex-col">
+    <Card className="bg-bg-surface border-border hover:border-accent-violet/50 transition-colors cursor-pointer group flex flex-col">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-text-heading group-hover:text-accent-gold transition-colors truncate">
+          <h3 className="text-lg font-semibold text-text-heading group-hover:text-accent-violet transition-colors truncate">
             {project.name}
           </h3>
           {isSetup && (
-            <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent-gold/15 text-accent-gold border border-accent-gold/30">
+            <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent-violet/15 text-accent-violet border border-accent-violet/30">
               Setup
             </span>
           )}
@@ -60,7 +60,7 @@ export function ProjectCard({ project, onSetup }: ProjectCardProps) {
             <Calendar className="h-3 w-3" />
             <span>{new Date(project.updated_at).toLocaleDateString()}</span>
           </div>
-          <span className={`flex items-center gap-1 text-xs font-medium ${isSetup ? "text-accent-gold" : "text-text-secondary group-hover:text-accent-gold"} transition-colors`}>
+          <span className={`flex items-center gap-1 text-xs font-medium ${isSetup ? "text-accent-violet" : "text-text-secondary group-hover:text-accent-violet"} transition-colors`}>
             {isSetup ? "Continue Setup" : "Open"}
             <ArrowRight className="h-3 w-3" />
           </span>

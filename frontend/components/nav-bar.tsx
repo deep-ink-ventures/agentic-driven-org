@@ -40,9 +40,9 @@ export function NavBar() {
       <div className="relative shrink-0" ref={menuRef}>
         <button
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border/60 hover:border-accent-gold/30 hover:bg-bg-surface transition-all"
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border/60 hover:border-accent-violet/30 hover:bg-bg-surface transition-all"
         >
-          <div className="h-7 w-7 rounded-full bg-accent-gold/20 border border-accent-gold/30 flex items-center justify-center text-accent-gold text-xs font-medium">
+          <div className="h-7 w-7 rounded-full bg-accent-violet/20 border border-accent-violet/30 flex items-center justify-center text-accent-violet text-xs font-medium">
             {initials}
           </div>
           <ChevronDown className={`h-3.5 w-3.5 text-text-secondary transition-transform ${open ? "rotate-180" : ""}`} />

@@ -5,27 +5,30 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-bg-primary: #111110;
-  --color-bg-surface: #1C1B18;
-  --color-bg-surface-hover: #272520;
-  --color-bg-input: #181714;
+  --color-bg-primary: #0a0e1a;
+  --color-bg-surface: #111827;
+  --color-bg-surface-hover: #1e2536;
+  --color-bg-input: #0f1629;
 
-  --color-accent-gold: #E8B84B;
-  --color-accent-gold-hover: #F0C85C;
-  --color-accent-gold-muted: oklch(0.78 0.12 85 / 0.15);
+  --color-accent-gold: #f59e0b;
+  --color-accent-gold-hover: #d97706;
+  --color-accent-gold-muted: rgba(245, 158, 11, 0.15);
 
-  --color-text-primary: #F0ECE2;
-  --color-text-secondary: #A8A290;
-  --color-text-heading: #FDFAF0;
+  --color-accent-violet: #7c6aef;
+  --color-accent-violet-light: #a78bfa;
 
-  --color-border: #332F28;
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-heading: #f1f5f9;
 
-  --color-flag-critical: #E5503E;
-  --color-flag-major: #E8B84B;
-  --color-flag-minor: #D4C068;
-  --color-flag-strength: #52C48C;
+  --color-border: rgba(148, 163, 184, 0.12);
 
-  --font-serif: "Source Serif 4", Georgia, serif;
+  --color-flag-critical: #ef4444;
+  --color-flag-major: #f59e0b;
+  --color-flag-minor: #eab308;
+  --color-flag-strength: #22c55e;
+
+  --font-serif: "DM Sans", system-ui, sans-serif;
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 }
@@ -47,7 +50,7 @@ h1, h2, h3 {
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent-gold);
+    outline: 2px solid var(--color-accent-violet);
     outline-offset: 2px;
     border-radius: 4px;
   }

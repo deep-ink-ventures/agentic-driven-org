@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { Source_Serif_4, Inter } from "next/font/google";
+import { DM_Sans, Inter } from "next/font/google";
 import "./globals.css";
 
-const sourceSerif = Source_Serif_4({
+const dmSans = DM_Sans({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-display",
-  weight: ["400", "600", "700"],
+  weight: ["400", "500", "700"],
 });
 
 const inter = Inter({
@@ -16,15 +16,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Frontier — The Agent Driven Organization",
+  title: "AgentDriven — Agentic AI Infrastructure & Consulting",
   description:
-    "Deploy autonomous AI agents on your own cloud. Frontier builds the agentic stack and integrates it into your business. Currently invite-only.",
+    "Deploy autonomous AI agents on your own cloud. AgentDriven builds the agentic stack and integrates it into your business. Currently invite-only.",
   openGraph: {
-    title: "Frontier — The Agent Driven Organization",
+    title: "AgentDriven — Agentic AI Infrastructure & Consulting",
     description:
-      "Deploy autonomous AI agents on your own cloud. Frontier builds the agentic stack and integrates it into your business.",
+      "Deploy autonomous AI agents on your own cloud. AgentDriven builds the agentic stack and integrates it into your business.",
     url: "https://agentdriven.org",
-    siteName: "Frontier",
+    siteName: "AgentDriven",
     type: "website",
   },
 };
@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${sourceSerif.variable} ${inter.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${inter.variable}`}>
       <body className="antialiased font-[family-name:var(--font-body)]">{children}</body>
     </html>
   );

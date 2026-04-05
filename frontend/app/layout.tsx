@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Source_Serif_4, Inter, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, Inter, JetBrains_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
 
-const sourceSerif = Source_Serif_4({
+const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-serif",
   display: "swap",
+  weight: ["400", "500", "700"],
 });
 
 const inter = Inter({
@@ -34,7 +35,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${sourceSerif.variable} ${inter.variable} ${jetbrainsMono.variable} bg-bg-primary text-text-primary antialiased`}
+        className={`${dmSans.variable} ${inter.variable} ${jetbrainsMono.variable} bg-bg-primary text-text-primary antialiased`}
       >
         <AuthProvider>{children}</AuthProvider>
       </body>

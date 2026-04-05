@@ -62,10 +62,10 @@ function AgentCard({
   return (
     <div
       onClick={clickable ? onClick : undefined}
-      className={`w-full text-left border border-border rounded-lg bg-bg-surface transition-colors p-4 group ${clickable ? "hover:border-accent-gold/50 cursor-pointer" : "opacity-60 cursor-default"}`}
+      className={`w-full text-left border border-border rounded-lg bg-bg-surface transition-colors p-4 group ${clickable ? "hover:border-accent-violet/50 cursor-pointer" : "opacity-60 cursor-default"}`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-text-heading group-hover:text-accent-gold transition-colors truncate mr-2">
+        <span className="text-sm font-medium text-text-heading group-hover:text-accent-violet transition-colors truncate mr-2">
           {agent.name}
         </span>
         <div className="flex items-center gap-2 shrink-0">
@@ -96,14 +96,14 @@ function AgentCard({
       </div>
       <div className="flex items-center justify-between mt-2">
         {agent.pending_task_count > 0 ? (
-          <p className="text-xs text-accent-gold">
+          <p className="text-xs text-accent-violet">
             {agent.pending_task_count} pending task{agent.pending_task_count !== 1 ? "s" : ""}
           </p>
         ) : <div />}
         {toggleable && onToggleAutoApprove && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleAutoApprove(); }}
-            className={`flex items-center gap-1 text-[10px] transition-colors ${agent.auto_approve ? "text-accent-gold" : "text-text-secondary/50 hover:text-accent-gold"}`}
+            className={`flex items-center gap-1 text-[10px] transition-colors ${agent.auto_approve ? "text-accent-violet" : "text-text-secondary/50 hover:text-accent-violet"}`}
             title={agent.auto_approve ? "Disable auto-approve" : "Enable auto-approve"}
           >
             <CheckCircle className="h-3 w-3" />
@@ -187,7 +187,7 @@ function DepartmentView({
         {activeAgents.length > 0 && (
           <button
             onClick={toggleAllAutoApprove}
-            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${deptAllApproved ? "border-accent-gold/30 bg-accent-gold/10 text-accent-gold" : "border-border bg-bg-surface text-text-secondary hover:text-accent-gold hover:border-accent-gold/30"}`}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${deptAllApproved ? "border-accent-violet/30 bg-accent-violet/10 text-accent-violet" : "border-border bg-bg-surface text-text-secondary hover:text-accent-violet hover:border-accent-violet/30"}`}
           >
             <CheckCircle className="h-3.5 w-3.5" />
             {deptAllApproved ? "Auto-approve on" : "Auto-approve all"}
@@ -375,7 +375,7 @@ function AgentConfigEditor({
         </div>
         <button
           onClick={() => setAutoApprove(!autoApprove)}
-          className={`transition-colors ${autoApprove ? "text-accent-gold" : "text-text-secondary hover:text-accent-gold"}`}
+          className={`transition-colors ${autoApprove ? "text-accent-violet" : "text-text-secondary hover:text-accent-violet"}`}
         >
           {autoApprove ? (
             <ToggleRight className="h-8 w-8" />
@@ -421,7 +421,7 @@ function AgentConfigEditor({
                     className="bg-bg-input border-border text-text-primary text-xs font-mono"
                   />
                   {agent.config_source[key] && agent.config_source[key] !== "agent" && !(key in config) && (
-                    <p className="text-[10px] text-accent-gold mt-0.5">
+                    <p className="text-[10px] text-accent-violet mt-0.5">
                       Inherited from {agent.config_source[key]}
                     </p>
                   )}
@@ -518,7 +518,7 @@ function AgentDetailView({
           {blueprint.tags.map((tag) => (
             <span
               key={tag}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold border border-accent-gold/20"
+              className="text-[10px] px-2 py-0.5 rounded-full bg-accent-violet/10 text-accent-violet border border-accent-violet/20"
             >
               {tag}
             </span>
@@ -534,7 +534,7 @@ function AgentDetailView({
             onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
               tab === key
-                ? "border-accent-gold text-accent-gold"
+                ? "border-accent-violet text-accent-violet"
                 : "border-transparent text-text-secondary hover:text-text-primary"
             }`}
           >
@@ -605,7 +605,7 @@ function AgentDetailView({
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
                 placeholder="Custom instructions for this agent..."
-                className="w-full flex-1 min-h-0 rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-gold focus-visible:ring-1 focus-visible:ring-accent-gold/50 resize-none font-mono"
+                className="w-full flex-1 min-h-0 rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 outline-none focus-visible:border-accent-violet focus-visible:ring-1 focus-visible:ring-accent-violet/50 resize-none font-mono"
                 autoFocus
               />
               <div className="flex gap-2 mt-3 shrink-0">
@@ -633,7 +633,7 @@ function AgentDetailView({
             </>
           ) : (
             <div
-              className="flex-1 min-h-0 rounded-lg border border-dashed border-border hover:border-accent-gold/40 p-4 cursor-pointer transition-colors overflow-y-auto"
+              className="flex-1 min-h-0 rounded-lg border border-dashed border-border hover:border-accent-violet/40 p-4 cursor-pointer transition-colors overflow-y-auto"
               onClick={() => setEditingInstructions(true)}
             >
               {instructions ? (
@@ -828,7 +828,7 @@ export default function ProjectDetailPage() {
         }}
         className={`flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
           view === "dashboard"
-            ? "text-accent-gold bg-accent-gold/10"
+            ? "text-accent-violet bg-accent-violet/10"
             : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
         }`}
       >
@@ -855,7 +855,7 @@ export default function ProjectDetailPage() {
               }}
               className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
                 selectedDept?.id === dept.id && view !== "dashboard"
-                  ? "bg-accent-gold/10 text-accent-gold"
+                  ? "bg-accent-violet/10 text-accent-violet"
                   : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
               }`}
             >
@@ -885,7 +885,7 @@ export default function ProjectDetailPage() {
           }}
           className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
             view === "settings"
-              ? "text-accent-gold bg-accent-gold/10"
+              ? "text-accent-violet bg-accent-violet/10"
               : "text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover"
           }`}
         >
@@ -901,7 +901,7 @@ export default function ProjectDetailPage() {
       {/* Mobile sidebar toggle */}
       <button
         onClick={() => setSidebarOpen(true)}
-        className="md:hidden fixed bottom-4 right-4 z-40 h-12 w-12 rounded-full bg-accent-gold text-bg-primary flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+        className="md:hidden fixed bottom-4 right-4 z-40 h-12 w-12 rounded-full bg-accent-violet text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />
@@ -913,8 +913,8 @@ export default function ProjectDetailPage() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-64 bg-bg-surface border-r border-border flex flex-col animate-in slide-in-from-left duration-200">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <span className="flex items-center gap-2 font-serif text-sm text-accent-gold font-bold">
-                <Logomark size={18} className="text-accent-gold" />
+              <span className="flex items-center gap-2 font-serif text-sm text-accent-violet font-bold">
+                <Logomark size={18} className="text-accent-violet" />
                 Navigation
               </span>
               <button onClick={() => setSidebarOpen(false)} className="text-text-secondary hover:text-text-primary">
