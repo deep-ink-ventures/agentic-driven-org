@@ -54,10 +54,16 @@ VERDICT_TOOL = {
 
 No `summary` field — the report text already contains the full review. Keep the tool minimal.
 
-### 3. `WorkforceBlueprint.execute_task` — conditional tool injection
+### 3. All call sites that produce verdicts — use `call_claude_with_tools`
 
-- If the blueprint has `review_dimensions` (non-empty list), call `call_claude_with_tools` with `[VERDICT_TOOL]` instead of `call_claude`
-- If the tool response contains a `submit_verdict` call, store `review_verdict` and `review_score` on the task
+Every code path that asks Claude for a verdict switches from `call_claude` to `call_claude_with_tools` with `[VERDICT_TOOL]`. Three call sites today:
+
+1. **`WorkforceBlueprint.execute_task`** — used by content_reviewer, outreach_reviewer, partnership_reviewer, review_engineer. Inject tool when `review_dimensions` is non-empty.
+2. **`EcosystemAnalystBlueprint`** — currently returns custom JSON with `verdict`/`overall_score`. Drop those JSON fields, use the tool instead.
+3. **`WritersRoomLeaderBlueprint._evaluate_feedback`** — currently uses `parse_json_response` for `overall_score` and a redundant VERDICT text line. Score comes from the tool; `fix_tasks` JSON stays in the text response.
+
+Same tool, same behavior at all three sites:
+- If the tool response contains `submit_verdict`, store `review_verdict` and `review_score` on the task
 - If Claude doesn't call the tool (edge case), fall back to `parse_review_verdict` on the report text and log a warning
 
 ### 4. `AgentTask` model — persist verdict
