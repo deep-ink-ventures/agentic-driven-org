@@ -40,8 +40,16 @@ class SprintListCreateView(generics.ListCreateAPIView):
             status=Sprint.Status.RUNNING,
         )
 
+        from projects.models import Department
+
         department_ids = serializer.validated_data.get("department_ids", [])
-        sprint.departments.set(department_ids)
+        valid_dept_ids = list(
+            Department.objects.filter(
+                id__in=department_ids,
+                project_id=self.kwargs["project_id"],
+            ).values_list("id", flat=True)
+        )
+        sprint.departments.set(valid_dept_ids)
 
         source_ids = serializer.validated_data.get("source_ids", [])
         if source_ids:

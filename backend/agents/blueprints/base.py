@@ -980,6 +980,8 @@ Respond with JSON:
         department = agent.department
         project = department.project
 
+        from agents.models import Agent as AgentModel
+        from agents.models import AgentTask
         from projects.models import Sprint
 
         running_sprints = list(
@@ -996,7 +998,7 @@ Respond with JSON:
 
         sprint = running_sprints[0]
 
-        workforce = Agent.objects.filter(
+        workforce = AgentModel.objects.filter(
             department=department,
             is_leader=False,
             status=Agent.Status.ACTIVE,
@@ -1039,7 +1041,7 @@ Respond with JSON:
 
         source_context = ""
         for src in sprint.sources.all()[:5]:
-            text = src.summary or src.extracted_text[:500] or src.raw_content[:500]
+            text = src.summary or (src.extracted_text or "")[:500] or (src.raw_content or "")[:500]
             if text:
                 source_context += f"\n- {src.original_filename or 'Attached file'}: {text[:400]}"
 

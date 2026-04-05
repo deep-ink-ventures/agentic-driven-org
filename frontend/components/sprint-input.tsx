@@ -17,6 +17,7 @@ export function SprintInput({
   projectId,
   departments,
   defaultDepartmentId,
+  onCreated,
 }: SprintInputProps) {
   const [text, setText] = useState("");
   const [selectedDeptIds, setSelectedDeptIds] = useState<Set<string>>(
@@ -99,6 +100,7 @@ export function SprintInput({
       setText("");
       setFiles([]);
       setShowDropZone(false);
+      onCreated?.();
       loadSuggestions();
     } finally {
       setSubmitting(false);
