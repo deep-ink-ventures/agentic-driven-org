@@ -683,3 +683,26 @@ class TestVerdictToolInjection:
             assert task.review_verdict == "APPROVED"
             assert task.review_score == 9.5
             assert result == response_text
+
+
+class TestWritersRoomReviewPairs:
+    def test_get_review_pairs_defined(self):
+        from agents.blueprints.writers_room.leader.agent import CREATIVE_MATRIX, WritersRoomLeaderBlueprint
+
+        bp = WritersRoomLeaderBlueprint()
+        pairs = bp.get_review_pairs()
+        assert len(pairs) > 0
+        reviewer_types = {p["reviewer"] for p in pairs}
+        assert reviewer_types == {"creative_reviewer"}
+        all_creators = set()
+        for agents_list in CREATIVE_MATRIX.values():
+            all_creators.update(agents_list)
+        pair_creators = {p["creator"] for p in pairs}
+        assert all_creators == pair_creators
+
+    def test_propose_review_chain_returns_none(self):
+        """Writers room overrides _propose_review_chain to return None."""
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        bp = WritersRoomLeaderBlueprint()
+        assert bp._propose_review_chain(None, None, set()) is None

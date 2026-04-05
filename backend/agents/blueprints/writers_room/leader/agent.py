@@ -111,12 +111,6 @@ class WritersRoomLeaderBlueprint(LeaderBlueprint):
             "label": "Language",
             "description": "Output language code: en, de, fr, es, etc. (default: en)",
         },
-        "target_stage": {
-            "type": "str",
-            "required": False,
-            "label": "Target Stage",
-            "description": "Final stage: logline, expose, treatment, step_outline, first_draft, revised_draft (default: revised_draft)",
-        },
     }
 
     @property
@@ -170,6 +164,48 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     # ── Register commands ────────────────────────────────────────────────
     plan_room = plan_room
     check_progress = check_progress
+
+    # ── Review pairs (universal pattern) ───────────────────────────────
+
+    def get_review_pairs(self):
+        all_creators = set()
+        for agents in CREATIVE_MATRIX.values():
+            all_creators.update(agents)
+
+        fix_commands = {
+            "story_researcher": "research",
+            "story_architect": "write",
+            "character_designer": "write",
+            "dialog_writer": "write",
+        }
+
+        return [
+            {
+                "creator": creator,
+                "creator_fix_command": fix_commands.get(creator, "write"),
+                "reviewer": "creative_reviewer",
+                "reviewer_command": "review-creative",
+                "dimensions": [
+                    "concept_fidelity",
+                    "originality",
+                    "market_fit",
+                    "structure",
+                    "character",
+                    "dialogue",
+                    "craft",
+                    "feasibility",
+                ],
+            }
+            for creator in sorted(all_creators)
+        ]
+
+    def _propose_review_chain(self, agent, creator_task, workforce_types):
+        """Override: writers room does NOT do direct creator->reviewer chains.
+
+        Instead, feedback agents analyze first, then creative_reviewer consolidates.
+        The state machine handles this via feedback_in_progress -> _propose_review_task.
+        """
+        return None
 
     # ── Task execution (uses base class delegation with stage context) ──
 
@@ -270,6 +306,11 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 ],
             }
 
+        # Check for review cycle triggers first (universal from base class)
+        review_result = self._check_review_trigger(agent)
+        if review_result:
+            return review_result
+
         # ── State machine ───────────────────────────────────────────────
 
         if status == "not_started":
@@ -277,7 +318,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             return self._propose_creative_tasks(agent, current_stage, config)
 
         if status == "writing_in_progress":
-            # All creative tasks completed (no active tasks remain) → advance
+            # All creative tasks completed (no active tasks remain) -> advance
             logger.info("Writers Room: stage '%s' writing complete — advancing to feedback", current_stage)
             stage_status[current_stage]["status"] = "writing_done"
             internal_state["stage_status"] = stage_status
@@ -290,17 +331,39 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             return self._propose_feedback_tasks(agent, current_stage, config)
 
         if status == "feedback_in_progress":
-            # All feedback tasks completed (no active tasks remain) → evaluate
-            logger.info("Writers Room: stage '%s' feedback complete — evaluating", current_stage)
+            # All feedback tasks completed -> dispatch creative_reviewer to consolidate
+            logger.info("Writers Room: stage '%s' feedback complete — dispatching review", current_stage)
             stage_status[current_stage]["status"] = "feedback_done"
             internal_state["stage_status"] = stage_status
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
-            return self._evaluate_feedback(agent, current_stage, config)
+            return self._propose_review_task(agent, current_stage, config)
 
         if status == "feedback_done":
-            # Step 4/5: Check feedback results and decide
-            return self._evaluate_feedback(agent, current_stage, config)
+            # Dispatch creative_reviewer to consolidate analyst feedback
+            return self._propose_review_task(agent, current_stage, config)
+
+        if status == "review_in_progress":
+            # creative_reviewer completed and _check_review_trigger accepted it
+            # (if it was rejected, _check_review_trigger returned a fix proposal above)
+            current_info["status"] = "passed"
+            stage_status[current_stage] = current_info
+            internal_state["stage_status"] = stage_status
+
+            target_stage = config.get("target_stage", "revised_draft")
+            next_stg = _next_stage(current_stage)
+            if next_stg and STAGES.index(current_stage) < STAGES.index(target_stage):
+                internal_state["current_stage"] = next_stg
+                internal_state["current_iteration"] = 0
+                logger.info("Writers Room: stage '%s' PASSED — advancing to '%s'", current_stage, next_stg)
+                agent.internal_state = internal_state
+                agent.save(update_fields=["internal_state"])
+                return self._propose_creative_tasks(agent, next_stg, config)
+
+            logger.info("Writers Room: target stage '%s' PASSED — project complete", current_stage)
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            return None
 
         if status == "fix_in_progress":
             # After fixes, re-run feedback
@@ -580,27 +643,14 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             "on_completion": {"set_status": "feedback_done", "stage": stage},
         }
 
-    # ── Evaluate feedback and decide: pass, fix, or advance ─────────────
+    # ── Review task proposal (dispatch creative_reviewer) ────────────
 
-    def _evaluate_feedback(
-        self,
-        agent: Agent,
-        stage: str,
-        config: dict,
-    ) -> dict | None:
-        """
-        Parse recent feedback task reports, score quality, decide whether to
-        pass the stage or route fixes back to creative agents.
+    def _propose_review_task(self, agent: Agent, stage: str, config: dict) -> dict:
+        """Dispatch the creative_reviewer to consolidate analyst feedback."""
+        locale = config.get("locale", "en")
 
-        Uses universal quality scoring:
-        - score >= 9.5 → pass (excellence)
-        - score >= 9.0 and polish_attempts >= 3 → pass (diminishing returns)
-        - otherwise → route fixes back
-        """
-        from agents.ai.claude_client import call_claude, parse_json_response
         from agents.models import AgentTask
 
-        # Gather feedback reports from this stage
         feedback_agent_types = [at for at, _ in FEEDBACK_MATRIX.get(stage, [])]
         recent_feedback = list(
             AgentTask.objects.filter(
@@ -609,298 +659,84 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 status=AgentTask.Status.DONE,
             )
             .order_by("-completed_at")[: len(feedback_agent_types) * 2]
-            .values_list("agent__agent_type", "report", "exec_summary")
+            .values_list("agent__agent_type", "report")
         )
 
-        if not recent_feedback:
-            logger.warning("Writers Room: no feedback found for stage '%s'", stage)
-            return None
-
-        # Build feedback summary for Claude to parse
         feedback_text = ""
-        for agent_type, report, _summary in recent_feedback:
+        for agent_type, report in recent_feedback:
             if report:
                 feedback_text += f"\n\n## {agent_type}\n{report[:3000]}"
 
-        # ── Special handling: ideation stage uses merge evaluation ──────
-        if stage == "ideation":
-            return self._evaluate_ideation_feedback(agent, stage, config, feedback_text)
-
-        # Track polish attempts for this stage
         internal_state = agent.internal_state or {}
         stage_status = internal_state.get("stage_status", {})
         current_info = stage_status.get(stage, {"iterations": 0})
-        polish_attempts = current_info.get("polish_attempts", 0)
-        iteration = current_info.get("iterations", 0)
-
-        context_msg = self.build_context_message(agent)
-        msg = f"""{context_msg}
-
-# Evaluate Feedback for Stage: {stage}
-
-## Quality Standard
-Excellence threshold: {EXCELLENCE_THRESHOLD}/10. The overall score is the MINIMUM of all dimension scores.
-An implementation is only as strong as its weakest dimension.
-
-## Feedback Reports
-{feedback_text}
-
-# Task
-Evaluate the quality of the current stage output based on ALL analyst feedback.
-
-## Scoring (REQUIRED)
-Score each dimension 1.0-10.0 (use decimals — 8.5, 9.0, 9.5 etc.):
-- **Concept fidelity**: Does the output honor the creator's original pitch? Are specific characters, conflicts, arcs, and references from the project goal preserved and developed (not replaced with generic alternatives)? Score 1-3 if the creator's vision was ignored or replaced with generic alternatives.
-- **Originality**: Is this concept genuinely original, or is it a structural clone of a referenced show with a cosmetic setting change? Apply the Setting Swap Test: if you change the setting back to the referenced show's setting, is the story essentially the same? If yes, score 1-3. A concept inspired by Succession's QUALITY should not copy Succession's PLOT. Check the market analyst's derivative risk flags carefully.
-- **Market fit**: Commercial viability, positioning, audience appeal
-- **Structure**: Story architecture, beats, pacing, act breaks
-- **Character**: Consistency, arcs, motivation, relationships, voice. Also: are character names realistic for the milieu (not joke names, codenames, or derivatives of the project title)?
-- **Dialogue**: Voice, subtext, scene construction, exposition balance
-- **Craft**: Format conventions, technical quality, polish
-- **Feasibility**: Budget, cast-ability, production practicality
-
-Only score dimensions that were analyzed by feedback agents this round.
-Always score **concept fidelity** and **originality** — they apply at every stage.
-Compute the **overall score** as the MINIMUM of all scored dimensions.
-
-## Fix routing (if score < {EXCELLENCE_THRESHOLD})
-Group issues by which creative agent should fix them:
-- market_analyst flags → story_researcher
-- structure_analyst flags → story_architect
-- character_analyst flags → character_designer
-- dialogue_analyst flags → dialog_writer
-- format_analyst flags → story_architect (structural) or dialog_writer (craft)
-- production_analyst flags → most relevant creative agent
-- concept_fidelity / originality flags → story_architect (premise/structure) AND character_designer (characters)
-
-Respond with JSON:
-{{
-    "scores": {{
-        "concept_fidelity": 0.0,
-        "originality": 0.0,
-        "market_fit": 0.0,
-        "structure": 0.0,
-        "character": 0.0,
-        "dialogue": 0.0,
-        "craft": 0.0,
-        "feasibility": 0.0
-    }},
-    "overall_score": 0.0,
-    "summary": "Brief evaluation summary",
-    "fix_tasks": [
-        {{
-            "target_agent_type": "creative agent type",
-            "flags_from": "feedback agent type",
-            "flags": ["list of specific issues to address"],
-            "exec_summary": "What to fix",
-            "step_plan": "Detailed fix instructions"
-        }}
-    ]
-}}
-
-VERDICT LINE (REQUIRED — must be the last line):
-VERDICT: APPROVED (score: N.N/10)
-VERDICT: CHANGES_REQUESTED (score: N.N/10)"""
-
-        response, usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=msg,
-            model=self.get_model(agent, command_name="check-progress"),
-        )
-        if usage:
-            logger.info(
-                "TOKEN_USAGE dept=%s agent=%s stage=%s input=%d output=%d cost=$%.4f",
-                agent.department.name,
-                agent.name,
-                stage,
-                usage.get("input_tokens", 0),
-                usage.get("output_tokens", 0),
-                usage.get("cost_usd", 0),
-            )
-
-        data = parse_json_response(response)
-        if not data:
-            logger.warning("Writers Room: failed to parse feedback evaluation: %s", response[:300])
-            return None
-
-        score = float(data.get("overall_score", 0.0))
-
-        # Use shared quality gate (tracks polish, evaluates acceptance)
-        # We use a stage-scoped key so each stage has independent tracking
-        stage_key = f"wr_{stage}"
-        # Seed review_rounds so _apply_quality_gate sees the iteration count
-        internal_state.setdefault("review_rounds", {})[stage_key] = iteration
-        internal_state.setdefault("polish_attempts", {})[stage_key] = polish_attempts
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-
-        accepted, polish_count, _round_num = self._apply_quality_gate(agent, score, stage_key)
-
-        # Re-read internal_state since _apply_quality_gate saved it
-        internal_state = agent.internal_state or {}
-        stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(stage, {"iterations": iteration})
-
-        if accepted:
-            # Stage passed — mark and advance
-            current_info["status"] = "passed"
-            current_info["polish_attempts"] = 0  # reset for next stage
-            stage_status[stage] = current_info
-            internal_state["stage_status"] = stage_status
-
-            # Advance to next stage if not at target
-            target_stage = config.get("target_stage", "revised_draft")
-            next_stage = _next_stage(stage)
-            if next_stage and STAGES.index(stage) < STAGES.index(target_stage):
-                internal_state["current_stage"] = next_stage
-                internal_state["current_iteration"] = 0
-                logger.info("Writers Room: stage '%s' PASSED (%.1f/10) — advancing to '%s'", stage, score, next_stage)
-            else:
-                logger.info("Writers Room: target stage '%s' PASSED (%.1f/10) — project complete", stage, score)
-
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
-
-            if next_stage and STAGES.index(stage) < STAGES.index(target_stage):
-                return self._propose_creative_tasks(agent, next_stage, config)
-            return None  # Done
-
-        # Score below threshold — route fixes
-        fix_tasks = data.get("fix_tasks", [])
-        if not fix_tasks:
-            logger.warning("Writers Room: score %.1f below threshold but no fix_tasks returned", score)
-            return None
-
-        current_info["status"] = "fix_in_progress"
-        current_info["iterations"] = iteration + 1
-        current_info["polish_attempts"] = polish_count
-        current_info["last_score"] = score
+        current_info["status"] = "review_in_progress"
         stage_status[stage] = current_info
         internal_state["stage_status"] = stage_status
         agent.internal_state = internal_state
         agent.save(update_fields=["internal_state"])
 
-        locale = config.get("locale", "en")
-        polish_msg = f" (polish {polish_attempts}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
-        tasks = []
-        for ft in fix_tasks:
-            tasks.append(
+        return {
+            "exec_summary": f"Stage '{stage}': consolidate analyst feedback and score",
+            "tasks": [
                 {
-                    "target_agent_type": ft["target_agent_type"],
-                    "exec_summary": ft.get("exec_summary", f"Fix issues from {ft.get('flags_from', 'analyst')}"),
+                    "target_agent_type": "creative_reviewer",
+                    "command_name": "review-creative",
+                    "exec_summary": f"Review stage '{stage}' — consolidate analyst feedback",
                     "step_plan": (
                         f"Stage: {stage}\n"
                         f"Locale: {locale}\n"
-                        f"Current score: {score}/10. Target: {EXCELLENCE_THRESHOLD}/10.\n"
-                        f"Issues from: {ft.get('flags_from', 'analyst')}\n\n"
-                        f"Address these specific issues:\n"
-                        + "\n".join(f"- {flag}" for flag in ft.get("flags", []))
-                        + f"\n\n{ft.get('step_plan', '')}\n\n"
-                        f"Rewrite your contribution addressing ALL flagged issues. "
-                        f"Focus on the weakest dimensions first. "
-                        f"Preserve everything that was not flagged. "
-                        f"Output must be in {locale}."
+                        f"Quality threshold: {EXCELLENCE_THRESHOLD}/10\n\n"
+                        f"## Analyst Feedback Reports\n{feedback_text}\n\n"
+                        f"Score each dimension 1.0-10.0. Overall score = minimum of all dimensions.\n"
+                        f"After your review, call the submit_verdict tool with your verdict and score.\n\n"
+                        f"For CHANGES_REQUESTED: group fix instructions by creative agent."
                     ),
                     "depends_on_previous": False,
                 }
-            )
-
-        return {
-            "exec_summary": f"Stage '{stage}': fix issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}",
-            "tasks": tasks,
-            "on_completion": {"set_status": "fix_in_progress", "stage": stage},
+            ],
         }
 
-    def _evaluate_ideation_feedback(
-        self,
-        agent: Agent,
-        stage: str,
-        config: dict,
-        feedback_text: str,
+    # ── Fix task override (writers-room-specific routing) ──────────────
+
+    def _propose_fix_task(
+        self, agent: Agent, review_task, score: float, round_num: int, polish_count: int
     ) -> dict | None:
-        """
-        Special evaluation for ideation stage: rank concepts, merge best elements,
-        store merged concept as Document, advance to concept stage.
-        """
+        """Route fix tasks to creative agents and track stage status."""
+        config = _get_merged_config(agent)
         locale = config.get("locale", "en")
-
-        context_msg = self.build_context_message(agent)
-        msg = f"""{context_msg}
-
-# Evaluate Ideation Concepts
-
-## Feedback from Analysts
-{feedback_text}
-
-# Task
-You are evaluating 3-5 competing concept pitches that were scored by feedback agents.
-
-1. RANK all concepts based on the feedback (commercial viability, dramatic potential, feasibility)
-2. PICK the winner — the concept with the strongest foundation
-3. IDENTIFY strong elements from the runners-up that could strengthen the winner
-4. PRODUCE one merged concept that combines the best of all pitches
-
-If ALL concepts received critical flags with no redeeming qualities, return:
-{{"all_failed": true, "reasoning": "..."}}
-
-Otherwise, return:
-{{
-    "all_failed": false,
-    "winner": "Concept N title",
-    "reasoning": "Why this concept won and what was merged",
-    "elements_merged": ["Element from Concept X", "Element from Concept Y"],
-    "merged_concept": "The complete merged concept description — 2-4 paragraphs covering premise, format, genre, tone, audience, and zeitgeist hook. Written in {locale}."
-}}"""
-
-        response, _usage = call_claude(
-            system_prompt=self.build_system_prompt(agent),
-            user_message=msg,
-            model=self.get_model(agent, command_name="check-progress"),
-        )
-
-        data = parse_json_response(response)
-        if not data:
-            logger.warning("Writers Room: failed to parse ideation evaluation: %s", response[:300])
-            return None
-
         internal_state = agent.internal_state or {}
+        current_stage = internal_state.get("current_stage", STAGES[0])
+
         stage_status = internal_state.get("stage_status", {})
-        current_info = stage_status.get(stage, {"iterations": 0})
-
-        if data.get("all_failed"):
-            # All concepts failed — loop: re-run ideation with feedback context
-            current_info["status"] = "not_started"
-            current_info["iterations"] = current_info.get("iterations", 0) + 1
-            stage_status[stage] = current_info
-            internal_state["stage_status"] = stage_status
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
-            logger.info("Writers Room: all ideation concepts failed, re-running ideation")
-            return self._propose_creative_tasks(agent, stage, config)
-
-        # Store merged concept as Document
-        merged_text = data.get("merged_concept", "")
-        if merged_text:
-            Document.objects.update_or_create(
-                department=agent.department,
-                title="Merged Concept",
-                defaults={
-                    "content": merged_text,
-                    "doc_type": "concept",
-                },
-            )
-
-        # Mark ideation as passed, advance to concept
-        current_info["status"] = "passed"
-        stage_status[stage] = current_info
+        current_info = stage_status.get(current_stage, {"iterations": 0})
+        current_info["status"] = "fix_in_progress"
+        stage_status[current_stage] = current_info
         internal_state["stage_status"] = stage_status
-        internal_state["current_stage"] = "concept"
-        internal_state["current_iteration"] = 0
         agent.internal_state = internal_state
         agent.save(update_fields=["internal_state"])
 
-        logger.info("Writers Room: ideation PASSED — merged concept stored, advancing to concept stage")
-        return self._propose_creative_tasks(agent, "concept", config)
+        review_snippet = (review_task.report or "")[:3000]
+        polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
+
+        return {
+            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}",
+            "tasks": [
+                {
+                    "target_agent_type": "story_architect",
+                    "command_name": "write",
+                    "exec_summary": f"Fix review issues for stage '{current_stage}' (score {score}/10)",
+                    "step_plan": (
+                        f"Current quality score: {score}/10. Target: {EXCELLENCE_THRESHOLD}/10.\n"
+                        f"Review round: {round_num}. Locale: {locale}\n\n"
+                        f"The creative reviewer has requested changes. Fix the issues below.\n\n"
+                        f"## Review Report\n{review_snippet}\n\n"
+                        f"Address every CHANGES_REQUESTED item. Focus on the weakest dimensions first."
+                    ),
+                    "depends_on_previous": False,
+                }
+            ],
+        }
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
