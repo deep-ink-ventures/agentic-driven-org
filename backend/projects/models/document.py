@@ -15,6 +15,9 @@ class Document(models.Model):
         SPRINT_PROGRESS = "sprint_progress", "Sprint Progress"
         SPRINT_SUMMARY = "sprint_summary", "Sprint Summary"
         MONTHLY_ARCHIVE = "monthly_archive", "Monthly Archive"
+        STAGE_DELIVERABLE = "stage_deliverable", "Stage Deliverable"
+        STAGE_RESEARCH = "stage_research", "Stage Research & Notes"
+        STAGE_CRITIQUE = "stage_critique", "Stage Critique"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
