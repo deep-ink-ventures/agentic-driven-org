@@ -837,3 +837,60 @@ class TestWritersRoomReviewPairs:
 
         bp = WritersRoomLeaderBlueprint()
         assert bp._propose_review_chain(None, None, set()) is None
+
+
+# ── Volume safety net ──────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestVolumeThresholdCheck:
+    def test_triggers_consolidation_when_over_threshold(self, db, department):
+        from unittest.mock import MagicMock, patch
+
+        from agents.models import Agent
+
+        # Create docs totaling over 1.5M chars
+        big_content = "word " * 400000  # ~2M chars
+        Document.objects.create(
+            title="Huge doc",
+            content=big_content,
+            department=department,
+        )
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        with patch("agents.blueprints.base.consolidate_department_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            blueprint = agent.get_blueprint()
+            blueprint.get_context(agent)
+            mock_task.delay.assert_called_once_with(str(department.id))
+
+    def test_does_not_trigger_consolidation_when_under_threshold(self, db, department):
+        from unittest.mock import MagicMock, patch
+
+        from agents.models import Agent
+
+        # Small content, well under threshold
+        Document.objects.create(
+            title="Small doc",
+            content="Just a short document.",
+            department=department,
+        )
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        with patch("agents.blueprints.base.consolidate_department_documents") as mock_task:
+            mock_task.delay = MagicMock()
+            blueprint = agent.get_blueprint()
+            blueprint.get_context(agent)
+            mock_task.delay.assert_not_called()

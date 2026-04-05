@@ -249,6 +249,17 @@ class BaseBlueprint(ABC):
         docs = list(
             department.documents.filter(is_archived=False).values_list("title", "content", "doc_type", "created_at")
         )
+
+        # Volume safety net — trigger async consolidation if context is too large
+        total_chars = sum(len(content) for _, content, _, _ in docs)
+        if total_chars > 1_500_000:  # ~500k tokens
+            consolidate_department_documents.delay(str(department.id))
+            logger.warning(
+                "VOLUME_THRESHOLD dept=%s chars=%d — async consolidation triggered",
+                department.name,
+                total_chars,
+            )
+
         docs_text = ""
         for title, content, doc_type, created_at in docs:
             from django.utils import timezone
@@ -1159,3 +1170,10 @@ What is the next step to advance this sprint toward completion?"""
             doc_type=Document.DocType.GENERAL,
             sprint=sprint,
         )
+
+
+# ── Deferred import — placed here to avoid circular imports ─────────────────
+# projects.tasks_consolidation imports from agents.ai, so importing at the top
+# of this module would create a cycle. Importing at the bottom (after all class
+# definitions) is safe and puts the name in the module namespace for patching.
+from projects.tasks_consolidation import consolidate_department_documents  # noqa: E402
