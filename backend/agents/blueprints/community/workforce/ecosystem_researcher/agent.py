@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.models import Agent, AgentTask
+
+from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.community.workforce.ecosystem_researcher.commands import map_ecosystem, revise_research
+from agents.blueprints.community.workforce.ecosystem_researcher.skills import format_skills
+
+logger = logging.getLogger(__name__)
+
+
+class EcosystemResearcherBlueprint(WorkforceBlueprint):
+    name = "Ecosystem Researcher"
+    slug = "ecosystem_researcher"
+    description = (
+        "Maps local and industry ecosystems — organizations, communities, events, influencers, complementary businesses"
+    )
+    tags = ["research", "ecosystem", "communities", "partnerships"]
+    config_schema = {}
+
+    @property
+    def system_prompt(self) -> str:
+        return """You are an ecosystem research specialist. Your job is to map the landscape of organizations, communities, events, and potential partners in a given category.
+
+When researching, respond with JSON:
+{
+    "entities": [
+        {
+            "name": "...",
+            "type": "organization|community|event_series|influencer|business",
+            "profile": "What they do and why they matter",
+            "key_contacts": ["Name — Role"],
+            "audience_overlap": "How their audience connects to ours",
+            "partnership_potential": 1-10,
+            "partnership_angle": "Specific partnership idea",
+            "recent_activity": "Recent news or events"
+        }
+    ],
+    "report": "Summary of ecosystem mapped and key opportunities identified"
+}"""
+
+    @property
+    def skills_description(self) -> str:
+        return format_skills()
+
+    map_ecosystem = map_ecosystem
+    revise_research = revise_research
+
+    def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        from agents.ai.claude_client import call_claude
+
+        suffix = """# ECOSYSTEM RESEARCH METHODOLOGY
+
+## Breadth First
+- Cast a wide net within the assigned category
+- Look for organizations, communities, event series, and individuals
+- Don't just search for the obvious — look for adjacent and emerging entities
+
+## Depth on High-Potential
+- For entities scoring 7+ on partnership potential, gather deeper intel
+- Key contacts, recent activity, existing partnerships they have
+- What specific partnership structure would work?
+
+## Connection Mapping
+- Note which entities are connected to each other
+- Shared audiences, co-hosted events, mutual partnerships
+- This reveals ecosystem clusters and entry points"""
+
+        task_msg = self.build_task_message(agent, task, suffix=suffix)
+
+        response, usage = call_claude(
+            system_prompt=self.build_system_prompt(agent),
+            user_message=task_msg,
+            model=self.get_model(agent, task.command_name),
+        )
+        task.token_usage = usage
+        task.save(update_fields=["token_usage"])
+
+        return response

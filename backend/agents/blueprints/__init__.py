@@ -148,6 +148,45 @@ if SalesLeaderBlueprint is not None:
         "config_schema": _sales_leader.config_schema,
     }
 
+# ── Community & Partnerships ────────────────────────────────────────────────
+
+try:
+    from agents.blueprints.community.leader import CommunityLeaderBlueprint
+except ImportError:
+    CommunityLeaderBlueprint = None
+
+_community_workforce = {}
+_community_imports = {
+    "ecosystem_researcher": (
+        "agents.blueprints.community.workforce.ecosystem_researcher",
+        "EcosystemResearcherBlueprint",
+    ),
+    "ecosystem_analyst": ("agents.blueprints.community.workforce.ecosystem_analyst", "EcosystemAnalystBlueprint"),
+    "partnership_writer": ("agents.blueprints.community.workforce.partnership_writer", "PartnershipWriterBlueprint"),
+    "partnership_reviewer": (
+        "agents.blueprints.community.workforce.partnership_reviewer",
+        "PartnershipReviewerBlueprint",
+    ),
+}
+for _slug, (_mod_path, _cls_name) in _community_imports.items():
+    try:
+        _mod = importlib.import_module(_mod_path)
+        _community_workforce[_slug] = getattr(_mod, _cls_name)()
+    except (ImportError, AttributeError):
+        pass
+
+if CommunityLeaderBlueprint is not None:
+    _community_leader = CommunityLeaderBlueprint()
+    DEPARTMENTS["community"] = {
+        "name": "Community & Partnerships",
+        "description": "Ecosystem mapping and partnership development — research communities, propose collaborations, build relationships with quality review loops",
+        "execution_mode": "scheduled",
+        "min_delay_seconds": 0,
+        "leader": _community_leader,
+        "workforce": _community_workforce,
+        "config_schema": _community_leader.config_schema,
+    }
+
 DEPARTMENT_TYPE_CHOICES = [(slug, dept["name"]) for slug, dept in DEPARTMENTS.items()]
 
 AGENT_TYPE_CHOICES = [("leader", "Department Leader")]
