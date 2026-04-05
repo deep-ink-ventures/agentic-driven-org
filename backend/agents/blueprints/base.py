@@ -964,10 +964,11 @@ Respond with JSON:
 
     def generate_task_proposal(self, agent: Agent) -> dict | None:
         """
-        Propose the next highest-value task by asking Claude to assess and plan.
+        Propose the next task by examining running sprints for this department.
 
-        Uses project goal, department documents, completed tasks, and available agents
-        to determine what to do next. Subclasses can override for domain-specific logic.
+        Picks the sprint with least recent activity (round-robin fairness),
+        reviews what's been done, and proposes subtasks to advance it.
+        Returns None if no running sprints exist.
         """
         import json
         import logging
@@ -979,7 +980,22 @@ Respond with JSON:
         department = agent.department
         project = department.project
 
-        # Gather available workforce agents
+        from projects.models import Sprint
+
+        running_sprints = list(
+            Sprint.objects.filter(
+                departments=department,
+                status=Sprint.Status.RUNNING,
+            )
+            .prefetch_related("sources")
+            .order_by("updated_at")
+        )
+
+        if not running_sprints:
+            return None
+
+        sprint = running_sprints[0]
+
         workforce = Agent.objects.filter(
             department=department,
             is_leader=False,
@@ -1002,60 +1018,78 @@ Respond with JSON:
                 }
             )
 
-        # Gather recent completed tasks
         completed_tasks = list(
             AgentTask.objects.filter(
-                agent__department=department,
+                sprint=sprint,
                 status__in=[AgentTask.Status.DONE, AgentTask.Status.PROCESSING],
             )
             .order_by("-created_at")
-            .values_list("exec_summary", flat=True)[:20]
+            .values_list("exec_summary", "report")[:20]
         )
+        completed_text = []
+        for summary, report in completed_tasks:
+            entry = summary
+            if report:
+                entry += f"\n  Result: {report[:300]}"
+            completed_text.append(entry)
 
-        # Gather department documents
         from projects.models import Document
 
         docs = list(Document.objects.filter(department=department).values_list("title", flat=True)[:20])
 
-        # Get locale
+        source_context = ""
+        for src in sprint.sources.all()[:5]:
+            text = src.summary or src.extracted_text[:500] or src.raw_content[:500]
+            if text:
+                source_context += f"\n- {src.original_filename or 'Attached file'}: {text[:400]}"
+
         locale = agent.get_config_value("locale") or "en"
 
-        system_prompt = f"""You are a department leader deciding the next highest-value task for your team.
+        system_prompt = f"""You are a department leader advancing a specific work instruction (sprint).
 
 You MUST respond with valid JSON only. No markdown fences, no explanation.
 
 ## Your Process
-1. ASSESS: Where does the project stand? What has been done? What's missing?
-2. GOAL: What does the project need most right now to move forward?
-3. IMPACT: Which agent and action would create the most value right now?
-4. PLAN: Write a detailed, actionable task plan for that agent.
+1. READ the sprint instruction carefully — this is what the user wants done.
+2. REVIEW what has been completed so far for this sprint.
+3. ASSESS: What's still missing? What would move this sprint closest to completion?
+4. PROPOSE: The most impactful next task(s) to advance the sprint.
+5. COMPLETE: If the sprint goal has been fully met with excellence, set "sprint_done" to true.
 
 ## Rules
-- Propose ONE task at a time (or a small chain of dependent tasks if they form a logical unit)
-- Each task must target a specific agent by agent_type
-- Each task must have a specific command_name from that agent's available commands
-- The step_plan must be detailed enough that the agent can work autonomously
-- Reference specific project details — characters, themes, goals, constraints
-- All output in {locale}
+- Every task MUST advance the sprint instruction. Do not invent unrelated work.
+- Propose ONE task (or a small chain if they form a logical unit).
+- Each task must target a specific agent by agent_type with a specific command_name.
+- The step_plan must be detailed — reference specific project details, characters, themes, goals.
+- All output in {locale}.
+- If you believe the sprint is COMPLETE (goal fully met), set "sprint_done": true and provide "completion_summary".
 
 ## Response JSON Schema
-{{
+{{{{
+    "sprint_done": false,
+    "completion_summary": "",
     "exec_summary": "Brief description of what this task achieves",
     "tasks": [
-        {{
+        {{{{
             "target_agent_type": "agent_type_slug",
             "command_name": "command_name",
             "exec_summary": "What this specific agent should deliver",
             "step_plan": "Detailed, actionable instructions for the agent...",
             "depends_on_previous": false
-        }}
+        }}}}
     ]
-}}"""
+}}}}"""
 
         user_message = f"""# Project: {project.name}
 
 ## Project Goal
 {project.goal or "No goal set."}
+
+## Sprint Instruction
+{sprint.text}
+
+## Sprint Context Files
+{source_context or "None."}
 
 ## Leader Instructions
 {agent.instructions or "No specific instructions."}
@@ -1063,13 +1097,13 @@ You MUST respond with valid JSON only. No markdown fences, no explanation.
 ## Available Agents
 {json.dumps(agents_desc, indent=2)}
 
-## Completed / In-Progress Tasks
-{json.dumps(completed_tasks) if completed_tasks else "None yet — this is the first task."}
+## Work Completed So Far (for this sprint)
+{json.dumps(completed_text) if completed_text else "Nothing yet — this sprint just started."}
 
 ## Department Documents
 {json.dumps(docs) if docs else "None yet."}
 
-What is the single most impactful next action for this department?"""
+What is the next step to advance this sprint toward completion?"""
 
         try:
             response, _usage = call_claude(
@@ -1078,10 +1112,25 @@ What is the single most impactful next action for this department?"""
                 max_tokens=4096,
             )
             result = parse_json_response(response)
-            if result:
-                return result
-            logger.warning("Leader %s: failed to parse task proposal from Claude", agent.name)
-        except Exception as e:
-            logger.exception("Leader %s: Claude call failed for task proposal: %s", agent.name, e)
+            if not result:
+                logger.warning("Leader %s: failed to parse sprint proposal", agent.name)
+                return None
 
-        return None
+            if result.get("sprint_done"):
+                sprint.status = Sprint.Status.DONE
+                sprint.completion_summary = result.get("completion_summary", "Sprint completed.")
+                sprint.completed_at = timezone.now()
+                sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+
+                from projects.views.sprint_view import _broadcast_sprint
+
+                _broadcast_sprint(sprint, "sprint.updated")
+                logger.info("Leader %s declared sprint done: %s", agent.name, sprint.text[:60])
+                return None
+
+            result["_sprint_id"] = str(sprint.id)
+            return result
+
+        except Exception as e:
+            logger.exception("Leader %s: sprint proposal failed: %s", agent.name, e)
+            return None

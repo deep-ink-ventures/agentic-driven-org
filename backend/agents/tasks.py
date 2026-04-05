@@ -144,7 +144,7 @@ def execute_agent_task(self, task_id: str):
 
         _broadcast_task(task)
         _unblock_dependents(task)
-        _trigger_continuous_mode(task)
+        _trigger_next_sprint_work(task)
 
         logger.info("Task %s completed: %s", task_id, task.exec_summary[:80])
 
@@ -214,34 +214,24 @@ def recover_stuck_tasks():
         _broadcast_task(task)
 
 
-def _trigger_continuous_mode(completed_task):
-    """In continuous mode, immediately trigger leader to evaluate next work."""
-    from agents.blueprints import DEPARTMENTS
+def _trigger_next_sprint_work(completed_task):
+    """After task completion, trigger leader if department has running sprints."""
+    from projects.models import Sprint
 
     department = completed_task.agent.department
-    dept_def = DEPARTMENTS.get(department.department_type, {})
-    default_mode = dept_def.get("execution_mode", "scheduled")
-    exec_mode = (department.config or {}).get("execution_mode", default_mode)
 
-    if exec_mode != "continuous":
+    has_running_sprints = Sprint.objects.filter(
+        departments=department,
+        status=Sprint.Status.RUNNING,
+    ).exists()
+
+    if not has_running_sprints:
         return
-
-    delay = (department.config or {}).get(
-        "min_delay_seconds",
-        dept_def.get("min_delay_seconds", 0),
-    )
 
     leader = department.agents.filter(is_leader=True, status="active").first()
     if leader:
-        create_next_leader_task.apply_async(
-            args=[str(leader.id)],
-            countdown=delay,
-        )
-        logger.info(
-            "Continuous mode: triggering leader %s (delay=%ds)",
-            leader.name,
-            delay,
-        )
+        create_next_leader_task.delay(str(leader.id))
+        logger.info("Sprint work: triggering leader %s after task completion", leader.name)
 
 
 @shared_task
@@ -270,6 +260,9 @@ def create_next_leader_task(leader_agent_id: str):
 
     try:
         proposal = blueprint.generate_task_proposal(agent)
+
+        # Extract sprint ID from proposal (set by generate_task_proposal)
+        sprint_id = proposal.pop("_sprint_id", None) if proposal else None
 
         if proposal is None:
             logger.info("Leader %s has nothing to propose (no active workforce)", agent.name)
@@ -315,6 +308,7 @@ def create_next_leader_task(leader_agent_id: str):
                     status=initial_status,
                     command_name=command_name,
                     blocked_by=blocked_by,
+                    sprint_id=sprint_id,
                     exec_summary=task_data.get("exec_summary", "Priority task"),
                     step_plan=task_data.get("step_plan", ""),
                 )
@@ -341,6 +335,7 @@ def create_next_leader_task(leader_agent_id: str):
                 agent=agent,
                 status=initial_status,
                 auto_execute=False,
+                sprint_id=sprint_id,
                 exec_summary=proposal.get("exec_summary", "Leader task"),
                 step_plan=proposal.get("step_plan", ""),
             )
