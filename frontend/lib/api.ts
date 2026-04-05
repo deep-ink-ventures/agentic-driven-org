@@ -277,12 +277,6 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  suggestSprints: (projectId: string, departmentIds: string[]) =>
-    request<{ suggestions: string[] }>(`/api/projects/${projectId}/sprints/suggest/`, {
-      method: "POST",
-      body: JSON.stringify({ department_ids: departmentIds }),
-    }),
-
   uploadSource: (projectId: string, formData: FormData) =>
     fetch(`${API_URL}/api/projects/${projectId}/sources/`, {
       method: "POST",

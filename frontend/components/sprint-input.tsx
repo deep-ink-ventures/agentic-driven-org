@@ -1,10 +1,10 @@
 // frontend/components/sprint-input.tsx
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { DepartmentDetail } from "@/lib/types";
-import { Loader2, Paperclip, X, Sparkles } from "lucide-react";
+import { Loader2, Paperclip, X } from "lucide-react";
 
 interface SprintInputProps {
   projectId: string;
@@ -26,30 +26,7 @@ export function SprintInput({
   const [files, setFiles] = useState<File[]>([]);
   const [showDropZone, setShowDropZone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const loadSuggestions = useCallback(async () => {
-    const deptIds = Array.from(selectedDeptIds);
-    if (deptIds.length === 0) {
-      setSuggestions([]);
-      return;
-    }
-    setLoadingSuggestions(true);
-    try {
-      const res = await api.suggestSprints(projectId, deptIds);
-      setSuggestions(res.suggestions || []);
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  }, [projectId, selectedDeptIds]);
-
-  useEffect(() => {
-    loadSuggestions();
-  }, [loadSuggestions]);
 
   function toggleDept(deptId: string) {
     setSelectedDeptIds((prev) => {
@@ -101,7 +78,6 @@ export function SprintInput({
       setFiles([]);
       setShowDropZone(false);
       onCreated?.();
-      loadSuggestions();
     } finally {
       setSubmitting(false);
     }
@@ -109,27 +85,6 @@ export function SprintInput({
 
   return (
     <div className="mb-6">
-      {/* Suggestions */}
-      <div className="flex flex-wrap gap-2 mb-3 min-h-[28px]">
-        {loadingSuggestions ? (
-          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Loading suggestions…
-          </div>
-        ) : (
-          suggestions.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => setText(s)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-accent-violet/8 text-accent-violet border border-accent-violet/20 hover:bg-accent-violet/15 transition-colors"
-            >
-              <Sparkles className="h-3 w-3" />
-              {s}
-            </button>
-          ))
-        )}
-      </div>
-
       {/* Input area */}
       <div
         onDragOver={handleDragOver}

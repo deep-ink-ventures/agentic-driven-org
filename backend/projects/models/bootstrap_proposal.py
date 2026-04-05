@@ -27,7 +27,7 @@ def get_proposal_json_schema() -> dict:
         "properties": {
             "enriched_goal": {
                 "type": "string",
-                "description": "The user's original goal preserved verbatim with typo fixes, formatting, and added context from sources — must never be shorter than the original",
+                "description": "The user's original goal with misspellings fixed and formatted as clean markdown — same content, no additions, no removals",
             },
             "summary": {
                 "type": "string",

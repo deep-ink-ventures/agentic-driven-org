@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import ReactMarkdown from "react-markdown";
 
 function slugifyName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -66,7 +67,9 @@ export default function ProjectDetailPage() {
     if (!project || initialDeepLinkDone) return;
     setInitialDeepLinkDone(true);
 
-    if (deptSlug) {
+    if (deptSlug === "settings") {
+      setView("settings");
+    } else if (deptSlug) {
       const dept = project.departments.find(
         (d) => d.department_type === deptSlug,
       );
@@ -79,10 +82,6 @@ export default function ProjectDetailPage() {
           if (agent) {
             setSelectedAgent(agent);
             setView("agent");
-            // Handle #config hash
-            if (typeof window !== "undefined" && window.location.hash === "#config") {
-              // Tab will be set in AgentDetailView
-            }
           } else {
             setView("department");
           }
@@ -237,83 +236,54 @@ export default function ProjectDetailPage() {
   }
 
   function SettingsView({ projectId: pid }: { projectId: string }) {
-    const [allSprints, setAllSprints] = useState<Sprint[]>([]);
-    const [settingsTab, setSettingsTab] = useState<"general" | "history">("general");
+    type SettingsTab = "overview";
+    const validSettingsTabs: SettingsTab[] = ["overview"];
+
+    function settingsTabFromHash(): SettingsTab {
+      if (typeof window === "undefined") return "overview";
+      const h = window.location.hash.replace("#", "");
+      return validSettingsTabs.includes(h as SettingsTab) ? (h as SettingsTab) : "overview";
+    }
+
+    const [settingsTab, setSettingsTabState] = useState<SettingsTab>(settingsTabFromHash);
+
+    const setSettingsTab = useCallback((t: SettingsTab) => {
+      setSettingsTabState(t);
+      window.history.replaceState(null, "", `#${t}`);
+    }, []);
 
     useEffect(() => {
-      if (settingsTab === "history") {
-        api.listSprints(pid).then(setAllSprints).catch(() => {});
-      }
-    }, [pid, settingsTab]);
+      function onHashChange() { setSettingsTabState(settingsTabFromHash()); }
+      window.addEventListener("hashchange", onHashChange);
+      return () => window.removeEventListener("hashchange", onHashChange);
+    }, []);
 
     return (
       <div>
         <h2 className="text-2xl font-semibold mb-4">Project Settings</h2>
         <div className="flex gap-1 border-b border-border mb-6">
           <button
-            onClick={() => setSettingsTab("general")}
+            onClick={() => setSettingsTab("overview")}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-              settingsTab === "general"
+              settingsTab === "overview"
                 ? "border-accent-violet text-accent-violet"
                 : "border-transparent text-text-secondary hover:text-text-primary"
             }`}
           >
-            General
-          </button>
-          <button
-            onClick={() => setSettingsTab("history")}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-              settingsTab === "history"
-                ? "border-accent-violet text-accent-violet"
-                : "border-transparent text-text-secondary hover:text-text-primary"
-            }`}
-          >
-            Sprint History
+            Overview
           </button>
         </div>
-        {settingsTab === "general" && (
+        <div className="space-y-6">
           <div className="rounded-lg border border-border bg-bg-surface p-6">
-            <p className="text-sm text-text-secondary">
-              Project configuration coming soon.
-            </p>
-          </div>
-        )}
-        {settingsTab === "history" && (
-          <div className="space-y-3">
-            {allSprints.length === 0 ? (
-              <p className="text-sm text-text-secondary">No sprints yet.</p>
-            ) : (
-              allSprints.map((sprint) => (
-                <div key={sprint.id} className="rounded-lg border border-border bg-bg-surface p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-text-heading">{sprint.text}</span>
-                    <span
-                      className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
-                        sprint.status === "running"
-                          ? "bg-flag-strength/15 text-flag-strength"
-                          : sprint.status === "paused"
-                            ? "bg-amber-500/15 text-amber-400"
-                            : "bg-bg-input text-text-secondary"
-                      }`}
-                    >
-                      {sprint.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-[10px] text-text-secondary">
-                    <span>{sprint.departments.map((d) => d.display_name).join(", ")}</span>
-                    <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
-                    <span>{sprint.task_count} tasks</span>
-                  </div>
-                  {sprint.completion_summary && (
-                    <p className="mt-2 text-xs text-text-secondary border-t border-border pt-2">
-                      {sprint.completion_summary}
-                    </p>
-                  )}
-                </div>
-              ))
+            <h3 className="text-lg font-semibold text-text-heading">{project!.name}</h3>
+            {project!.goal && (
+              <div className="mt-3 text-sm text-text-primary leading-relaxed prose prose-invert prose-sm max-w-none">
+                <ReactMarkdown>{project!.goal}</ReactMarkdown>
+              </div>
             )}
           </div>
-        )}
+
+        </div>
       </div>
     );
   }
@@ -386,6 +356,21 @@ export default function ProjectDetailPage() {
             api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
           }}
           projectId={project.id}
+          onNavigateToDept={(deptType) => {
+            const dept = project!.departments.find((d) => d.department_type === deptType);
+            if (dept) {
+              const alreadyOnDept = selectedDept?.id === dept.id && view === "department";
+              setSelectedDept(dept);
+              setSelectedAgent(null);
+              setView("department");
+              setSidebarOpen(false);
+              if (alreadyOnDept) {
+                window.location.hash = "#sprints";
+              } else {
+                router.push(`/project/${projectSlug}/${deptType}#sprints`);
+              }
+            }
+          }}
         />
       )}
       <div className="px-2 py-2 border-t border-border space-y-1">

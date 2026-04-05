@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { AgentSummary, DepartmentDetail, AvailableAgent } from "@/lib/types";
 import { AgentCard } from "@/components/agent-card";
 import { TaskQueue } from "@/components/task-queue";
-import { Loader2, CheckCircle, Plus, Zap, Settings2 } from "lucide-react";
+import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function DepartmentView({
@@ -26,12 +26,36 @@ export function DepartmentView({
   const leader = dept.agents.find((a) => a.is_leader);
   const workforce = dept.agents.filter((a) => !a.is_leader);
 
-  const [tab, setTab] = useState<"agents" | "tasks" | "sprints" | "config">("agents");
+  type Tab = "agents" | "tasks" | "sprints" | "config";
+  const validTabs: Tab[] = ["agents", "tasks", "sprints", "config"];
+
+  function tabFromHash(): Tab {
+    if (typeof window === "undefined") return "agents";
+    const h = window.location.hash.replace("#", "");
+    return validTabs.includes(h as Tab) ? (h as Tab) : "agents";
+  }
+
+  const [tab, setTabState] = useState<Tab>(tabFromHash);
+
+  const setTab = useCallback((t: Tab) => {
+    setTabState(t);
+    window.history.replaceState(null, "", `#${t}`);
+  }, []);
+
+  useEffect(() => {
+    function onHashChange() {
+      setTabState(tabFromHash());
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>([]);
   const [provisioning, setProvisioning] = useState<Set<string>>(new Set());
   const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
   const [configSaving, setConfigSaving] = useState(false);
   const [deptSprints, setDeptSprints] = useState<import("@/lib/types").Sprint[]>([]);
+  const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set());
+  const [sprintActing, setSprintActing] = useState<string | null>(null);
 
   async function toggleAgent(agent: AgentSummary) {
     const newStatus = agent.status === "active" ? "inactive" : "active";
@@ -68,11 +92,33 @@ export function DepartmentView({
       .catch(() => {});
   }, [projectId, dept.id]);
 
+  const refreshSprints = useCallback(() => {
+    api.listSprints(projectId, { department: dept.id }).then(setDeptSprints).catch(() => {});
+  }, [projectId, dept.id]);
+
   useEffect(() => {
-    if (tab === "sprints") {
-      api.listSprints(projectId, { department: dept.id }).then(setDeptSprints).catch(() => {});
+    if (tab === "sprints") refreshSprints();
+  }, [tab, refreshSprints]);
+
+  async function updateSprintStatus(sprint: import("@/lib/types").Sprint, newStatus: "running" | "paused" | "done") {
+    setSprintActing(sprint.id);
+    try {
+      await api.updateSprint(projectId, sprint.id, { status: newStatus });
+      refreshSprints();
+      onRefresh();
+    } finally {
+      setSprintActing(null);
     }
-  }, [tab, projectId, dept.id]);
+  }
+
+  function toggleExpanded(sprintId: string) {
+    setExpandedSprints((prev) => {
+      const next = new Set(prev);
+      if (next.has(sprintId)) next.delete(sprintId);
+      else next.add(sprintId);
+      return next;
+    });
+  }
 
   async function handleAddAgent(agentType: string) {
     setProvisioning((prev) => new Set(prev).add(agentType));
@@ -262,47 +308,105 @@ export function DepartmentView({
       )}
 
       {tab === "sprints" && (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           {deptSprints.length === 0 ? (
             <p className="text-sm text-text-secondary">No sprints for this department yet.</p>
           ) : (
-            deptSprints.map((sprint) => (
-              <div
-                key={sprint.id}
-                className={`rounded-lg border p-4 ${
-                  sprint.status === "running"
-                    ? "border-flag-strength/20 bg-flag-strength/4"
-                    : sprint.status === "paused"
-                      ? "border-border bg-bg-surface"
-                      : "border-border bg-bg-surface opacity-60"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-text-heading">{sprint.text}</span>
-                  <span
-                    className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
-                      sprint.status === "running"
-                        ? "bg-flag-strength/15 text-flag-strength"
-                        : sprint.status === "paused"
-                          ? "bg-bg-input text-text-secondary"
-                          : "bg-bg-input text-text-secondary"
-                    }`}
-                  >
-                    {sprint.status}
-                  </span>
+            deptSprints.map((sprint) => {
+              const expanded = expandedSprints.has(sprint.id);
+              const acting = sprintActing === sprint.id;
+              return (
+                <div
+                  key={sprint.id}
+                  className={`rounded-lg border ${
+                    sprint.status === "running"
+                      ? "border-flag-strength/20 bg-flag-strength/4"
+                      : sprint.status === "paused"
+                        ? "border-amber-500/20 bg-amber-500/4"
+                        : "border-border bg-bg-surface opacity-60"
+                  }`}
+                >
+                  {/* Compact header row */}
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <button
+                      onClick={() => toggleExpanded(sprint.id)}
+                      className="shrink-0 text-text-secondary hover:text-text-primary transition-colors"
+                    >
+                      {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    </button>
+                    <span className="text-sm text-text-heading truncate flex-1">
+                      {sprint.text}
+                    </span>
+                    <span className="text-[10px] text-text-secondary shrink-0">
+                      {sprint.task_count} tasks
+                    </span>
+                    <span
+                      className={`text-[10px] font-medium uppercase px-1.5 py-0.5 rounded-full shrink-0 ${
+                        sprint.status === "running"
+                          ? "bg-flag-strength/15 text-flag-strength"
+                          : sprint.status === "paused"
+                            ? "bg-amber-500/15 text-amber-400"
+                            : "bg-bg-input text-text-secondary"
+                      }`}
+                    >
+                      {sprint.status}
+                    </span>
+                    {/* Action buttons */}
+                    {sprint.status !== "done" && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {sprint.status === "running" ? (
+                          <button
+                            onClick={() => updateSprintStatus(sprint, "paused")}
+                            disabled={acting}
+                            className="p-1 rounded hover:bg-amber-500/20 text-text-secondary hover:text-amber-400 transition-colors disabled:opacity-50"
+                            title="Pause sprint"
+                          >
+                            <Pause className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => updateSprintStatus(sprint, "running")}
+                            disabled={acting}
+                            className="p-1 rounded hover:bg-flag-strength/20 text-text-secondary hover:text-flag-strength transition-colors disabled:opacity-50"
+                            title="Resume sprint"
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => updateSprintStatus(sprint, "done")}
+                          disabled={acting}
+                          className="p-1 rounded hover:bg-flag-critical/20 text-text-secondary hover:text-flag-critical transition-colors disabled:opacity-50"
+                          title="Stop sprint"
+                        >
+                          <Square className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {/* Collapsible details */}
+                  {expanded && (
+                    <div className="px-3 pb-2.5 border-t border-border/50 mx-3">
+                      <p className="text-sm text-text-primary pt-2 whitespace-pre-wrap">
+                        {sprint.text}
+                      </p>
+                      <div className="flex items-center gap-3 text-[10px] text-text-secondary mt-2">
+                        <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
+                        <span>{sprint.created_by_email}</span>
+                        {sprint.departments.length > 1 && (
+                          <span>{sprint.departments.map((d) => d.display_name).join(" · ")}</span>
+                        )}
+                      </div>
+                      {sprint.status === "done" && sprint.completion_summary && (
+                        <p className="mt-2 text-xs text-text-secondary">
+                          {sprint.completion_summary}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-text-secondary">
-                  <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
-                  <span>{sprint.task_count} tasks</span>
-                  <span>{sprint.created_by_email}</span>
-                </div>
-                {sprint.status === "done" && sprint.completion_summary && (
-                  <p className="mt-2 text-xs text-text-secondary border-t border-border pt-2">
-                    {sprint.completion_summary}
-                  </p>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

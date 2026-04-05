@@ -14,12 +14,12 @@ You MUST respond with valid JSON matching the exact schema below. No markdown, n
 4. Agent instructions should be ONE sentence — a brief role description derived from the sources.
 5. Do NOT generate documents — they will be created in a later step.
 6. Leaders are auto-created — do NOT include leaders in the agents list.
-7. The "enriched_goal" MUST preserve the user's original goal text VERBATIM — every specific detail, character, constraint, and creative directive. You may fix typos, improve formatting (e.g. markdown), and ADD context derived from the source materials. But you must NEVER remove, summarize, or rephrase the user's original content. The enriched goal should be the original goal plus any additional context — never less.
+7. The "enriched_goal" MUST preserve the user's original goal text VERBATIM — every specific detail, character, constraint, and creative directive. You may ONLY fix misspellings and format it as clean, well-structured markdown (headings, lists, paragraphs). You must NEVER add context, remove content, summarize, or rephrase. The output must contain exactly the same information as the input — no more, no less.
 
 ## Response JSON Schema
 
 {
-    "enriched_goal": "The user's original goal text preserved verbatim, with typos fixed, better formatting, and additional context from sources appended — NEVER shorter than the original",
+    "enriched_goal": "The user's original goal with misspellings fixed and formatted as clean markdown — same content, no additions, no removals",
     "summary": "2-3 sentence analysis of the project for display purposes only",
     "departments": [
         {

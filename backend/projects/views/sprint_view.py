@@ -1,10 +1,7 @@
-import json
 import logging
 
 from django.utils import timezone
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-from rest_framework.views import APIView
+from rest_framework import generics, permissions
 
 from projects.models import Source, Sprint
 
@@ -114,86 +111,6 @@ class SprintDetailView(generics.RetrieveUpdateAPIView):
                 ).first()
                 if leader:
                     create_next_leader_task.delay(str(leader.id))
-
-
-class SprintSuggestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, project_id):
-        from agents.ai.claude_client import call_claude, parse_json_response
-        from projects.models import Department, Document, Project
-
-        try:
-            project = Project.objects.get(id=project_id)
-        except Project.DoesNotExist:
-            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        department_ids = request.data.get("department_ids", [])
-        departments = Department.objects.filter(id__in=department_ids, project=project)
-
-        dept_info = []
-        for dept in departments:
-            docs = list(Document.objects.filter(department=dept).values_list("title", flat=True)[:10])
-            from agents.models import AgentTask
-
-            recent_tasks = list(
-                AgentTask.objects.filter(
-                    agent__department=dept,
-                    status=AgentTask.Status.DONE,
-                )
-                .order_by("-completed_at")
-                .values_list("exec_summary", flat=True)[:10]
-            )
-            dept_info.append(
-                {
-                    "name": dept.display_name,
-                    "type": dept.department_type,
-                    "documents": docs,
-                    "recent_completed_tasks": recent_tasks,
-                }
-            )
-
-        running_sprints = list(
-            Sprint.objects.filter(
-                project=project,
-                status=Sprint.Status.RUNNING,
-            ).values_list("text", flat=True)
-        )
-
-        system_prompt = (
-            "You are a project strategist. Given the project goal and current state, "
-            "suggest 3 high-impact actions that would move the project forward. "
-            "Be specific and actionable. Don't suggest anything already in progress. "
-            "Respond with a JSON array of exactly 3 strings. No markdown fences."
-        )
-
-        user_message = f"""# Project: {project.name}
-
-## Project Goal
-{project.goal or "No goal set."}
-
-## Departments
-{json.dumps(dept_info, indent=2)}
-
-## Currently Running Sprints
-{json.dumps(running_sprints) if running_sprints else "None — nothing is in progress."}
-
-Suggest 3 specific, actionable next steps. Return as JSON array of 3 strings."""
-
-        try:
-            response, _usage = call_claude(
-                system_prompt=system_prompt,
-                user_message=user_message,
-                model="claude-haiku-4-5-20251001",
-                max_tokens=1024,
-            )
-            suggestions = parse_json_response(response)
-            if isinstance(suggestions, list):
-                return Response({"suggestions": suggestions[:3]})
-            return Response({"suggestions": []})
-        except Exception:
-            logger.exception("Failed to generate sprint suggestions")
-            return Response({"suggestions": []})
 
 
 def _broadcast_sprint(sprint, event_type="sprint.updated"):
