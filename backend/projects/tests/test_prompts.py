@@ -55,13 +55,12 @@ class TestBuildBootstrapUserMessage:
         assert "Posts tweets" in msg
         assert "**reddit**" in msg
 
-    def test_truncation_at_10k(self):
+    def test_long_text_not_truncated(self):
         long_text = "x" * 15000
         sources = self._make_sources([long_text])
         msg = build_bootstrap_user_message("P", "G", sources, self._make_departments())
-        assert "[... truncated ...]" in msg
-        assert "x" * 15000 not in msg
-        assert "x" * 10000 in msg
+        assert "[... truncated ...]" not in msg
+        assert "x" * 15000 in msg
 
     def test_short_text_not_truncated(self):
         sources = self._make_sources(["short text"])

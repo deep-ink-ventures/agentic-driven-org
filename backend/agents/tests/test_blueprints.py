@@ -894,3 +894,70 @@ class TestVolumeThresholdCheck:
             blueprint = agent.get_blueprint()
             blueprint.get_context(agent)
             mock_task.delay.assert_not_called()
+
+
+# ── No truncation guarantees ──────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestNoTruncation:
+    def test_document_content_not_truncated(self, db, department):
+        from agents.models import Agent
+
+        long_content = "A" * 5000
+        Document.objects.create(title="Long doc", content=long_content, department=department)
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        blueprint = agent.get_blueprint()
+        ctx = blueprint.get_context(agent)
+        assert long_content in ctx["department_documents"]
+
+    def test_report_not_truncated(self, db, department):
+        from agents.models import Agent, AgentTask
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        long_report = "B" * 5000
+        AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.DONE,
+            exec_summary="Test task with long report",
+            report=long_report,
+        )
+
+        blueprint = agent.get_blueprint()
+        ctx = blueprint.get_context(agent)
+        assert long_report in ctx["own_recent_tasks"]
+
+    def test_exec_summary_not_truncated(self, db, department):
+        from agents.models import Agent, AgentTask
+
+        agent = Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=department,
+            status="active",
+        )
+
+        long_summary = "C" * 200
+        AgentTask.objects.create(
+            agent=agent,
+            status=AgentTask.Status.DONE,
+            exec_summary=long_summary,
+            report="Short report",
+        )
+
+        blueprint = agent.get_blueprint()
+        ctx = blueprint.get_context(agent)
+        assert long_summary in ctx["own_recent_tasks"]
