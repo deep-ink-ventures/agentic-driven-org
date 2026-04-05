@@ -31,18 +31,18 @@ export default function Nav() {
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled || menuOpen
-            ? "bg-ink/90 backdrop-blur-sm border-b border-copper/10"
+            ? "bg-navy/90 backdrop-blur-sm border-b border-border"
             : "bg-transparent"
         }`}
       >
         <div className="max-w-6xl mx-auto px-6 md:px-12 flex items-center justify-between h-14">
           <a
             href="#"
-            className="flex items-center gap-2.5 font-display text-white text-base focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-copper rounded-sm"
+            className="flex items-center gap-2.5 font-display text-heading text-base focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet rounded-sm"
             aria-label="The Agent Driven Organization — back to top"
             onClick={() => setMenuOpen(false)}
           >
-            <Logomark size={22} className="text-copper" />
+            <Logomark size={22} className="text-violet" />
             The Agent Driven Organization
           </a>
 
@@ -52,7 +52,7 @@ export default function Nav() {
               <a
                 key={link.href}
                 href={link.href}
-                className="text-stone text-sm hover:text-white transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-copper rounded-sm"
+                className="text-secondary text-sm hover:text-heading transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet rounded-sm"
               >
                 {link.label}
               </a>
@@ -61,18 +61,18 @@ export default function Nav() {
 
           {/* Mobile hamburger */}
           <button
-            className="sm:hidden flex flex-col justify-center items-center w-11 h-11 gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-copper rounded-sm -mr-1.5"
+            className="sm:hidden flex flex-col justify-center items-center w-11 h-11 gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet rounded-sm -mr-1.5"
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
           >
             <span
-              className={`block w-5 h-[1.5px] bg-white transition-all duration-200 ${
+              className={`block w-5 h-[1.5px] bg-heading transition-all duration-200 ${
                 menuOpen ? "rotate-45 translate-y-[4.5px]" : ""
               }`}
             />
             <span
-              className={`block w-5 h-[1.5px] bg-white transition-all duration-200 ${
+              className={`block w-5 h-[1.5px] bg-heading transition-all duration-200 ${
                 menuOpen ? "-rotate-45 -translate-y-[1.5px]" : ""
               }`}
             />
@@ -80,9 +80,9 @@ export default function Nav() {
         </div>
       </header>
 
-      {/* Mobile menu overlay — always mounted, animated via opacity+visibility */}
+      {/* Mobile menu overlay */}
       <div
-        className={`fixed inset-0 z-40 bg-ink/95 backdrop-blur-sm pt-20 px-6 sm:hidden transition-all duration-300 ${
+        className={`fixed inset-0 z-40 bg-navy/95 backdrop-blur-sm pt-20 px-6 sm:hidden transition-all duration-300 ${
           menuOpen
             ? "opacity-100 visible"
             : "opacity-0 invisible pointer-events-none"
@@ -96,7 +96,7 @@ export default function Nav() {
               href={link.href}
               tabIndex={menuOpen ? 0 : -1}
               onClick={() => setMenuOpen(false)}
-              className="font-display text-2xl text-white hover:text-copper transition-all duration-200 py-3"
+              className="font-display text-2xl text-heading hover:text-violet transition-all duration-200 py-3"
               style={{
                 transitionDelay: menuOpen ? `${i * 50}ms` : "0ms",
                 opacity: menuOpen ? 1 : 0,

@@ -13,11 +13,11 @@ export default function Logos() {
   const { ref, visible } = useInView();
 
   return (
-    <section ref={ref} className="py-16 md:py-24 px-6 md:px-12 border-t border-stone/5">
+    <section ref={ref} className="py-16 md:py-24 px-6 md:px-12 border-t border-border">
       <div
-        className={`max-w-6xl mx-auto ${visible ? "animate-fade-in" : "opacity-0"}`}
+        className={`max-w-6xl mx-auto ${visible ? "animate-fade-up" : "opacity-0"}`}
       >
-        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-stone/40 mb-10 text-center">
+        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-secondary/60 mb-10 text-center">
           Trusted by forward-thinking teams
         </p>
         <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-6 md:gap-x-20">
@@ -30,7 +30,7 @@ export default function Logos() {
                 height={32}
                 className="w-8 h-8 rounded-md object-cover"
               />
-              <span className="text-stone/50 text-sm font-medium tracking-wide whitespace-nowrap">
+              <span className="text-secondary/70 text-sm font-medium tracking-wide whitespace-nowrap">
                 {client.name}
               </span>
             </div>

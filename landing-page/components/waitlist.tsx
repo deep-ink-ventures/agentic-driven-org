@@ -67,7 +67,7 @@ export default function Waitlist() {
 
         {status === "success" ? (
           <div className="py-6 border-t border-violet/20">
-            <p className="text-lg text-white font-display font-medium">
+            <p className="text-lg text-heading font-display font-medium">
               You&apos;re on the list. We&apos;ll be in touch.
             </p>
           </div>
@@ -82,7 +82,7 @@ export default function Waitlist() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
               required
-              className="flex-1 bg-navy border border-silver/15 rounded-lg px-5 py-3.5 text-white text-[15px] placeholder:text-silver/40 focus:outline-none focus:border-violet/50 transition-colors duration-200"
+              className="flex-1 bg-navy border border-border rounded-lg px-5 py-3.5 text-primary text-[15px] placeholder:text-secondary/40 focus:outline-none focus:border-violet/50 transition-colors duration-200"
             />
             <button
               type="submit"

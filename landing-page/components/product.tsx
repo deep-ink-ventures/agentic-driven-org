@@ -44,7 +44,7 @@ export default function Product() {
               and the agents. No black boxes. No mystery APIs. Every decision is
               traceable, every workflow is yours to modify.
             </p>
-            <p className="text-white font-medium text-[17px]">
+            <p className="text-heading font-medium text-[17px]">
               This isn&apos;t another SaaS you subscribe to. It&apos;s
               infrastructure you own.
             </p>

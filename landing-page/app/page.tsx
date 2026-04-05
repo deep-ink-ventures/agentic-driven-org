@@ -1,4 +1,5 @@
 import Hero from "@/components/hero";
+import Logos from "@/components/logos";
 import ValueProps from "@/components/value-props";
 import Product from "@/components/product";
 import Consulting from "@/components/consulting";
@@ -11,6 +12,7 @@ export default function Home() {
   return (
     <main>
       <Hero />
+      <Logos />
       <ValueProps />
       <Product />
       <Consulting />

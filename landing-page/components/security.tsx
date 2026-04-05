@@ -49,10 +49,10 @@ export default function Security() {
               <div
                 key={f.label}
                 className={`flex justify-between items-baseline py-5 ${
-                  i < features.length - 1 ? "border-b border-silver/10" : ""
+                  i < features.length - 1 ? "border-b border-border" : ""
                 }`}
               >
-                <span className="text-white font-medium text-[15px]">
+                <span className="text-heading font-medium text-[15px]">
                   {f.label}
                 </span>
                 <span className="text-silver text-sm">{f.detail}</span>

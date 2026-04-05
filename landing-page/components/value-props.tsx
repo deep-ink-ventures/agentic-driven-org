@@ -51,7 +51,7 @@ export default function ValueProps() {
               <span className="font-display text-xs font-medium tracking-[0.2em] text-violet/60 block mb-5">
                 {prop.num}
               </span>
-              <h3 className="font-display text-xl font-bold mb-4 text-white">
+              <h3 className="font-display text-xl font-bold mb-4 text-heading">
                 {prop.title}
               </h3>
               <p className="text-silver leading-relaxed text-[15px]">

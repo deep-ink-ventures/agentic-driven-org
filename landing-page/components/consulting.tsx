@@ -42,7 +42,7 @@ export default function Consulting() {
             </p>
           </div>
 
-          <p className="mt-10 text-white font-display font-medium text-xl leading-snug">
+          <p className="mt-10 text-heading font-display font-medium text-xl leading-snug">
             We make your company agentic-first.
             <br />
             <span className="text-silver">Then you run it.</span>
