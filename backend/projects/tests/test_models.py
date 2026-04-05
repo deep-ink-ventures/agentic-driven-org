@@ -31,7 +31,7 @@ def user2(db):
 def config(db):
     return ProjectConfig.objects.create(
         name="Test Config",
-        config={"google_email": "test@example.com"},
+        config={},
     )
 
 
@@ -56,7 +56,7 @@ def tag(db):
 class TestProjectConfig:
     def test_create(self, config):
         assert config.name == "Test Config"
-        assert config.google_email == "test@example.com"
+        assert config.google_email == ""
         assert config.google_credentials == {}
         assert config.pk is not None
 
@@ -79,7 +79,7 @@ class TestProjectConfig:
         assert "unknown_key" in errors[0]
 
     def test_validate_config_wrong_type(self):
-        c = ProjectConfig(name="Bad", config={"google_email": 123})
+        c = ProjectConfig(name="Bad", config={"any_key": 123})
         errors = c.validate_config()
         assert len(errors) == 1
 
@@ -87,7 +87,6 @@ class TestProjectConfig:
         schema = ProjectConfig.get_schema()
         assert "type" in schema
         assert "properties" in schema
-        assert "google_email" in schema["properties"]
 
 
 # ── Project ────────────────────────────────────────────────────────────────────
@@ -332,7 +331,7 @@ class TestBootstrapProposal:
         assert not BootstrapProposal.objects.filter(pk=bp.pk).exists()
 
     def test_ordering(self, project):
-        bp1 = BootstrapProposal.objects.create(project=project)
+        BootstrapProposal.objects.create(project=project)
         bp2 = BootstrapProposal.objects.create(project=project)
         proposals = list(BootstrapProposal.objects.filter(project=project))
         assert proposals[0].pk == bp2.pk

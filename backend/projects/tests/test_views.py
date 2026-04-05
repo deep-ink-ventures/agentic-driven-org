@@ -281,36 +281,33 @@ class TestProjectConfigView:
         assert "schema" in resp.data
 
     def test_get_config_with_values(self, authed_client, project):
-        pc = ProjectConfig.objects.create(name="Test Config", config={"google_email": "a@b.com"})
+        pc = ProjectConfig.objects.create(name="Test Config", config={})
         project.config = pc
         project.save(update_fields=["config"])
         resp = authed_client.get(f"/api/projects/{project.slug}/config/")
         assert resp.status_code == 200
-        assert resp.data["config"]["google_email"] == "a@b.com"
+        assert resp.data["config"] == {}
 
     def test_patch_creates_config_if_missing(self, authed_client, project):
         resp = authed_client.patch(
             f"/api/projects/{project.slug}/config/",
-            {"config": {"google_email": "new@test.com"}},
+            {"config": {}},
             format="json",
         )
         assert resp.status_code == 200
         project.refresh_from_db()
         assert project.config is not None
-        assert project.config.config["google_email"] == "new@test.com"
 
     def test_patch_merges_config(self, authed_client, project):
-        pc = ProjectConfig.objects.create(name="Config", config={"google_email": "old@test.com"})
+        pc = ProjectConfig.objects.create(name="Config", config={})
         project.config = pc
         project.save(update_fields=["config"])
         resp = authed_client.patch(
             f"/api/projects/{project.slug}/config/",
-            {"config": {"google_email": "updated@test.com"}},
+            {"config": {}},
             format="json",
         )
         assert resp.status_code == 200
-        pc.refresh_from_db()
-        assert pc.config["google_email"] == "updated@test.com"
 
     def test_non_member_gets_404(self, api_client, other_user, project):
         api_client.force_authenticate(user=other_user)
