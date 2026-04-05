@@ -515,14 +515,14 @@ export function TaskQueue({
       {/* Two lanes side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <TaskLane
-          config={{ title: "In Progress", statuses: "queued,processing,awaiting_dependencies,planned", pulse: true }}
+          config={{ title: "Needs Attention", statuses: "awaiting_approval,failed" }}
           projectId={projectId}
           department={department}
           agent={agent}
           wsEvent={wsEvent}
         />
         <TaskLane
-          config={{ title: "Needs Attention", statuses: "awaiting_approval,failed" }}
+          config={{ title: "In Progress", statuses: "queued,processing,awaiting_dependencies,planned", pulse: true }}
           projectId={projectId}
           department={department}
           agent={agent}
