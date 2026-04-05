@@ -84,6 +84,7 @@ _writers_room_imports = {
     "dialogue_analyst": ("agents.blueprints.writers_room.workforce.dialogue_analyst", "DialogueAnalystBlueprint"),
     "format_analyst": ("agents.blueprints.writers_room.workforce.format_analyst", "FormatAnalystBlueprint"),
     "production_analyst": ("agents.blueprints.writers_room.workforce.production_analyst", "ProductionAnalystBlueprint"),
+    "creative_reviewer": ("agents.blueprints.writers_room.workforce.creative_reviewer", "CreativeReviewerBlueprint"),
 }
 for _slug, (_mod_path, _cls_name) in _writers_room_imports.items():
     try:
