@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { AgentSummary, DepartmentDetail, AvailableAgent } from "@/lib/types";
 import { AgentCard } from "@/components/agent-card";
 import { TaskQueue } from "@/components/task-queue";
-import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, ChevronDown, ChevronRight, FileText, Link2, File, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function DepartmentView({
@@ -401,6 +401,71 @@ export function DepartmentView({
                         <p className="mt-2 text-xs text-text-secondary">
                           {sprint.completion_summary}
                         </p>
+                      )}
+                      {/* Sprint outputs */}
+                      {sprint.outputs && sprint.outputs.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <div className="text-[10px] font-medium text-text-secondary uppercase tracking-wider">
+                            Results
+                          </div>
+                          {sprint.outputs.map((output) => (
+                            <div
+                              key={output.id}
+                              className="flex items-center gap-2 rounded-md bg-surface-raised/50 border border-border/30 px-2.5 py-2"
+                            >
+                              {output.output_type === "markdown" || output.output_type === "plaintext" ? (
+                                <FileText className="h-3.5 w-3.5 text-accent-primary shrink-0" />
+                              ) : output.output_type === "link" ? (
+                                <Link2 className="h-3.5 w-3.5 text-accent-primary shrink-0" />
+                              ) : (
+                                <File className="h-3.5 w-3.5 text-accent-primary shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium text-text-primary truncate">
+                                  {output.title}
+                                </div>
+                                {output.label && (
+                                  <div className="text-[10px] text-text-secondary">{output.label}</div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {output.output_type === "link" && output.url && (
+                                  <a
+                                    href={output.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1 rounded hover:bg-accent-primary/20 text-text-secondary hover:text-accent-primary transition-colors"
+                                    title="Open link"
+                                  >
+                                    <Link2 className="h-3 w-3" />
+                                  </a>
+                                )}
+                                {(output.output_type === "markdown" || output.output_type === "plaintext") && output.content && (
+                                  <button
+                                    onClick={() => {
+                                      const blob = new Blob([output.content], { type: "text/markdown" });
+                                      const url = URL.createObjectURL(blob);
+                                      const a = document.createElement("a");
+                                      a.href = url;
+                                      a.download = `${output.title.toLowerCase().replace(/\s+/g, "-")}.md`;
+                                      a.click();
+                                      URL.revokeObjectURL(url);
+                                    }}
+                                    className="p-1 rounded hover:bg-accent-primary/20 text-text-secondary hover:text-accent-primary transition-colors"
+                                    title="Download"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </button>
+                                )}
+                                {output.output_type === "file" && output.original_filename && (
+                                  <span className="text-[10px] text-text-secondary">
+                                    {output.original_filename}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}

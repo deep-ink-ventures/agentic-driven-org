@@ -97,6 +97,19 @@ export interface SprintDepartment {
   display_name: string;
 }
 
+export interface SprintOutput {
+  id: string;
+  department: string;
+  title: string;
+  label: string;
+  output_type: "markdown" | "plaintext" | "link" | "file";
+  content: string;
+  url: string;
+  original_filename: string;
+  file_size: number;
+  updated_at: string | null;
+}
+
 export interface Sprint {
   id: string;
   project: string;
@@ -105,6 +118,7 @@ export interface Sprint {
   completion_summary: string;
   departments: SprintDepartment[];
   task_count: number;
+  outputs: SprintOutput[];
   created_by_email: string;
   created_at: string;
   updated_at: string;
