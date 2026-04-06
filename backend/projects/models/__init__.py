@@ -1,6 +1,7 @@
 from .bootstrap_proposal import BootstrapProposal
 from .department import Department
 from .document import Document
+from .output import Output
 from .project import Project
 from .project_config import ProjectConfig
 from .source import Source
@@ -13,6 +14,7 @@ __all__ = [
     "Department",
     "Tag",
     "Document",
+    "Output",
     "Source",
     "BootstrapProposal",
     "Sprint",

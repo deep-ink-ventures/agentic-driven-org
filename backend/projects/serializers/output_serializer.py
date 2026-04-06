@@ -4,27 +4,21 @@ from projects.models import Output
 
 
 class OutputListSerializer(serializers.ModelSerializer):
-    """List view serializer for Output model."""
-
     created_by_task_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Output
         fields = [
             "id",
-            "project",
+            "sprint",
             "department",
             "title",
             "label",
             "output_type",
-            "content",
-            "file_key",
+            "url",
             "original_filename",
             "file_size",
             "content_type",
-            "version",
-            "parent",
-            "word_count",
             "created_by_task",
             "created_by_task_summary",
             "created_at",
@@ -40,20 +34,9 @@ class OutputListSerializer(serializers.ModelSerializer):
             "exec_summary": obj.created_by_task.exec_summary if obj.created_by_task else "",
         }
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        data.pop("file_key", None)
-        return data
-
 
 class OutputDetailSerializer(OutputListSerializer):
-    """Detail view -- full content, no truncation."""
+    """Detail view — includes full content."""
 
-    def to_representation(self, instance):
-        # Skip the list serializer's truncation by calling ModelSerializer directly
-        data = serializers.ModelSerializer.to_representation(self, instance)
-        # Add created_by_task_summary
-        data["created_by_task_summary"] = self.get_created_by_task_summary(instance)
-        # Never expose file_key directly
-        data.pop("file_key", None)
-        return data
+    class Meta(OutputListSerializer.Meta):
+        fields = [*OutputListSerializer.Meta.fields, "content"]

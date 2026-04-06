@@ -5,39 +5,40 @@ from django.db import models
 
 class Output(models.Model):
     """
-    Generic output produced by any department.
-    Source = input, Output = what agents produce.
-    Writers room produces scripts, legal produces contracts, etc.
+    Sprint output artifact — the deliverable a department produces.
+
+    Each department contributes at most one output per sprint, representing
+    the latest refined version. The Head Of updates it after each cycle.
+
+    Content types:
+    - markdown/plaintext: inline text in the `content` field
+    - link: a URL (PR, commit, deployment) in the `url` field
+    - file: a binary artifact in storage, referenced by `file_key`
     """
 
     class OutputType(models.TextChoices):
         MARKDOWN = "markdown", "Markdown"
-        FOUNTAIN = "fountain", "Fountain"  # screenplay format
         PLAINTEXT = "plaintext", "Plain Text"
-        PDF = "pdf", "PDF"
-        HTML = "html", "HTML"
-        OTHER = "other", "Other"
+        LINK = "link", "Link"
+        FILE = "file", "File"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    project = models.ForeignKey(
-        "projects.Project",
+    sprint = models.ForeignKey(
+        "projects.Sprint",
         on_delete=models.CASCADE,
         related_name="outputs",
     )
     department = models.ForeignKey(
         "projects.Department",
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name="outputs",
     )
 
-    # What is this output?
     title = models.CharField(max_length=255)
     label = models.CharField(
         max_length=50,
         blank=True,
-        help_text='e.g. "logline", "treatment", "contract_draft", "v2"',
+        help_text='Stage or type label, e.g. "pitch", "concept", "pr", "design"',
     )
     output_type = models.CharField(
         max_length=20,
@@ -45,31 +46,20 @@ class Output(models.Model):
         default=OutputType.MARKDOWN,
     )
 
-    # Content -- inline text content (for markdown, fountain, plaintext)
-    content = models.TextField(blank=True)
-
-    # File -- for binary outputs (PDFs, etc.) -- uses same storage as Source
+    # Content — exactly one of these is populated depending on output_type
+    content = models.TextField(blank=True, help_text="Inline text for markdown/plaintext outputs")
+    url = models.URLField(blank=True, help_text="For link outputs (PR, commit, deployment URL)")
     file_key = models.CharField(
         max_length=500,
         blank=True,
-        help_text="Storage path -- private, never expose directly.",
+        help_text="Storage path for binary files — private, never expose directly.",
     )
+
+    # File metadata (only relevant for file outputs)
     original_filename = models.CharField(max_length=255, blank=True)
-    file_size = models.IntegerField(default=0)
     content_type = models.CharField(max_length=100, blank=True)
+    file_size = models.IntegerField(default=0)
 
-    # Versioning
-    version = models.PositiveIntegerField(default=1)
-    parent = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="revisions",
-    )
-
-    # Metadata
-    word_count = models.IntegerField(default=0)
     created_by_task = models.ForeignKey(
         "agents.AgentTask",
         null=True,
@@ -81,7 +71,13 @@ class Output(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sprint", "department"],
+                name="one_output_per_department_per_sprint",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.title} v{self.version} ({self.output_type})"
+        return f"{self.title} ({self.output_type}) — {self.sprint}"

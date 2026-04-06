@@ -5,25 +5,21 @@ from projects.models import Output
 from projects.serializers import OutputDetailSerializer, OutputListSerializer
 
 
-class ProjectOutputListView(ListAPIView):
-    """List outputs for a project. Filter by ?department=, ?label=, ?output_type=."""
+class SprintOutputListView(ListAPIView):
+    """List outputs for a sprint. Filter by ?department=, ?output_type=."""
 
     serializer_class = OutputListSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         qs = Output.objects.filter(
-            project_id=self.kwargs["project_id"],
-            project__members=self.request.user,
+            sprint_id=self.kwargs["sprint_id"],
+            sprint__project__members=self.request.user,
         ).select_related("created_by_task")
 
         department = self.request.query_params.get("department")
         if department:
             qs = qs.filter(department_id=department)
-
-        label = self.request.query_params.get("label")
-        if label:
-            qs = qs.filter(label=label)
 
         output_type = self.request.query_params.get("output_type")
         if output_type:
@@ -32,7 +28,7 @@ class ProjectOutputListView(ListAPIView):
         return qs
 
 
-class ProjectOutputDetailView(RetrieveAPIView):
+class SprintOutputDetailView(RetrieveAPIView):
     """Retrieve a single output with full content."""
 
     serializer_class = OutputDetailSerializer
@@ -41,6 +37,6 @@ class ProjectOutputDetailView(RetrieveAPIView):
 
     def get_queryset(self):
         return Output.objects.filter(
-            project_id=self.kwargs["project_id"],
-            project__members=self.request.user,
+            sprint_id=self.kwargs["sprint_id"],
+            sprint__project__members=self.request.user,
         ).select_related("created_by_task")
