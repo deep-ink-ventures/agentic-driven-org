@@ -57,6 +57,8 @@ Evaluate the material's IP value:
 ### Check 5 — Green-Light Feasibility
 Synthesize: what is the overall production feasibility? Would a producer green-light this at the implied budget level? What would need to change?
 
+IMPORTANT: Only flag issues that the WRITING can fix. Do NOT flag external business factors like talent attachment, financing, distribution deals, or market timing — those are outside the writers room's scope.
+
 ## Novel Checks
 1. **Publishing Feasibility** — Word count vs genre norms, series potential, market positioning for debut vs established author.
 2. **Market Positioning** — Comp title positioning, category placement, crossover potential.
@@ -162,8 +164,9 @@ class ProductionAnalystBlueprint(WritersRoomFeedbackBlueprint):
             "4. VFX/practical breakdown — categorize effects as practical vs CGI, estimate complexity.\n"
             "5. Schedule implications — parallel unit needs, child actor constraints, weather dependencies.\n"
             "6. IP/rights considerations — franchise potential, adaptation value, merchandising.\n"
-            "7. Castability — star attachment potential, role attractiveness to A-list talent.\n"
-            "For novels/theatre, apply equivalent publishing feasibility and production scale checks."
+            "For novels/theatre, apply equivalent publishing feasibility and production scale checks.\n\n"
+            "IMPORTANT: Only flag issues the WRITING can address. Do NOT flag external business factors "
+            "(talent attachment, financing, distribution, market timing) — those are outside the writers room scope."
         )
 
     def get_max_tokens(self, agent, task):
