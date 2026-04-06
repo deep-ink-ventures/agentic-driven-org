@@ -126,10 +126,13 @@ except ImportError:
 
 _sales_workforce = {}
 _sales_imports = {
-    "prospector": ("agents.blueprints.sales.workforce.prospector", "ProspectorBlueprint"),
-    "prospect_analyst": ("agents.blueprints.sales.workforce.prospect_analyst", "ProspectAnalystBlueprint"),
-    "outreach_writer": ("agents.blueprints.sales.workforce.outreach_writer", "OutreachWriterBlueprint"),
-    "outreach_reviewer": ("agents.blueprints.sales.workforce.outreach_reviewer", "OutreachReviewerBlueprint"),
+    "researcher": ("agents.blueprints.sales.workforce.researcher", "ResearcherBlueprint"),
+    "strategist": ("agents.blueprints.sales.workforce.strategist", "StrategistBlueprint"),
+    "pitch_architect": ("agents.blueprints.sales.workforce.pitch_architect", "PitchArchitectBlueprint"),
+    "profile_selector": ("agents.blueprints.sales.workforce.profile_selector", "ProfileSelectorBlueprint"),
+    "pitch_personalizer": ("agents.blueprints.sales.workforce.pitch_personalizer", "PitchPersonalizerBlueprint"),
+    "sales_qa": ("agents.blueprints.sales.workforce.sales_qa", "SalesQaBlueprint"),
+    "email_outreach": ("agents.blueprints.sales.workforce.email_outreach", "EmailOutreachBlueprint"),
 }
 for _slug, (_mod_path, _cls_name) in _sales_imports.items():
     try:
@@ -142,7 +145,10 @@ if SalesLeaderBlueprint is not None:
     _sales_leader = SalesLeaderBlueprint()
     DEPARTMENTS["sales"] = {
         "name": "Sales",
-        "description": "Outbound prospecting and outreach — target research, qualification, personalized outreach with quality review loops",
+        "description": (
+            "Outbound sales pipeline — industry research, target strategy, pitch design, "
+            "prospect profiling, personalized outreach with QA review loops"
+        ),
         "leader": _sales_leader,
         "workforce": _sales_workforce,
         "config_schema": _sales_leader.config_schema,
