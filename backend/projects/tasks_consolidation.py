@@ -14,7 +14,7 @@ from django.db.models import Sum
 from django.db.models.functions import Length
 from django.utils import timezone
 
-from agents.ai.claude_client import call_claude
+from agents.ai.claude_client import call_claude, parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -191,3 +191,241 @@ def consolidate_department_documents(department_id):
             "topic-organized set. Preserve everything still relevant. Drop only clearly outdated information."
         ),
     )
+
+
+# ── Agent instructions review ───────────────────────────────────────────────
+
+
+@shared_task
+def review_agent_instructions_after_sprint(sprint_id: str):
+    """Review agent instructions across all departments after a sprint completes.
+
+    Three-step process:
+    1. Assess which departments are affected by sprint outcomes
+    2. For affected departments, assess which agents need instruction updates
+    3. For affected agents, propose updated instructions (stored as pending AgentTask)
+    """
+    from agents.models import AgentTask
+    from projects.models import Department, Sprint
+
+    try:
+        sprint = Sprint.objects.get(id=sprint_id)
+    except Sprint.DoesNotExist:
+        logger.warning("Sprint %s not found — skipping instructions review", sprint_id)
+        return
+
+    project = sprint.project
+
+    # Gather sprint outcomes
+    sprint_tasks = list(
+        AgentTask.objects.filter(sprint=sprint, status=AgentTask.Status.DONE)
+        .select_related("agent", "agent__department")
+        .values_list("agent__department__department_type", "exec_summary", "report")
+    )
+    if not sprint_tasks:
+        return
+
+    outcomes_text = ""
+    for dept_type, summary, report in sprint_tasks:
+        outcomes_text += f"\n- [{dept_type}] {summary}"
+        if report:
+            outcomes_text += f"\n  Result: {report[:500]}"
+
+    # Get all departments in the project
+    all_departments = list(Department.objects.filter(project=project).values_list("id", "department_type"))
+
+    # Step 1: Which departments are affected?
+    dept_list = "\n".join(f"- {dt}" for _, dt in all_departments)
+    response, _usage = call_claude(
+        system_prompt=(
+            "You assess whether sprint outcomes affect other departments' agent instructions. "
+            "Respond with JSON only. No markdown fences."
+        ),
+        user_message=f"""## Project: {project.name}
+## Project Goal: {project.goal or "Not set"}
+
+## Sprint that just completed: {sprint.text}
+
+## Sprint outcomes:
+{outcomes_text}
+
+## All departments in this project:
+{dept_list}
+
+Which departments might have agents whose instructions are now outdated due to these sprint outcomes?
+
+Only flag departments where the sprint outcomes genuinely change the context that agents rely on.
+For example:
+- A writers room sprint that changes the title/arc affects marketing and sales agents
+- A backend security fix does NOT affect sales or writers room agents
+- A sales strategy sprint might affect community/partnership agents
+
+Respond with JSON:
+{{"affected_departments": ["dept_type1", "dept_type2"], "reasoning": "why"}}
+
+If NO departments are affected, return {{"affected_departments": [], "reasoning": "why not"}}""",
+        max_tokens=1024,
+    )
+
+    result = parse_json_response(response)
+    if not result:
+        logger.warning("INSTRUCTIONS_REVIEW: failed to parse department assessment for sprint %s", sprint_id)
+        return
+
+    affected_dept_types = result.get("affected_departments", [])
+    if not affected_dept_types:
+        logger.info(
+            "INSTRUCTIONS_REVIEW: no departments affected by sprint %s — %s",
+            sprint_id,
+            result.get("reasoning", ""),
+        )
+        return
+
+    logger.info(
+        "INSTRUCTIONS_REVIEW: sprint %s affects departments: %s — %s",
+        sprint_id,
+        affected_dept_types,
+        result.get("reasoning", ""),
+    )
+
+    # Step 2 & 3: For each affected department, review agents
+    dept_map = {dt: did for did, dt in all_departments}
+    for dept_type in affected_dept_types:
+        dept_id = dept_map.get(dept_type)
+        if not dept_id:
+            continue
+        _review_department_agents(dept_id, sprint, outcomes_text)
+
+
+def _review_department_agents(department_id, sprint, outcomes_text: str):
+    """Review and update agent instructions for a single department."""
+    from agents.models import Agent, AgentTask
+    from projects.models import Department, Document
+
+    department = Department.objects.get(id=department_id)
+
+    agents = list(
+        Agent.objects.filter(
+            department=department,
+            status=Agent.Status.ACTIVE,
+        ).values_list("id", "name", "agent_type", "instructions")
+    )
+    if not agents:
+        return
+
+    # Gather current department docs for context
+    docs = list(
+        Document.objects.filter(department=department, is_archived=False).values_list("title", "doc_type", "content")[
+            :10
+        ]
+    )
+    docs_text = ""
+    for title, doc_type, content in docs:
+        docs_text += f"\n\n--- [{doc_type}] {title} ---\n{content[:1000]}"
+
+    # Build agent descriptions
+    agents_text = ""
+    for _agent_id, name, agent_type, instructions in agents:
+        agents_text += f"\n\n### {name} ({agent_type})\n**Current instructions:**\n{instructions or '(none)'}"
+
+    # Step 2: Which agents are affected?
+    response, _usage = call_claude(
+        system_prompt=(
+            "You review agent instructions after a sprint to check if they are still accurate. "
+            "Respond with JSON only. No markdown fences."
+        ),
+        user_message=f"""## Department: {department.name} ({department.department_type})
+
+## Sprint outcomes that may affect this department:
+{outcomes_text}
+
+## Current department documents:
+{docs_text}
+
+## Agents and their current instructions:
+{agents_text}
+
+For each agent, decide:
+- Are their instructions still accurate given the sprint outcomes?
+- Do they reference anything that changed?
+- Should instructions be updated to reflect new context?
+
+Respond with JSON:
+{{
+    "agents": [
+        {{
+            "agent_type": "agent_type",
+            "affected": true/false,
+            "reason": "why affected or not",
+            "updated_instructions": "the full new instructions text (only if affected)"
+        }}
+    ]
+}}
+
+Rules:
+- Only flag agents whose instructions genuinely need updating
+- Preserve the style and tone of existing instructions
+- Add new context, don't rewrite from scratch
+- If an agent has no instructions and doesn't need any, mark as not affected""",
+        max_tokens=8192,
+    )
+
+    result = parse_json_response(response)
+    if not result:
+        logger.warning(
+            "INSTRUCTIONS_REVIEW: failed to parse agent assessment for department %s",
+            department.name,
+        )
+        return
+
+    # Step 3: Create update tasks for affected agents
+    agent_map = {at: (aid, name) for aid, name, at, _ in agents}
+    leader = Agent.objects.filter(department=department, is_leader=True, status="active").first()
+
+    updated_count = 0
+    for agent_data in result.get("agents", []):
+        if not agent_data.get("affected"):
+            continue
+
+        agent_type = agent_data.get("agent_type")
+        if agent_type not in agent_map:
+            continue
+
+        agent_id, agent_name = agent_map[agent_type]
+        new_instructions = agent_data.get("updated_instructions", "")
+        if not new_instructions:
+            continue
+
+        # Create an awaiting-approval task on the leader to update this agent's instructions
+        AgentTask.objects.create(
+            agent_id=leader.id if leader else agent_id,
+            created_by_agent=leader,
+            status=AgentTask.Status.AWAITING_APPROVAL,
+            exec_summary=f"Update instructions for {agent_name} after sprint: {sprint.text[:60]}",
+            step_plan=(
+                f"## Reason\n{agent_data.get('reason', 'Sprint outcomes changed relevant context.')}\n\n"
+                f"## Proposed Updated Instructions\n{new_instructions}\n\n"
+                f"Approve to apply these updated instructions to {agent_name} ({agent_type})."
+            ),
+        )
+        updated_count += 1
+
+        logger.info(
+            "INSTRUCTIONS_REVIEW: proposed update for %s (%s) in %s — %s",
+            agent_name,
+            agent_type,
+            department.name,
+            agent_data.get("reason", ""),
+        )
+
+    if updated_count:
+        logger.info(
+            "INSTRUCTIONS_REVIEW: proposed %d instruction updates for department %s",
+            updated_count,
+            department.name,
+        )
+    else:
+        logger.info(
+            "INSTRUCTIONS_REVIEW: no instruction updates needed for department %s",
+            department.name,
+        )
