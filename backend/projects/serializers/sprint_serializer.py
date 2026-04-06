@@ -16,6 +16,7 @@ class SprintSerializer(serializers.ModelSerializer):
     )
     departments = serializers.SerializerMethodField()
     task_count = serializers.SerializerMethodField()
+    outputs = serializers.SerializerMethodField()
     created_by_email = serializers.EmailField(source="created_by.email", read_only=True)
 
     class Meta:
@@ -30,6 +31,7 @@ class SprintSerializer(serializers.ModelSerializer):
             "department_ids",
             "source_ids",
             "task_count",
+            "outputs",
             "created_by_email",
             "created_at",
             "updated_at",
@@ -59,3 +61,20 @@ class SprintSerializer(serializers.ModelSerializer):
 
     def get_task_count(self, obj):
         return obj.tasks.count()
+
+    def get_outputs(self, obj):
+        return [
+            {
+                "id": str(o.id),
+                "department": str(o.department_id),
+                "title": o.title,
+                "label": o.label,
+                "output_type": o.output_type,
+                "content": o.content,
+                "url": o.url,
+                "original_filename": o.original_filename,
+                "file_size": o.file_size,
+                "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+            }
+            for o in obj.outputs.all()
+        ]
