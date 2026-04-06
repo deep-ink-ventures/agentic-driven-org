@@ -83,6 +83,10 @@ _writers_room_imports = {
     "format_analyst": ("agents.blueprints.writers_room.workforce.format_analyst", "FormatAnalystBlueprint"),
     "production_analyst": ("agents.blueprints.writers_room.workforce.production_analyst", "ProductionAnalystBlueprint"),
     "creative_reviewer": ("agents.blueprints.writers_room.workforce.creative_reviewer", "CreativeReviewerBlueprint"),
+    "authenticity_analyst": (
+        "agents.blueprints.writers_room.workforce.authenticity_analyst.agent",
+        "AuthenticityAnalystBlueprint",
+    ),
     "lead_writer": ("agents.blueprints.writers_room.workforce.lead_writer", "LeadWriterBlueprint"),
 }
 for _slug, (_mod_path, _cls_name) in _writers_room_imports.items():

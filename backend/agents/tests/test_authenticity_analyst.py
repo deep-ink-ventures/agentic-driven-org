@@ -140,3 +140,45 @@ class TestWritersRoomAuthenticityAnalyst:
         commands = bp.get_commands()
         command_names = [c["name"] for c in commands]
         assert "analyze" in command_names
+
+
+class TestRegistration:
+    def test_get_blueprint_returns_instance(self):
+        from agents.ai.archetypes.authenticity_analyst import AuthenticityAnalystMixin
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("authenticity_analyst", "writers_room")
+        assert isinstance(bp, AuthenticityAnalystMixin)
+
+    def test_in_workforce_metadata(self):
+        from agents.blueprints import get_workforce_metadata
+
+        metadata = get_workforce_metadata("writers_room")
+        slugs = [m["agent_type"] for m in metadata]
+        assert "authenticity_analyst" in slugs
+
+
+class TestCreativeReviewerAuthenticityDimension:
+    def test_review_dimensions_includes_authenticity(self):
+        from agents.blueprints.writers_room.workforce.creative_reviewer.agent import (
+            CreativeReviewerBlueprint,
+        )
+
+        bp = CreativeReviewerBlueprint()
+        assert "authenticity" in bp.review_dimensions
+
+    def test_system_prompt_mentions_authenticity(self):
+        from agents.blueprints.writers_room.workforce.creative_reviewer.agent import (
+            CreativeReviewerBlueprint,
+        )
+
+        bp = CreativeReviewerBlueprint()
+        assert "Authenticity" in bp.system_prompt
+
+    def test_fix_routing_mentions_authenticity(self):
+        from agents.blueprints.writers_room.workforce.creative_reviewer.agent import (
+            CreativeReviewerBlueprint,
+        )
+
+        bp = CreativeReviewerBlueprint()
+        assert "authenticity_analyst" in bp.system_prompt

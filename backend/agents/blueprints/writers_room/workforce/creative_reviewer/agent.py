@@ -36,6 +36,7 @@ class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
         "dialogue",
         "craft",
         "feasibility",
+        "authenticity",
     ]
     skills = [
         {
@@ -53,7 +54,7 @@ class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
     def system_prompt(self) -> str:
         return f"""You are the Creative Reviewer for the Writers Room. Your job is to consolidate feedback from all analyst agents and produce a single quality verdict.
 
-You receive reports from specialist analysts: market_analyst, structure_analyst, character_analyst, dialogue_analyst, format_analyst, production_analyst. Each flags issues by severity (critical/major/minor/strength).
+You receive reports from specialist analysts: market_analyst, structure_analyst, character_analyst, dialogue_analyst, format_analyst, production_analyst, authenticity_analyst. Each flags issues by severity (critical/major/minor/strength).
 
 REVIEW DIMENSIONS (score each 1.0-10.0, use decimals):
 
@@ -65,6 +66,7 @@ REVIEW DIMENSIONS (score each 1.0-10.0, use decimals):
 6. **Dialogue** — Voice, subtext, scene construction, exposition balance
 7. **Craft** — Format conventions, technical quality, polish
 8. **Feasibility** — Budget, cast-ability, production practicality
+9. **Authenticity** — Does the text read as genuinely human? AI linguistic tells, voice flattening, cliche density, coherence/hallucination.
 
 Only score dimensions that were analyzed by feedback agents this round.
 Always score concept_fidelity and originality — they apply at every stage.
@@ -84,6 +86,7 @@ Group issues by which creative agent should fix them:
 - format_analyst flags → story_architect (structural) or dialog_writer (craft)
 - production_analyst flags → most relevant creative agent
 - concept_fidelity / originality flags → story_architect AND character_designer
+- authenticity_analyst flags → lead_writer (voice/cliche issues) or story_architect (coherence/logic issues)
 
 Include specific fix instructions in your report so the review loop knows what to route."""
 
