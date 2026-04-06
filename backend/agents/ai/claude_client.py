@@ -141,6 +141,94 @@ def call_claude_with_tools(
     return response_text, tool_input, usage
 
 
+def call_claude_tool_loop(
+    system_prompt: str,
+    user_message: str,
+    tools: list[dict],
+    handle_tool_call: callable,
+    model: str = "claude-sonnet-4-6",
+    max_tokens: int = 8192,
+    max_turns: int = 50,
+) -> tuple[str, dict]:
+    """Multi-turn tool loop: Claude calls tools, we handle them, feed results back.
+
+    Args:
+        handle_tool_call: callable(name, input) -> str (JSON result).
+            Called for each tool_use block. Return value is sent back as tool_result.
+        max_turns: safety cap on conversation turns.
+
+    Returns (final_response_text, cumulative_usage_dict).
+    """
+    client = _get_client()
+    from agents.ai.pricing import estimate_cost
+
+    messages = [{"role": "user", "content": user_message}]
+    total_input = 0
+    total_output = 0
+    total_cost = 0.0
+    final_text = ""
+
+    for _turn in range(max_turns):
+        message = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=messages,
+            tools=tools,
+        )
+
+        total_input += message.usage.input_tokens
+        total_output += message.usage.output_tokens
+        total_cost += estimate_cost(model, message.usage.input_tokens, message.usage.output_tokens)
+
+        # Collect text and tool calls
+        text_parts = []
+        tool_uses = []
+        for block in message.content:
+            if block.type == "text":
+                text_parts.append(block.text)
+            elif block.type == "tool_use":
+                tool_uses.append(block)
+
+        final_text = "".join(text_parts)
+
+        if message.stop_reason == "end_turn" or not tool_uses:
+            break
+
+        # Process tool calls and build tool results
+        assistant_content = message.content  # preserve full content for conversation
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        tool_results = []
+        for tool_use in tool_uses:
+            result_str = handle_tool_call(tool_use.name, tool_use.input)
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": result_str,
+                }
+            )
+
+        messages.append({"role": "user", "content": tool_results})
+
+    usage = {
+        "model": model,
+        "input_tokens": total_input,
+        "output_tokens": total_output,
+        "cost_usd": total_cost,
+    }
+    logger.info(
+        "Claude tool loop: model=%s turns=%d input=%d output=%d cost=$%.4f",
+        model,
+        _turn + 1,
+        total_input,
+        total_output,
+        total_cost,
+    )
+    return final_text, usage
+
+
 def stream_claude(
     system_prompt: str,
     user_message: str,
