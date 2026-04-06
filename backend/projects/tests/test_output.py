@@ -39,29 +39,9 @@ class TestOutputModel:
 
 class TestOutputConstraints:
     @pytest.mark.django_db
-    def test_one_output_per_department_per_sprint(self):
+    def test_two_outputs_same_label_rejected(self):
+        """Two outputs with the same (sprint, department, label) must fail."""
         from django.contrib.auth import get_user_model
-
-        from projects.models import Department, Project, Sprint
-
-        User = get_user_model()
-        user = User.objects.create_user(email="test@test.com", password="test")
-        project = Project.objects.create(name="Test", goal="Test", owner=user)
-        dept = Department.objects.create(project=project, department_type="writers_room")
-        sprint = Sprint.objects.create(project=project, text="Write a pitch", created_by=user)
-        sprint.departments.add(dept)
-
-        Output.objects.create(sprint=sprint, department=dept, title="Pitch v1", output_type="markdown", content="v1")
-
-        with pytest.raises(IntegrityError):
-            Output.objects.create(
-                sprint=sprint, department=dept, title="Pitch v2", output_type="markdown", content="v2"
-            )
-
-    @pytest.mark.django_db
-    def test_update_in_place_works(self):
-        from django.contrib.auth import get_user_model
-
         from projects.models import Department, Project, Sprint
 
         User = get_user_model()
@@ -71,14 +51,26 @@ class TestOutputConstraints:
         sprint = Sprint.objects.create(project=project, text="Write a pitch", created_by=user)
         sprint.departments.add(dept)
 
-        output = Output.objects.create(
-            sprint=sprint, department=dept, title="Pitch v1", output_type="markdown", content="First version"
-        )
-        output.title = "Pitch v2"
-        output.content = "Revised version"
-        output.save()
+        Output.objects.create(sprint=sprint, department=dept, title="Expose Deliverable", label="expose:deliverable", output_type="markdown", content="v1")
 
-        output.refresh_from_db()
-        assert output.title == "Pitch v2"
-        assert output.content == "Revised version"
-        assert Output.objects.filter(sprint=sprint, department=dept).count() == 1
+        with pytest.raises(IntegrityError):
+            Output.objects.create(sprint=sprint, department=dept, title="Expose Deliverable", label="expose:deliverable", output_type="markdown", content="v2")
+
+    @pytest.mark.django_db
+    def test_three_outputs_different_labels_allowed(self):
+        """Three outputs with different labels for same sprint+dept must succeed."""
+        from django.contrib.auth import get_user_model
+        from projects.models import Department, Project, Sprint
+
+        User = get_user_model()
+        user = User.objects.create_user(email="test3@test.com", password="test")
+        project = Project.objects.create(name="Test", goal="Test", owner=user)
+        dept = Department.objects.create(project=project, department_type="writers_room")
+        sprint = Sprint.objects.create(project=project, text="Write a pitch", created_by=user)
+        sprint.departments.add(dept)
+
+        Output.objects.create(sprint=sprint, department=dept, title="Expose Deliverable", label="expose:deliverable", output_type="markdown", content="d")
+        Output.objects.create(sprint=sprint, department=dept, title="Expose Critique", label="expose:critique", output_type="markdown", content="c")
+        Output.objects.create(sprint=sprint, department=dept, title="Expose Research", label="expose:research", output_type="markdown", content="r")
+
+        assert Output.objects.filter(sprint=sprint, department=dept).count() == 3

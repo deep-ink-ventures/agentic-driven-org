@@ -74,8 +74,8 @@ class Output(models.Model):
         ordering = ["-updated_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["sprint", "department"],
-                name="one_output_per_department_per_sprint",
+                fields=["sprint", "department", "label"],
+                name="one_output_per_department_per_sprint_per_label",
             ),
         ]
 
