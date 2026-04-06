@@ -62,6 +62,7 @@ function TaskCard({
   const [acting, setActing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [editedPlan, setEditedPlan] = useState(task.step_plan);
   const [editedSummary, setEditedSummary] = useState(task.exec_summary);
 
@@ -180,13 +181,21 @@ function TaskCard({
             </div>
           )}
 
-          {/* Report — read only */}
+          {/* Report — read only, toggle visibility */}
           {task.report && (
             <div>
-              <p className="text-xs text-text-secondary mb-1">Report</p>
-              <div className="text-xs text-text-primary bg-bg-input rounded-lg p-3 border border-border prose prose-invert prose-xs max-w-none prose-headings:text-text-primary prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:bg-bg-surface prose-pre:border prose-pre:border-border">
-                <ReactMarkdown>{task.report}</ReactMarkdown>
-              </div>
+              <button
+                onClick={() => setShowReport(!showReport)}
+                className="text-xs text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1 mb-2"
+              >
+                {showReport ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {showReport ? "Hide report" : "Show report"}
+              </button>
+              {showReport && (
+                <div className="text-xs text-text-primary bg-bg-input rounded-lg p-3 border border-border prose prose-invert prose-xs max-w-none prose-headings:text-text-primary prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:bg-bg-surface prose-pre:border prose-pre:border-border">
+                  <ReactMarkdown>{task.report}</ReactMarkdown>
+                </div>
+              )}
             </div>
           )}
           {task.error_message && (
@@ -332,7 +341,16 @@ function TaskLane({
     [projectId, activeStatuses, department, agent],
   );
 
-  // Defer fetch for collapsible lanes until first expand
+  // For collapsible lanes, fetch count immediately; defer full task fetch until expand
+  useEffect(() => {
+    if (config.collapsible && !hasFetched) {
+      api.getProjectTasks(projectId, { status: config.statuses, department, agent, limit: 1 })
+        .then((page) => setTotalCount(page.totalCount))
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!expanded && !hasFetched) {
       setLoading(false);

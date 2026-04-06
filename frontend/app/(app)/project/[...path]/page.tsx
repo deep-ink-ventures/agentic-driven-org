@@ -23,6 +23,9 @@ import {
   Plus,
   Menu,
   X,
+  Copy,
+  Check,
+  RefreshCw,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
@@ -236,8 +239,8 @@ export default function ProjectDetailPage() {
   }
 
   function SettingsView({ projectId: pid }: { projectId: string }) {
-    type SettingsTab = "overview";
-    const validSettingsTabs: SettingsTab[] = ["overview"];
+    type SettingsTab = "overview" | "integrations";
+    const validSettingsTabs: SettingsTab[] = ["overview", "integrations"];
 
     function settingsTabFromHash(): SettingsTab {
       if (typeof window === "undefined") return "overview";
@@ -246,6 +249,9 @@ export default function ProjectDetailPage() {
     }
 
     const [settingsTab, setSettingsTabState] = useState<SettingsTab>(settingsTabFromHash);
+    const [pairingToken, setPairingToken] = useState<string | null>(null);
+    const [tokenLoading, setTokenLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const setSettingsTab = useCallback((t: SettingsTab) => {
       setSettingsTabState(t);
@@ -258,32 +264,126 @@ export default function ProjectDetailPage() {
       return () => window.removeEventListener("hashchange", onHashChange);
     }, []);
 
+    async function generateToken() {
+      setTokenLoading(true);
+      try {
+        const res = await api.generateExtensionToken(projectSlug!);
+        setPairingToken(res.token);
+      } catch {
+        // silently fail — user can retry
+      } finally {
+        setTokenLoading(false);
+      }
+    }
+
+    function copyToken() {
+      if (!pairingToken) return;
+      navigator.clipboard.writeText(pairingToken);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+
+    const tabClass = (t: SettingsTab) =>
+      `px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+        settingsTab === t
+          ? "border-accent-violet text-accent-violet"
+          : "border-transparent text-text-secondary hover:text-text-primary"
+      }`;
+
     return (
       <div>
         <h2 className="text-2xl font-semibold mb-4">Project Settings</h2>
         <div className="flex gap-1 border-b border-border mb-6">
-          <button
-            onClick={() => setSettingsTab("overview")}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-              settingsTab === "overview"
-                ? "border-accent-violet text-accent-violet"
-                : "border-transparent text-text-secondary hover:text-text-primary"
-            }`}
-          >
+          <button onClick={() => setSettingsTab("overview")} className={tabClass("overview")}>
             Overview
           </button>
+          <button onClick={() => setSettingsTab("integrations")} className={tabClass("integrations")}>
+            Integrations
+          </button>
         </div>
-        <div className="space-y-6">
-          <div className="rounded-lg border border-border bg-bg-surface p-6">
-            <h3 className="text-lg font-semibold text-text-heading">{project!.name}</h3>
-            {project!.goal && (
-              <div className="mt-3 text-sm text-text-primary leading-relaxed prose prose-invert prose-sm max-w-none">
-                <ReactMarkdown>{project!.goal}</ReactMarkdown>
-              </div>
-            )}
-          </div>
 
-        </div>
+        {settingsTab === "overview" && (
+          <div className="space-y-6">
+            <div className="rounded-lg border border-border bg-bg-surface p-6">
+              <h3 className="text-lg font-semibold text-text-heading">{project!.name}</h3>
+              {project!.goal && (
+                <div className="mt-3 text-sm text-text-primary leading-relaxed prose prose-invert prose-sm max-w-none">
+                  <ReactMarkdown>{project!.goal}</ReactMarkdown>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {settingsTab === "integrations" && (
+          <div className="space-y-6">
+            <div className="rounded-lg border border-border bg-bg-surface p-6">
+              <h3 className="text-lg font-semibold text-text-heading">Chrome Extension</h3>
+              <p className="mt-2 text-sm text-text-secondary">
+                Pair the Chrome extension with this project to sync browser sessions for your agents.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary uppercase tracking-wide mb-1.5">
+                    Backend URL
+                  </label>
+                  <code className="block rounded-md border border-border bg-bg-base px-3 py-2 text-sm font-mono text-text-primary select-all">
+                    {process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}
+                  </code>
+                </div>
+
+                {!pairingToken ? (
+                  <button
+                    onClick={generateToken}
+                    disabled={tokenLoading}
+                    className="inline-flex items-center gap-2 rounded-md bg-accent-violet px-4 py-2 text-sm font-medium text-white hover:bg-accent-violet/90 disabled:opacity-50 transition-colors"
+                  >
+                    {tokenLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    Generate Pairing Code
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <label className="block text-xs font-medium text-text-secondary uppercase tracking-wide">
+                      Pairing Code
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 rounded-md border border-border bg-bg-base px-3 py-2 text-sm font-mono text-text-primary break-all select-all">
+                        {pairingToken}
+                      </code>
+                      <button
+                        onClick={copyToken}
+                        className="shrink-0 rounded-md border border-border p-2 text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover transition-colors"
+                        title="Copy to clipboard"
+                      >
+                        {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-text-secondary">
+                      Paste this code into the Chrome extension popup. Expires in 24 hours.
+                    </p>
+                    <button
+                      onClick={generateToken}
+                      disabled={tokenLoading}
+                      className="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
+                    >
+                      {tokenLoading ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                      Regenerate
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

@@ -4,7 +4,8 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import type { Sprint } from "@/lib/types";
-import { Pause, Play, Check } from "lucide-react";
+import { Pause, Play, Square } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface SprintSidebarProps {
   sprints: Sprint[];
@@ -15,14 +16,31 @@ interface SprintSidebarProps {
 
 export function SprintSidebar({ sprints, onUpdate, projectId, onNavigateToDept }: SprintSidebarProps) {
   const [acting, setActing] = useState<string | null>(null);
+  const [stopping, setStopping] = useState<Sprint | null>(null);
 
   const visible = sprints.filter((s) => s.status !== "done");
 
   async function updateStatus(e: React.MouseEvent, sprint: Sprint, newStatus: "running" | "paused" | "done") {
     e.stopPropagation();
+    if (newStatus === "done") {
+      setStopping(sprint);
+      return;
+    }
     setActing(sprint.id);
     try {
       await api.updateSprint(projectId, sprint.id, { status: newStatus });
+      onUpdate();
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function confirmStop() {
+    if (!stopping) return;
+    setActing(stopping.id);
+    setStopping(null);
+    try {
+      await api.updateSprint(projectId, stopping.id, { status: "done" });
       onUpdate();
     } finally {
       setActing(null);
@@ -78,10 +96,10 @@ export function SprintSidebar({ sprints, onUpdate, projectId, onNavigateToDept }
                 <button
                   onClick={(e) => updateStatus(e, sprint, "done")}
                   disabled={acting === sprint.id}
-                  className="p-0.5 rounded hover:bg-flag-strength/20 text-text-secondary hover:text-flag-strength transition-colors"
-                  title="Mark done"
+                  className="p-0.5 rounded hover:bg-flag-critical/20 text-text-secondary hover:text-flag-critical transition-colors"
+                  title="Stop sprint"
                 >
-                  <Check className="h-3 w-3" />
+                  <Square className="h-2.5 w-2.5" />
                 </button>
               </div>
             </div>
@@ -91,6 +109,16 @@ export function SprintSidebar({ sprints, onUpdate, projectId, onNavigateToDept }
           </div>
         );
       })}
+      <ConfirmDialog
+        open={!!stopping}
+        title="Stop sprint"
+        description="This will mark the sprint as done. In-flight tasks will finish, but no new work will be created."
+        confirmLabel="Stop sprint"
+        cancelLabel="Keep running"
+        variant="danger"
+        onConfirm={confirmStop}
+        onCancel={() => setStopping(null)}
+      />
     </div>
   );
 }

@@ -14,6 +14,8 @@ import {
   Terminal,
   Settings2,
   ListTodo,
+  Clock,
+  CalendarDays,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -114,6 +116,39 @@ export function AgentDetailView({
               {blueprint.description}
             </p>
           </div>
+          {/* Scheduled tasks */}
+          {blueprint.commands.some((cmd) => cmd.schedule) && (
+            <div>
+              <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
+                Schedule
+              </h3>
+              <div className="space-y-1.5">
+                {blueprint.commands
+                  .filter((cmd) => cmd.schedule)
+                  .map((cmd) => (
+                    <div
+                      key={cmd.name}
+                      className="flex items-center gap-2 text-xs rounded-md border border-border bg-bg-input/50 px-2.5 py-1.5"
+                    >
+                      {cmd.schedule === "hourly" ? (
+                        <Clock className="h-3.5 w-3.5 text-accent-violet shrink-0" />
+                      ) : (
+                        <CalendarDays className="h-3.5 w-3.5 text-accent-gold shrink-0" />
+                      )}
+                      <span className="text-text-primary font-mono">
+                        {cmd.name}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-primary border border-border text-text-secondary">
+                        {cmd.schedule}
+                      </span>
+                      <span className="text-text-secondary">
+                        {cmd.description}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
           <div>
             <h3 className="text-xs uppercase text-text-secondary font-medium mb-2">
               Skills

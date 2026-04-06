@@ -7,6 +7,7 @@ import { AgentCard } from "@/components/agent-card";
 import { TaskQueue } from "@/components/task-queue";
 import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, ChevronDown, ChevronRight, FileText, Link2, File, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export function DepartmentView({
   dept,
@@ -56,6 +57,7 @@ export function DepartmentView({
   const [deptSprints, setDeptSprints] = useState<import("@/lib/types").Sprint[]>([]);
   const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set());
   const [sprintActing, setSprintActing] = useState<string | null>(null);
+  const [stoppingSprint, setStoppingSprint] = useState<import("@/lib/types").Sprint | null>(null);
 
   async function toggleAgent(agent: AgentSummary) {
     const newStatus = agent.status === "active" ? "inactive" : "active";
@@ -101,9 +103,26 @@ export function DepartmentView({
   }, [tab, refreshSprints]);
 
   async function updateSprintStatus(sprint: import("@/lib/types").Sprint, newStatus: "running" | "paused" | "done") {
+    if (newStatus === "done") {
+      setStoppingSprint(sprint);
+      return;
+    }
     setSprintActing(sprint.id);
     try {
       await api.updateSprint(projectId, sprint.id, { status: newStatus });
+      refreshSprints();
+      onRefresh();
+    } finally {
+      setSprintActing(null);
+    }
+  }
+
+  async function confirmStopSprint() {
+    if (!stoppingSprint) return;
+    setSprintActing(stoppingSprint.id);
+    setStoppingSprint(null);
+    try {
+      await api.updateSprint(projectId, stoppingSprint.id, { status: "done" });
       refreshSprints();
       onRefresh();
     } finally {
@@ -140,6 +159,7 @@ export function DepartmentView({
   const deptAllApproved = activeAgents.length > 0 && activeAgents.every((a) => a.auto_approve);
 
   return (
+    <>
     <div>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2.5">
@@ -334,7 +354,10 @@ export function DepartmentView({
                     >
                       {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                     </button>
-                    <span className="text-sm text-text-heading truncate flex-1">
+                    <span
+                      onClick={() => toggleExpanded(sprint.id)}
+                      className="text-sm text-text-heading truncate flex-1 cursor-pointer"
+                    >
                       {sprint.text}
                     </span>
                     <span className="text-[10px] text-text-secondary shrink-0">
@@ -549,5 +572,16 @@ export function DepartmentView({
         </div>
       )}
     </div>
+    <ConfirmDialog
+      open={!!stoppingSprint}
+      title="Stop sprint"
+      description="This will mark the sprint as done. In-flight tasks will finish, but no new work will be created."
+      confirmLabel="Stop sprint"
+      cancelLabel="Keep running"
+      variant="danger"
+      onConfirm={confirmStopSprint}
+      onCancel={() => setStoppingSprint(null)}
+    />
+    </>
   );
 }

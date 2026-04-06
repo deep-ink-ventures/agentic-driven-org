@@ -1,25 +1,35 @@
-# TODO — Future Improvements
+# General
 
-## Context Efficiency
-- `build_context_message()` dumps up to 3000 chars per department document + 10 recent tasks with 200-char reports. For departments with many docs/tasks, this eats input tokens. Consider summarizing context with a cheaper model (e.g. Haiku) rather than raw-dumping full text.
+Living instructions:
 
-## Bootstrap Source Handling
-- `build_bootstrap_user_message()` sends up to 10K chars per source. Instead of truncating, summarize each source with a cheaper model first, then feed summaries to the bootstrap prompt.
+When we do archive / sum up documents we should also dispatch an instructions reviewer for all agents in the department that reviews all instructions of the agents if they are still up to date of if things within it have changed.
 
-## Multi-tenancy
-- Redis is a single instance for broker, cache, and channels. When going multi-tenant, consider separate Redis instances or Redis Cluster. Add this as a requirement when multi-tenancy is designed.
+---
 
-## Agent Config Security
-- `agent.config` JSONField stores sensitive data (browser cookies, auth tokens). Currently visible to all admin users. When the frontend API is built, ensure this field is write-only in serializers.
+AI Detection Agent, generalist, Separate Agent, Agent Mixin?
 
-## Prompt Injection Hardening (before multi-tenant / frontend)
+---
 
-Current mitigation: XML tags around user-controlled content in all prompts. Still needed:
 
-- **Source URL content scanning** — `extract_from_url` fetches external HTML that flows into bootstrap. Scan/strip content that looks like prompt injection before storing extracted_text. This is the only vector that exists TODAY (attacker doesn't need an account, just a URL someone pastes as a source).
-- **Bootstrap proposal schema validation** — validate Claude's JSON response against a strict schema (only known department_types, only known agent_types per department) before `_apply_proposal` creates objects. Currently validated at the department/agent level but not at the JSON structure level.
-- **Rate limiting on Claude calls** — prevent a user from generating unlimited bootstrap proposals or task proposals. Add per-user/per-project rate limits on bootstrap_project and create_next_leader_task.
-- **Audit logging** — log every prompt sent to Claude (system + user message) with timestamp, user, agent, and token usage. Searchable for post-incident review.
-- **Output validation** — verify Claude's JSON responses match expected structure strictly before acting on them. Reject responses with unexpected keys or values.
-- **Task report feedback loop** — Claude's own output (task reports) gets fed back as context for future tasks. A hallucinated instruction in a report could self-reinforce. Consider summarizing/sanitizing reports before including in context, or capping context to most recent N tasks.
-- **Agent instructions field** — when frontend ships, either restrict to plain text (no markdown headers, no instruction-like patterns) or make it a structured form instead of free text.
+
+# Writers Room
+
+
+
+
+
+## The order of information flow is wrong and sometimes informations are not given
+
+The outputed texts sometimes does not make any sense. Examples:
+
+I noticed that the writer is very very fast, almost like just copy and paste. It should actually write a genuine document from scratch at the beginning (and then changes). Not just a wild mix or puzzle of things.
+
+Ideally it has an internal review process that the outputted text is correct, that information are not referenced before given and so on. I see this as one of the biggest challenges and we need to have a solution that actually scales.
+
+
+
+## Remove constraints
+
+> 🔴 **Showrunner-Attachment fehlt vollständig** — extern, nicht durch Exposé lösbar, aber Real K.O.-Faktor
+
+This is not part of the writers room. Remove that constraint. It'sblocking

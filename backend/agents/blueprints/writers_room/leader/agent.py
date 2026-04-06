@@ -1174,26 +1174,32 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 sprint=sprint,
             )
 
-        # Update the sprint output with the latest deliverable
-        if deliverable_content and sprint:
-            self._update_sprint_output(agent, sprint, stage, deliverable_content)
+        # Update the sprint output with the latest deliverable and research
+        if sprint:
+            if deliverable_content:
+                self._update_sprint_output(agent, sprint, stage, deliverable_content, "deliverable")
+            if research_content:
+                self._update_sprint_output(agent, sprint, stage, research_content, "research")
 
-    def _update_sprint_output(self, agent, sprint, stage: str, content: str):
-        """Update or create the sprint output for this department.
+    def _update_sprint_output(self, agent, sprint, stage: str, content: str, output_type: str = "deliverable"):
+        """Update or create a sprint output record for this department.
 
-        One output per department per sprint — updated in place each cycle.
+        Label format: {effective_stage}:{output_type}
+        e.g. "expose:deliverable", "expose:critique", "expose:research"
         """
         from projects.models import Output
 
         effective_stage = self._get_effective_stage(agent, stage)
         stage_display = effective_stage.replace("_", " ").title()
+        type_display = output_type.title()
+        label = f"{effective_stage}:{output_type}"
 
         Output.objects.update_or_create(
             sprint=sprint,
             department=agent.department,
+            label=label,
             defaults={
-                "title": stage_display,
-                "label": effective_stage,
+                "title": f"{stage_display} {type_display}",
                 "output_type": "markdown",
                 "content": content,
             },
@@ -1234,6 +1240,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 contents={"stage_critique": critique_content},
                 sprint=sprint,
             )
+            if sprint:
+                self._update_sprint_output(agent, sprint, stage, critique_content, "critique")
 
     # ── Feedback task proposal ──────────────────────────────────────────
 

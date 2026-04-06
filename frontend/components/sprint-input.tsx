@@ -95,10 +95,24 @@ export function SprintInput({
         <div className="flex gap-2 p-3">
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="What should this department work on?"
+            onChange={(e) => {
+              setText(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = `${e.target.scrollHeight}px`;
+            }}
+            onFocus={(e) => {
+              if (!text) {
+                e.target.style.height = "12rem";
+              }
+            }}
+            onBlur={(e) => {
+              if (!text) {
+                e.target.style.height = "";
+              }
+            }}
+            placeholder={defaultDepartmentId ? "What should this department work on?" : "What should selected departments work on?"}
             rows={1}
-            className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-secondary/50 resize-none focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-secondary/50 resize-none focus:outline-none transition-[height] duration-200"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -153,20 +167,33 @@ export function SprintInput({
 
         {/* Department selector + submit */}
         <div className="flex items-center justify-between border-t border-border px-3 py-2">
-          <div className="flex flex-wrap gap-1.5">
-            {departments.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => toggleDept(d.id)}
-                className={`px-2 py-0.5 rounded-full text-[10px] border transition-colors ${
-                  selectedDeptIds.has(d.id)
-                    ? "bg-accent-violet/15 text-accent-violet border-accent-violet/30"
-                    : "bg-bg-input text-text-secondary border-border hover:border-accent-violet/30"
-                }`}
-              >
-                {d.display_name}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {!defaultDepartmentId && (
+              <span className="text-[10px] text-text-secondary/50 mr-1">Departments:</span>
+            )}
+            {departments.map((d) => {
+              const leader = d.agents.find((a) => a.is_leader);
+              const hasProvisioning = d.agents.some((a) => a.status === "provisioning");
+              const leaderInactive = leader && leader.status !== "active";
+              const disabled = hasProvisioning || leaderInactive;
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => !disabled && toggleDept(d.id)}
+                  disabled={disabled}
+                  className={`px-2 py-0.5 rounded-full text-[10px] border transition-colors ${
+                    disabled
+                      ? "bg-bg-input text-text-secondary/30 border-border/50 cursor-not-allowed"
+                      : selectedDeptIds.has(d.id)
+                        ? "bg-accent-violet/15 text-accent-violet border-accent-violet/30"
+                        : "bg-bg-input text-text-secondary border-border hover:border-accent-violet/30"
+                  }`}
+                  title={disabled ? (hasProvisioning ? "Agents still provisioning" : "Leader is inactive") : undefined}
+                >
+                  {d.display_name}
+                </button>
+              );
+            })}
           </div>
           <button
             onClick={handleSubmit}

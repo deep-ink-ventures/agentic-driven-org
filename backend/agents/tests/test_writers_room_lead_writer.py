@@ -696,8 +696,8 @@ class TestSprintOutput:
         leader_blueprint._update_sprint_output(leader, sprint, "pitch", "The pitch content")
         output = Output.objects.filter(sprint=sprint, department=leader.department).first()
         assert output is not None
-        assert output.title == "Pitch"
-        assert output.label == "pitch"
+        assert output.title == "Pitch Deliverable"
+        assert output.label == "pitch:deliverable"
         assert output.output_type == "markdown"
         assert output.content == "The pitch content"
 
@@ -717,8 +717,8 @@ class TestSprintOutput:
         leader.save(update_fields=["internal_state"])
         leader_blueprint._update_sprint_output(leader, sprint, "treatment", "Series concept")
         output = Output.objects.get(sprint=sprint, department=leader.department)
-        assert output.title == "Concept"
-        assert output.label == "concept"
+        assert output.title == "Concept Deliverable"
+        assert output.label == "concept:deliverable"
 
 
 class TestLeadWriterRevisionPrompt:
@@ -761,3 +761,51 @@ class TestLeadWriterRevisionPrompt:
 
         assert "stage research document" in step_plan
         assert "creative decision is yours" in step_plan
+
+
+class TestUpdateSprintOutput:
+    def test_update_sprint_output_uses_label_with_type(self):
+        """_update_sprint_output must include output_type in the label."""
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+        from unittest.mock import MagicMock, patch
+
+        bp = WritersRoomLeaderBlueprint()
+        agent = MagicMock()
+        agent.internal_state = {"format_type": "standalone"}
+        sprint = MagicMock()
+
+        with patch("projects.models.Output.objects.update_or_create") as mock_uoc:
+            bp._update_sprint_output(agent, sprint, "expose", "content", "deliverable")
+            call_kwargs = mock_uoc.call_args
+            assert call_kwargs.kwargs["label"] == "expose:deliverable" or \
+                   call_kwargs[1]["label"] == "expose:deliverable" or \
+                   "expose:deliverable" in str(call_kwargs)
+
+    def test_update_sprint_output_critique_label(self):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+        from unittest.mock import MagicMock, patch
+
+        bp = WritersRoomLeaderBlueprint()
+        agent = MagicMock()
+        agent.internal_state = {"format_type": "standalone"}
+        sprint = MagicMock()
+
+        with patch("projects.models.Output.objects.update_or_create") as mock_uoc:
+            bp._update_sprint_output(agent, sprint, "expose", "content", "critique")
+            call_kwargs = mock_uoc.call_args
+            assert "expose:critique" in str(call_kwargs)
+
+    def test_update_sprint_output_default_is_deliverable(self):
+        """output_type defaults to 'deliverable' for backwards compatibility."""
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+        from unittest.mock import MagicMock, patch
+
+        bp = WritersRoomLeaderBlueprint()
+        agent = MagicMock()
+        agent.internal_state = {"format_type": "standalone"}
+        sprint = MagicMock()
+
+        with patch("projects.models.Output.objects.update_or_create") as mock_uoc:
+            bp._update_sprint_output(agent, sprint, "expose", "content")
+            call_kwargs = mock_uoc.call_args
+            assert "expose:deliverable" in str(call_kwargs)
