@@ -719,3 +719,45 @@ class TestSprintOutput:
         output = Output.objects.get(sprint=sprint, department=leader.department)
         assert output.title == "Concept"
         assert output.label == "concept"
+
+
+class TestLeadWriterRevisionPrompt:
+    def test_revision_step_plan_requires_json_only(self):
+        """Revision step_plan must instruct the model to output only JSON."""
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+        from unittest.mock import MagicMock
+
+        bp = WritersRoomLeaderBlueprint()
+        agent = MagicMock()
+        agent.internal_state = {
+            "current_stage": "expose",
+            "format_type": "standalone",
+            "stage_status": {"expose": {"iterations": 1}},
+        }
+        config = {"locale": "en"}
+
+        result = bp._propose_lead_writer_task(agent, "expose", config)
+        step_plan = result["tasks"][0]["step_plan"]
+
+        assert "Output ONLY the JSON" in step_plan
+        assert "No preamble" in step_plan
+
+    def test_revision_step_plan_includes_research_hint(self):
+        """Revision step_plan must hint at incorporating praised research material."""
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+        from unittest.mock import MagicMock
+
+        bp = WritersRoomLeaderBlueprint()
+        agent = MagicMock()
+        agent.internal_state = {
+            "current_stage": "expose",
+            "format_type": "standalone",
+            "stage_status": {"expose": {"iterations": 1}},
+        }
+        config = {"locale": "en"}
+
+        result = bp._propose_lead_writer_task(agent, "expose", config)
+        step_plan = result["tasks"][0]["step_plan"]
+
+        assert "stage research document" in step_plan
+        assert "creative decision is yours" in step_plan

@@ -12,6 +12,28 @@ def _context_section(context: str) -> str:
     return f"## Additional Context\n{context}"
 
 
+def _detect_locale_from_text(text: str) -> str | None:
+    """Best-effort locale detection from text using character/word heuristics."""
+    import re
+
+    if not text:
+        return None
+    lower = text.lower()
+    # German indicators
+    if re.search(r"\b(und|oder|ein|eine|das|der|die|ist|schreib|auf deutsch)\b", lower):
+        return "de"
+    # French indicators
+    if re.search(r"\b(le|la|les|des|est|une|dans|pour|avec|écrire|en français)\b", lower):
+        return "fr"
+    # Spanish indicators
+    if re.search(r"\b(el|los|las|una|del|por|con|para|escribir|en español)\b", lower):
+        return "es"
+    # Italian indicators
+    if re.search(r"\b(il|gli|una|della|sono|con|per|scrivi|in italiano)\b", lower):
+        return "it"
+    return None
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=10)
 def summarize_source(self, source_id: str):
     """Generate a comprehensive summary of a source document using Claude."""
@@ -374,9 +396,26 @@ Write 4-6 substantial paragraphs. Think of this as a creative brief + operating 
 2. Detect the locale using ISO codes (e.g. "de", "en", "fr").
 3. Reference specific details from the source materials — generic instructions will be rejected.
 
-## Response JSON Schema
+You MUST call the submit_config tool with your results."""
 
-{"leader_instructions": "4-6 paragraphs of detailed, project-specific instructions...", "locale": "de"}"""
+CONFIGURE_LEADER_TOOL = {
+    "name": "submit_config",
+    "description": "Submit the leader instructions and detected locale.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "leader_instructions": {
+                "type": "string",
+                "description": "4-6 paragraphs of detailed, project-specific leader instructions.",
+            },
+            "locale": {
+                "type": "string",
+                "description": "ISO 639-1 locale code detected from the project goal and sources (e.g. 'de', 'en', 'fr').",
+            },
+        },
+        "required": ["leader_instructions", "locale"],
+    },
+}
 
 
 GENERATE_DOCUMENTS_SYSTEM_PROMPT = """You are a senior project strategist creating foundational documents for a department in an AI agent platform. These documents are the department's knowledge base — agents read them to understand the project and do their work.
@@ -457,7 +496,6 @@ def get_department_recommendations(project) -> dict:
 @shared_task(bind=True, max_retries=3, default_retry_delay=10)
 def configure_new_department(self, department_id: str, context: str = ""):
     """Configure a department: leader instructions via Claude, then fan out agent + document tasks."""
-    from agents.ai.claude_client import call_claude, parse_json_response
     from agents.blueprints import DEPARTMENTS
     from agents.models import Agent
     from projects.models import Department
@@ -524,22 +562,28 @@ def configure_new_department(self, department_id: str, context: str = ""):
 
 Write comprehensive leader instructions for this department. The leader uses these instructions to decide what tasks to create and how to coordinate the workforce."""
 
-        # 2. Claude call for leader instructions
-        response, _usage = call_claude(
+        # 2. Claude call for leader instructions (forced tool guarantees schema)
+        from agents.ai.claude_client import call_claude_with_tools
+
+        _response, result, _usage = call_claude_with_tools(
             system_prompt=CONFIGURE_LEADER_SYSTEM_PROMPT,
             user_message=user_message,
+            tools=[CONFIGURE_LEADER_TOOL],
+            force_tool="submit_config",
             max_tokens=4096,
         )
 
-        result = parse_json_response(response)
         leader_instructions = result.get("leader_instructions", "") if result else ""
 
         # 3. Set department-level locale from detected language
         locale = result.get("locale") if result else None
+        if not locale:
+            # Last-resort fallback: heuristic from project goal text
+            locale = _detect_locale_from_text(project.goal or "")
         if locale:
-            dept_config = department.config or {}
-            dept_config["locale"] = locale
-            department.config = dept_config
+            model_config = department.config or {}
+            model_config["locale"] = locale
+            department.config = model_config
             department.save(update_fields=["config"])
 
         # 4. Update or create leader

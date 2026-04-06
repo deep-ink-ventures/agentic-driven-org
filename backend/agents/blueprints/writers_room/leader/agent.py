@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent
 
-from agents.ai.claude_client import call_claude, parse_json_response
 from agents.blueprints.base import (
     EXCELLENCE_THRESHOLD,
     MAX_REVIEW_ROUNDS,
@@ -1009,7 +1008,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 "## REVISION MODE\n"
                 "The current Stage Deliverable and the Critique are in the department documents. "
                 "Your job is to REVISE the existing deliverable, NOT rewrite it.\n\n"
-                "Output your changes as revision JSON:\n"
+                "Output your changes as revision JSON.\n\n"
+                "OUTPUT FORMAT — CRITICAL:\n"
+                "Output ONLY the JSON revision object. No preamble, no explanation, no prose. "
+                "Your response must start with `{` and end with `}`. Nothing before or after.\n\n"
                 "```json\n"
                 "{\n"
                 '  "revisions": [\n'
@@ -1031,6 +1033,9 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 "- For replace_between, quote unique start and end anchor passages\n"
                 "- ONLY change what the Critique flagged. Everything else stays BYTE-IDENTICAL.\n"
                 "- If the Critique praised a section, do NOT touch it.\n\n"
+                "If the critique praises material not yet present in the deliverable, check the "
+                "stage research document — it contains the raw creative work. You may incorporate "
+                "it if it serves the story, but the creative decision is yours.\n\n"
                 "Read the Critique carefully. Address EVERY flagged issue. Preserve EVERYTHING praised.\n\n"
                 f"Your output must be in {locale}."
             )
@@ -1461,13 +1466,41 @@ You are the showrunner of a professional writers room. Analyze the sprint text a
   - If an expose exists -> "treatment" (or "concept" for series)
   - If a treatment/concept exists -> "first_draft"
 
-Respond with JSON only:
-{{
-    "format_type": "standalone|series",
-    "terminal_stage": "pitch|expose|treatment|concept|first_draft",
-    "entry_stage": "pitch|expose|treatment|first_draft",
-    "reasoning": "Brief explanation"
-}}"""
+You MUST call the classify_sprint tool with your results."""
+
+FORMAT_DETECTION_TOOL = {
+    "name": "classify_sprint",
+    "description": "Submit sprint classification results.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "format_type": {
+                "type": "string",
+                "enum": ["standalone", "series"],
+                "description": "Whether this is a standalone piece or a series.",
+            },
+            "terminal_stage": {
+                "type": "string",
+                "enum": ["pitch", "expose", "treatment", "concept", "first_draft"],
+                "description": "The final stage the pipeline should reach.",
+            },
+            "entry_stage": {
+                "type": "string",
+                "enum": ["pitch", "expose", "treatment", "first_draft"],
+                "description": "Where the pipeline should start based on existing material.",
+            },
+            "locale": {
+                "type": "string",
+                "description": "ISO 639-1 locale code detected from sprint text and goal (e.g. 'de', 'en', 'fr').",
+            },
+            "reasoning": {
+                "type": "string",
+                "description": "Brief explanation of the classification.",
+            },
+        },
+        "required": ["format_type", "terminal_stage", "entry_stage", "locale", "reasoning"],
+    },
+}
 
 
 def _run_format_detection(agent, sprint_text: str) -> dict:
@@ -1475,6 +1508,8 @@ def _run_format_detection(agent, sprint_text: str) -> dict:
     Classify the sprint to determine format type, terminal stage, and entry point.
     Returns dict with format_type, terminal_stage, entry_stage.
     """
+    from agents.ai.claude_client import call_claude_with_tools
+
     project = agent.department.project
     goal = project.goal or "No goal specified"
 
@@ -1497,16 +1532,17 @@ def _run_format_detection(agent, sprint_text: str) -> dict:
         sources_summary=sources_summary,
     )
 
-    response, _usage = call_claude(
-        system_prompt="You are a project classification system. Respond with JSON only.",
+    _response, data, _usage = call_claude_with_tools(
+        system_prompt="You are a project classification system.",
         user_message=prompt,
+        tools=[FORMAT_DETECTION_TOOL],
+        force_tool="classify_sprint",
         model="claude-sonnet-4-6",
         max_tokens=1024,
     )
 
-    data = parse_json_response(response)
     if not data or "format_type" not in data:
-        logger.warning("Format detection failed to parse, defaulting: %s", response[:200])
+        logger.warning("Format detection tool call failed, defaulting")
         return {"format_type": "standalone", "terminal_stage": "treatment", "entry_stage": "pitch"}
 
     result = {
@@ -1533,6 +1569,15 @@ def _run_format_detection(agent, sprint_text: str) -> dict:
     internal_state["entry_detected"] = True
     agent.internal_state = internal_state
     agent.save(update_fields=["internal_state"])
+
+    # Backfill locale on department if not set (catches pre-existing departments)
+    detected_locale = data.get("locale")
+    dept_config = agent.department.config or {}
+    if detected_locale and not dept_config.get("locale"):
+        dept_config["locale"] = detected_locale
+        agent.department.config = dept_config
+        agent.department.save(update_fields=["config"])
+        logger.info("Writers Room: backfilled department locale to '%s'", detected_locale)
 
     logger.info(
         "Writers Room format detection: format=%s terminal=%s entry=%s reason=%s",

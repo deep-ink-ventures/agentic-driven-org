@@ -81,27 +81,35 @@ def call_claude_with_tools(
     tools: list[dict],
     model: str = "claude-sonnet-4-6",
     max_tokens: int = 8192,
+    force_tool: str | None = None,
 ) -> tuple[str, dict | None, dict]:
     """
     Call Claude API with tools and return (response_text, tool_input_or_None, usage_dict).
     Concatenates text blocks into the report. Extracts the first tool_use block's
     input as structured data. Returns None for tool_input if no tool was called.
+
+    If force_tool is set, the API will require the model to call that tool,
+    guaranteeing schema-validated structured output.
     """
     client = _get_client()
     logger.info(
-        "Calling Claude with tools: model=%s, system_len=%d, msg_len=%d, tools=%d",
+        "Calling Claude with tools: model=%s, system_len=%d, msg_len=%d, tools=%d, force=%s",
         model,
         len(system_prompt),
         len(user_message),
         len(tools),
+        force_tool,
     )
-    message = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
-        tools=tools,
-    )
+    kwargs = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_message}],
+        "tools": tools,
+    }
+    if force_tool:
+        kwargs["tool_choice"] = {"type": "tool", "name": force_tool}
+    message = client.messages.create(**kwargs)
     response_text = ""
     tool_input = None
     for block in message.content:
