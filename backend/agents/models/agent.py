@@ -37,6 +37,10 @@ class Agent(models.Model):
         default=False,
         help_text="When true, all tasks for this agent skip approval and execute immediately.",
     )
+    outreach = models.BooleanField(
+        default=False,
+        help_text="Whether this agent handles outreach delivery (email, LinkedIn, etc.)",
+    )
 
     class Status(models.TextChoices):
         PROVISIONING = "provisioning"
