@@ -1,5 +1,9 @@
 """Tests for Lead Writer agent and writers room pipeline refactor."""
 
+from unittest.mock import patch
+
+import pytest
+
 from agents.blueprints import get_blueprint
 from projects.models import Document
 
@@ -112,3 +116,176 @@ class TestFormatDetection:
         from agents.blueprints.writers_room.leader.agent import _run_format_detection
 
         assert callable(_run_format_detection)
+
+
+# ── State machine and document creation tests ──────────────────────────────
+
+
+@pytest.fixture
+def leader_blueprint():
+    from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+    return WritersRoomLeaderBlueprint()
+
+
+@pytest.fixture
+def mock_leader_agent(db):
+    """Create a minimal leader agent with department and project."""
+    from django.contrib.auth import get_user_model
+
+    from agents.models import Agent
+    from projects.models import Department, Project, Sprint
+
+    User = get_user_model()
+    user = User.objects.create_user(email="test-wr@example.com", password="pass1234")
+    project = Project.objects.create(name="Test Project", goal="A test story about brothers", owner=user)
+    dept = Department.objects.create(
+        project=project,
+        department_type="writers_room",
+    )
+    leader = Agent.objects.create(
+        department=dept,
+        name="Showrunner",
+        agent_type="leader",
+        is_leader=True,
+        status="active",
+        internal_state={},
+    )
+    for agent_type in [
+        "story_researcher",
+        "story_architect",
+        "character_designer",
+        "dialog_writer",
+        "lead_writer",
+        "market_analyst",
+        "structure_analyst",
+        "character_analyst",
+        "creative_reviewer",
+    ]:
+        Agent.objects.create(
+            department=dept,
+            name=agent_type.replace("_", " ").title(),
+            agent_type=agent_type,
+            is_leader=False,
+            status="active",
+        )
+    sprint = Sprint.objects.create(
+        project=project,
+        text="Write a series concept for a banking scandal drama",
+        status=Sprint.Status.RUNNING,
+        created_by=user,
+    )
+    sprint.departments.add(dept)
+    return leader
+
+
+class TestStateMachine:
+    @pytest.mark.django_db
+    @patch("agents.blueprints.writers_room.leader.agent._run_format_detection")
+    def test_not_started_dispatches_creative_agents(self, mock_detect, leader_blueprint, mock_leader_agent):
+        mock_detect.return_value = {
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_stage": "pitch",
+        }
+        proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
+        assert proposal is not None
+        assert "tasks" in proposal
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert "lead_writer" not in agent_types
+        assert "story_researcher" in agent_types
+
+    @pytest.mark.django_db
+    def test_creative_writing_done_dispatches_lead_writer(self, leader_blueprint, mock_leader_agent):
+        mock_leader_agent.internal_state = {
+            "current_stage": "pitch",
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_detected": True,
+            "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
+        assert proposal is not None
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert agent_types == ["lead_writer"]
+
+    @pytest.mark.django_db
+    def test_lead_writing_done_dispatches_feedback(self, leader_blueprint, mock_leader_agent):
+        mock_leader_agent.internal_state = {
+            "current_stage": "pitch",
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_detected": True,
+            "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        with patch.object(leader_blueprint, "_create_deliverable_and_research_docs"):
+            proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
+        assert proposal is not None
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert "lead_writer" not in agent_types
+        assert any(a in agent_types for a in ["market_analyst", "structure_analyst", "character_analyst"])
+
+    @pytest.mark.django_db
+    def test_review_pairs_only_lead_writer(self, leader_blueprint):
+        pairs = leader_blueprint.get_review_pairs()
+        assert len(pairs) == 1
+        assert pairs[0]["creator"] == "lead_writer"
+        assert pairs[0]["reviewer"] == "creative_reviewer"
+
+
+class TestDocumentCreation:
+    @pytest.mark.django_db
+    def test_create_stage_documents_v1_no_archive(self, leader_blueprint, mock_leader_agent):
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable", "stage_research"],
+            contents={
+                "stage_deliverable": "The pitch",
+                "stage_research": "Research notes",
+            },
+        )
+        docs = Document.objects.filter(department=mock_leader_agent.department, is_archived=False)
+        assert docs.filter(doc_type="stage_deliverable").count() == 1
+        assert docs.filter(doc_type="stage_research").count() == 1
+
+    @pytest.mark.django_db
+    def test_create_stage_documents_v2_archives_v1(self, leader_blueprint, mock_leader_agent):
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "Pitch v1"},
+        )
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=2,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "Pitch v2"},
+        )
+        all_docs = Document.objects.filter(department=mock_leader_agent.department, doc_type="stage_deliverable")
+        assert all_docs.count() == 2
+        archived = all_docs.filter(is_archived=True).first()
+        active = all_docs.filter(is_archived=False).first()
+        assert archived is not None
+        assert active is not None
+        assert archived.consolidated_into == active
+        assert "v1" in archived.title
+        assert "v2" in active.title
+
+    @pytest.mark.django_db
+    def test_effective_stage_series_treatment(self, leader_blueprint, mock_leader_agent):
+        mock_leader_agent.internal_state = {"format_type": "series"}
+        mock_leader_agent.save(update_fields=["internal_state"])
+        assert leader_blueprint._get_effective_stage(mock_leader_agent, "treatment") == "concept"
+
+    @pytest.mark.django_db
+    def test_effective_stage_standalone_treatment(self, leader_blueprint, mock_leader_agent):
+        mock_leader_agent.internal_state = {"format_type": "standalone"}
+        mock_leader_agent.save(update_fields=["internal_state"])
+        assert leader_blueprint._get_effective_stage(mock_leader_agent, "treatment") == "treatment"
