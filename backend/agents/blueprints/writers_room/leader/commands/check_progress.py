@@ -32,7 +32,7 @@ def check_progress(self, agent: Agent) -> dict:
     department = agent.department
     internal_state = agent.internal_state or {}
     stage_status = internal_state.get("stage_status", {})
-    current_stage = internal_state.get("current_stage", "logline")
+    current_stage = internal_state.get("current_stage", "pitch")
     now = timezone.now()
 
     issues = []

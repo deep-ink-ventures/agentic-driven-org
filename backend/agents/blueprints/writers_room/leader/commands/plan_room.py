@@ -31,7 +31,9 @@ def plan_room(self, agent: Agent) -> dict | None:
     department = agent.department
     internal_state = agent.internal_state or {}
     stage_status = internal_state.get("stage_status", {})
-    current_stage = internal_state.get("current_stage", "logline")
+    current_stage = internal_state.get("current_stage", "pitch")
+    terminal_stage = internal_state.get("terminal_stage", "treatment")
+    format_type = internal_state.get("format_type", "standalone")
 
     # Merge config
     config = {
@@ -39,7 +41,6 @@ def plan_room(self, agent: Agent) -> dict | None:
         **(department.config or {}),
         **(agent.config or {}),
     }
-    target_stage = config.get("target_stage", "revised_draft")
     locale = config.get("locale", "en")
 
     # Gather completed work
@@ -77,12 +78,21 @@ def plan_room(self, agent: Agent) -> dict | None:
 
 # Writers Room State
 Current stage: {current_stage}
-Target stage: {target_stage}
+Terminal stage: {terminal_stage}
+Format type: {format_type}
 Locale: {locale}
 Stage status: {json.dumps(stage_status, indent=2)}
 
+# 4-Stage Pipeline
+The pipeline runs: pitch → expose → treatment → first_draft
+The terminal_stage determines where the pipeline stops (set when the sprint was created).
+
 # Workforce Agents
 {workforce_desc}
+
+The team includes a **lead_writer** who synthesizes the creative team's output into a
+single cohesive stage deliverable after each round of creative writing is complete.
+Feedback agents then critique that synthesized deliverable.
 
 # Completed Work
 {completed_text}
@@ -95,10 +105,11 @@ Assess the writers room state. What should happen next?
 
 Consider:
 1. If active work is in progress, report status and wait.
-2. If a stage needs creative agents to write, list them.
-3. If a stage needs feedback agents to analyze, list them.
-4. If feedback has been received, evaluate whether the stage passes.
-5. If we've reached the target stage with passing scores, report completion.
+2. If a stage needs creative agents to write, assign them.
+3. Once creative writing is done, assign the lead_writer to synthesize a deliverable.
+4. Once the lead_writer deliverable exists, assign feedback agents to critique it.
+5. If feedback has been received, evaluate whether the stage passes.
+6. If we've reached terminal_stage with passing scores, report completion.
 
 For any new work, specify tasks with target_agent_type matching the workforce.
 
