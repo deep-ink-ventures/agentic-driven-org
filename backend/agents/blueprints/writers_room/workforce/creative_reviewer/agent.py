@@ -12,13 +12,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
-from agents.blueprints.base import EXCELLENCE_THRESHOLD, WorkforceBlueprint
+from agents.blueprints.base import EXCELLENCE_THRESHOLD
+from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlueprint
 from agents.blueprints.writers_room.workforce.creative_reviewer.commands import review_creative
 
 logger = logging.getLogger(__name__)
 
 
-class CreativeReviewerBlueprint(WorkforceBlueprint):
+class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
     name = "Creative Reviewer"
     slug = "creative_reviewer"
     description = (

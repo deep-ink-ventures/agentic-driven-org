@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlueprint
 from agents.blueprints.writers_room.workforce.market_analyst.commands import analyze
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ Each flag is one line, one emoji, one sentence.
 DO NOT use markdown tables anywhere in your output."""
 
 
-class MarketAnalystBlueprint(WorkforceBlueprint):
+class MarketAnalystBlueprint(WritersRoomFeedbackBlueprint):
     name = "Market Analyst"
     slug = "market_analyst"
     controls = "story_researcher"

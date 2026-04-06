@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlueprint
 from agents.blueprints.writers_room.workforce.dialogue_analyst.commands import analyze
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ Each flag is one line, one emoji, one sentence with quoted evidence.
 DO NOT use markdown tables anywhere in your output."""
 
 
-class DialogueAnalystBlueprint(WorkforceBlueprint):
+class DialogueAnalystBlueprint(WritersRoomFeedbackBlueprint):
     name = "Dialogue Analyst"
     slug = "dialogue_analyst"
     controls = "dialog_writer"

@@ -60,3 +60,23 @@ class TestWritersRoomFeedbackBlueprint:
             ctx = bp.get_context(MagicMock())
 
         assert ctx["department_documents"] == "--- [stage_deliverable] Expose v1 ---\ncontent"
+
+
+class TestFeedbackAgentInheritance:
+    @pytest.mark.parametrize("agent_type", [
+        "market_analyst",
+        "structure_analyst",
+        "character_analyst",
+        "dialogue_analyst",
+        "format_analyst",
+        "production_analyst",
+        "creative_reviewer",
+    ])
+    def test_inherits_feedback_blueprint(self, agent_type):
+        from agents.blueprints import get_blueprint
+        from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlueprint
+
+        bp = get_blueprint(agent_type, "writers_room")
+        assert isinstance(bp, WritersRoomFeedbackBlueprint), (
+            f"{agent_type} must inherit WritersRoomFeedbackBlueprint"
+        )
