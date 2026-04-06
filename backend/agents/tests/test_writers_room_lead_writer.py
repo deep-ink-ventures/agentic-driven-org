@@ -1,6 +1,6 @@
 """Tests for Lead Writer agent and writers room pipeline refactor."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -581,3 +581,80 @@ class TestRevisionAwareDocCreation:
         )
         assert revised == "Completely new prose content."
         assert applied is False
+
+
+class TestRevisionInstructions:
+    @pytest.fixture
+    def leader_blueprint(self):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        return WritersRoomLeaderBlueprint()
+
+    def test_lead_writer_iteration_0_no_revision_instructions(self, leader_blueprint):
+        mock_agent = MagicMock()
+        mock_agent.internal_state = {
+            "format_type": "standalone",
+            "current_stage": "pitch",
+            "stage_status": {"pitch": {"status": "creative_done", "iterations": 0}},
+        }
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"})
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "REVISION MODE" not in step_plan
+
+    def test_lead_writer_iteration_1_has_revision_instructions(self, leader_blueprint):
+        mock_agent = MagicMock()
+        mock_agent.internal_state = {
+            "format_type": "standalone",
+            "current_stage": "pitch",
+            "stage_status": {"pitch": {"status": "creative_done", "iterations": 1}},
+        }
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"})
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "REVISION MODE" in step_plan
+        assert "replace" in step_plan.lower()
+        assert "old_text" in step_plan
+
+    def test_lead_writer_expose_has_replace_section(self, leader_blueprint):
+        mock_agent = MagicMock()
+        mock_agent.internal_state = {
+            "format_type": "standalone",
+            "current_stage": "expose",
+            "stage_status": {"expose": {"status": "creative_done", "iterations": 1}},
+        }
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "expose", {"locale": "en"})
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "replace_section" in step_plan
+
+    def test_lead_writer_first_draft_has_replace_between(self, leader_blueprint):
+        mock_agent = MagicMock()
+        mock_agent.internal_state = {
+            "format_type": "standalone",
+            "current_stage": "first_draft",
+            "stage_status": {"first_draft": {"status": "creative_done", "iterations": 1}},
+        }
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "first_draft", {"locale": "en"})
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "replace_between" in step_plan
+
+    def test_creative_agents_iteration_0_no_revision_preamble(self, leader_blueprint):
+        mock_agent = MagicMock()
+        mock_agent.department.agents.filter.return_value.values_list.return_value = ["story_researcher"]
+        mock_agent.internal_state = {"stage_status": {"pitch": {"iterations": 0}}, "current_stage": "pitch"}
+        mock_agent.get_config_value.return_value = None
+        with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
+            mock_doc.objects.filter.return_value.exists.return_value = True
+            result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"})
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "REVISION ROUND" not in step_plan
+
+    def test_creative_agents_iteration_1_has_revision_preamble(self, leader_blueprint):
+        mock_agent = MagicMock()
+        mock_agent.department.agents.filter.return_value.values_list.return_value = ["story_researcher"]
+        mock_agent.internal_state = {"stage_status": {"pitch": {"iterations": 1}}, "current_stage": "pitch"}
+        mock_agent.get_config_value.return_value = None
+        with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
+            mock_doc.objects.filter.return_value.exists.return_value = True
+            result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"})
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "REVISION ROUND" in step_plan
+        assert "Critique" in step_plan

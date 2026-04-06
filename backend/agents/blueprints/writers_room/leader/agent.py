@@ -902,6 +902,21 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         internal_state = agent.internal_state or {}
         dispatch_stage = internal_state.get("current_stage", stage)
 
+        # Revision preamble for iteration > 0
+        revision_preamble = ""
+        current_iterations = internal_state.get("stage_status", {}).get(dispatch_stage, {}).get("iterations", 0)
+        if current_iterations > 0:
+            revision_preamble = (
+                "## REVISION ROUND\n"
+                f"This is revision round {current_iterations + 1}. "
+                "Your previous output is in the Research & Notes document under your section header. "
+                "The Critique document lists what needs fixing.\n\n"
+                "REVISE ONLY what the Critique flagged. Preserve everything it praised or did not mention. "
+                "Do NOT rewrite from scratch. If the Critique says your character work is strong but "
+                "the market positioning is weak, keep the character work EXACTLY as it was and fix "
+                "only the market positioning.\n\n"
+            )
+
         for agent_type in creative_agents:
             spec = TASK_SPECS.get(stage, {}).get(agent_type)
             if not spec:
@@ -927,6 +942,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 "exec_summary": spec["exec_summary"],
                 "step_plan": (
                     f"Locale: {locale}\n{format_context}\n"
+                    f"{revision_preamble}"
                     f"{pitch_preamble}"
                     f"{spec['step_plan']}\n\n"
                     f"FIDELITY CHECK (before submitting): Re-read the creator's pitch. "
@@ -970,6 +986,66 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         stage_display = "concept" if (stage == "treatment" and format_type == "series") else stage
 
+        iteration = internal_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
+
+        if iteration > 0:
+            # Determine available operations based on stage
+            if stage == "pitch":
+                ops_note = "Available operations: replace (surgical text edits)."
+            elif stage == "first_draft":
+                ops_note = (
+                    "Available operations: replace (surgical text edits), "
+                    "replace_between (replace passage between two unique anchor texts, inclusive)."
+                )
+            else:
+                ops_note = (
+                    "Available operations: replace (surgical text edits), "
+                    "replace_section (replace everything under a markdown header until next same-level header)."
+                )
+
+            step_plan = (
+                f"Locale: {locale}\nFormat: {format_type}\nStage: {stage_display}\n"
+                f"Round: {iteration + 1} (REVISION)\n\n"
+                "## REVISION MODE\n"
+                "The current Stage Deliverable and the Critique are in the department documents. "
+                "Your job is to REVISE the existing deliverable, NOT rewrite it.\n\n"
+                "Output your changes as revision JSON:\n"
+                "```json\n"
+                "{\n"
+                '  "revisions": [\n'
+                '    {"type": "replace", "old_text": "exact text from document", '
+                '"new_text": "revised text"},\n'
+                '    {"type": "replace_section", "section": "## Section Header", '
+                '"new_content": "new section content"},\n'
+                '    {"type": "replace_between", "start": "unique start anchor", '
+                '"end": "unique end anchor", "new_content": "new content"}\n'
+                "  ],\n"
+                '  "preserved": "Brief note on what was deliberately kept and why"\n'
+                "}\n"
+                "```\n\n"
+                f"{ops_note}\n\n"
+                "RULES:\n"
+                "- Quote old_text EXACTLY from the existing document — character for character\n"
+                "- Quote enough context for uniqueness (if old_text matches multiple times, the edit fails)\n"
+                "- For replace_section, use the exact markdown header from the document\n"
+                "- For replace_between, quote unique start and end anchor passages\n"
+                "- ONLY change what the Critique flagged. Everything else stays BYTE-IDENTICAL.\n"
+                "- If the Critique praised a section, do NOT touch it.\n\n"
+                "Read the Critique carefully. Address EVERY flagged issue. Preserve EVERYTHING praised.\n\n"
+                f"Your output must be in {locale}."
+            )
+        else:
+            step_plan = (
+                f"Locale: {locale}\nFormat: {format_type}\nStage: {stage_display}\n\n"
+                "Synthesize ALL creative agents' work from this round into a single cohesive "
+                f"'{stage_display}' document. Consult department documents for all creative "
+                "output and prior stage deliverables.\n\n"
+                "CRITICAL: Do NOT invent new elements. Use the story_architect's structure, "
+                "character_designer's ensemble, dialog_writer's voice work, and "
+                "story_researcher's research exactly as provided.\n\n"
+                f"Your output must be in {locale}."
+            )
+
         return {
             "exec_summary": f"Stage '{stage_display}': Lead Writer synthesizes deliverable",
             "tasks": [
@@ -977,16 +1053,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     "target_agent_type": "lead_writer",
                     "command_name": command_name,
                     "exec_summary": f"Write the {stage_display} — synthesize creative team output",
-                    "step_plan": (
-                        f"Locale: {locale}\nFormat: {format_type}\nStage: {stage_display}\n\n"
-                        "Synthesize ALL creative agents' work from this round into a single cohesive "
-                        f"'{stage_display}' document. Consult department documents for all creative "
-                        "output and prior stage deliverables.\n\n"
-                        "CRITICAL: Do NOT invent new elements. Use the story_architect's structure, "
-                        "character_designer's ensemble, dialog_writer's voice work, and "
-                        "story_researcher's research exactly as provided.\n\n"
-                        f"Your output must be in {locale}."
-                    ),
+                    "step_plan": step_plan,
                     "depends_on_previous": False,
                 }
             ],
