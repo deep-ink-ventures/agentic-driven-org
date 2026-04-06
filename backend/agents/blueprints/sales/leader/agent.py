@@ -349,18 +349,42 @@ You don't write pitches or do research directly — you create tasks for your wo
             f"Execute your command based on the above context."
         )
 
+        tasks = [
+            {
+                "target_agent_type": agent_type,
+                "command_name": command_name,
+                "exec_summary": f"Sales pipeline — {step.replace('_', ' ')}",
+                "step_plan": step_plan,
+                "depends_on_previous": False,
+            },
+        ]
+
+        # During QA review, also dispatch authenticity analyst if available
+        if step == "qa_review":
+            active_types = set(
+                agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
+            )
+            if "authenticity_analyst" in active_types:
+                tasks.append(
+                    {
+                        "target_agent_type": "authenticity_analyst",
+                        "command_name": "analyze",
+                        "exec_summary": "Authenticity check — detect AI-generated patterns in pitches",
+                        "step_plan": (
+                            f"## Personalized Pitches to Analyze\n{context_text}\n\n"
+                            f"Analyze the personalized pitch texts for AI-generated patterns. "
+                            f"Focus on: linguistic tells, voice flattening across pitches, "
+                            f"cliche/default patterns, and coherence. Each pitch should read "
+                            f"as genuinely human-written, not template-generated."
+                        ),
+                        "depends_on_previous": False,
+                    }
+                )
+
         return {
             "exec_summary": f"Sales pipeline step: {step.replace('_', ' ')}",
             "_sprint_id": str(sprint.id),
-            "tasks": [
-                {
-                    "target_agent_type": agent_type,
-                    "command_name": command_name,
-                    "exec_summary": f"Sales pipeline — {step.replace('_', ' ')}",
-                    "step_plan": step_plan,
-                    "depends_on_previous": False,
-                },
-            ],
+            "tasks": tasks,
         }
 
     def _propose_dispatch_tasks(self, agent: Agent, sprint, outreach_agents) -> dict:

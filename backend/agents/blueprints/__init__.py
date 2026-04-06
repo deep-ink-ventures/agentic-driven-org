@@ -132,6 +132,10 @@ _sales_imports = {
     "profile_selector": ("agents.blueprints.sales.workforce.profile_selector", "ProfileSelectorBlueprint"),
     "pitch_personalizer": ("agents.blueprints.sales.workforce.pitch_personalizer", "PitchPersonalizerBlueprint"),
     "sales_qa": ("agents.blueprints.sales.workforce.sales_qa", "SalesQaBlueprint"),
+    "authenticity_analyst": (
+        "agents.blueprints.sales.workforce.authenticity_analyst",
+        "AuthenticityAnalystBlueprint",
+    ),
     "email_outreach": ("agents.blueprints.sales.workforce.email_outreach", "EmailOutreachBlueprint"),
 }
 for _slug, (_mod_path, _cls_name) in _sales_imports.items():
