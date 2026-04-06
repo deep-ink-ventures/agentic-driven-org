@@ -473,15 +473,20 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         if not creative_agents:
             logger.warning("Writers Room: no active creative agents for stage '%s' — skipping", stage)
             internal_state = agent.internal_state or {}
+            # Use current_stage (always a STAGES member), not effective stage which may be "concept"
+            real_stage = internal_state.get("current_stage", stage)
             stage_status = internal_state.get("stage_status", {})
-            stage_status[stage] = {"status": "passed", "iterations": 0}
+            stage_status[real_stage] = {"status": "passed", "iterations": 0}
             internal_state["stage_status"] = stage_status
-            next_stg = _next_stage(stage)
+            next_stg = _next_stage(real_stage)
             if next_stg:
                 internal_state["current_stage"] = next_stg
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
-            return self._propose_creative_tasks(agent, next_stg, config) if next_stg else None
+            if next_stg:
+                next_effective = self._get_effective_stage(agent, next_stg)
+                return self._propose_creative_tasks(agent, next_effective, config)
+            return None
 
         locale = config.get("locale", "en")
         target_format = config.get("target_format", "")
@@ -868,7 +873,9 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     def _create_stage_documents(self, agent, stage, version, doc_types, contents, sprint=None):
         """Create stage documents, archiving prior versions if they exist."""
-        stage_display = stage.replace("_", " ").title()
+        # Use effective stage for display (series "treatment" → "Concept")
+        effective = self._get_effective_stage(agent, stage)
+        stage_display = effective.replace("_", " ").title()
         label_map = {
             "stage_deliverable": "Deliverable",
             "stage_research": "Research & Notes",

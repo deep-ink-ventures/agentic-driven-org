@@ -289,3 +289,39 @@ class TestDocumentCreation:
         mock_leader_agent.internal_state = {"format_type": "standalone"}
         mock_leader_agent.save(update_fields=["internal_state"])
         assert leader_blueprint._get_effective_stage(mock_leader_agent, "treatment") == "treatment"
+
+    @pytest.mark.django_db
+    def test_series_documents_titled_concept_not_treatment(self, leader_blueprint, mock_leader_agent):
+        """For series, documents at the treatment stage position should be titled 'Concept', not 'Treatment'."""
+        mock_leader_agent.internal_state = {"format_type": "series", "stage_status": {"treatment": {"iterations": 0}}}
+        mock_leader_agent.save(update_fields=["internal_state"])
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="treatment",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "The series concept"},
+        )
+        doc = Document.objects.filter(department=mock_leader_agent.department, doc_type="stage_deliverable").first()
+        assert doc is not None
+        assert "Concept" in doc.title
+        assert "Treatment" not in doc.title
+
+    @pytest.mark.django_db
+    def test_standalone_documents_titled_treatment(self, leader_blueprint, mock_leader_agent):
+        """For standalone, documents at the treatment stage should be titled 'Treatment'."""
+        mock_leader_agent.internal_state = {
+            "format_type": "standalone",
+            "stage_status": {"treatment": {"iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="treatment",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "The treatment"},
+        )
+        doc = Document.objects.filter(department=mock_leader_agent.department, doc_type="stage_deliverable").first()
+        assert doc is not None
+        assert "Treatment" in doc.title
