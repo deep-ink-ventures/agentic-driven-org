@@ -438,3 +438,38 @@ class TestApplyRevisions:
         assert "New main content." in result
         assert "Sub content A." not in result
         assert "Other content." in result
+
+
+class TestStructureRequirements:
+    def test_craft_directives_have_structure_info(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        for key, directive in CRAFT_DIRECTIVES.items():
+            assert "## Document Structure" in directive, f"{key} missing structure requirements"
+
+    def test_pitch_no_mandatory_sections(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        d = CRAFT_DIRECTIVES["write_pitch"].lower()
+        assert "flowing prose" in d or "no mandatory sections" in d
+
+    def test_expose_requires_sections(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "##" in CRAFT_DIRECTIVES["write_expose"]
+        assert "Premise" in CRAFT_DIRECTIVES["write_expose"]
+
+    def test_concept_requires_sections(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        directive = CRAFT_DIRECTIVES["write_concept"]
+        assert "Story Engine" in directive
+        assert "Characters" in directive
+        assert "Episode" in directive
+
+    def test_first_draft_mentions_screenplay_format(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        directive = CRAFT_DIRECTIVES["write_first_draft"]
+        assert "SCREENPLAY" in directive or "screenplay" in directive
+        assert "slugline" in directive.lower() or "INT." in directive
