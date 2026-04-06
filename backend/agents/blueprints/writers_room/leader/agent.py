@@ -192,6 +192,98 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             .first()
         )
 
+    # ── Revision application ───────────────────────────────────────────
+
+    def _apply_revisions(self, document_content: str, revisions: list[dict]) -> tuple[str, list[dict]]:
+        """Apply structured edits to a document.
+
+        Returns (revised_content, failed_edits).
+        Failed edits are skipped — the quality loop handles retry.
+        """
+        result = document_content
+        failed = []
+
+        for rev in revisions:
+            rev_type = rev.get("type", "replace")
+
+            if rev_type == "replace":
+                old = rev.get("old_text", "")
+                new = rev.get("new_text", "")
+                if not old:
+                    continue
+                count = result.count(old)
+                if count == 1:
+                    result = result.replace(old, new, 1)
+                elif count == 0:
+                    failed.append({"text": old[:80], "reason": "not_found"})
+                else:
+                    failed.append({"text": old[:80], "reason": f"ambiguous ({count} matches)"})
+
+            elif rev_type == "replace_section":
+                header = rev.get("section", "")
+                new_content = rev.get("new_content", "")
+                result, ok = self._replace_section(result, header, new_content)
+                if not ok:
+                    failed.append({"text": header, "reason": "section_not_found"})
+
+            elif rev_type == "replace_between":
+                start = rev.get("start", "")
+                end = rev.get("end", "")
+                new_content = rev.get("new_content", "")
+                result, ok = self._replace_between(result, start, end, new_content)
+                if not ok:
+                    failed.append({"text": f"{start[:40]}...{end[:40]}", "reason": "anchors_not_found"})
+
+        return result, failed
+
+    @staticmethod
+    def _replace_section(content: str, header: str, new_content: str) -> tuple[str, bool]:
+        """Replace content under a markdown header until the next same-level header."""
+        if header not in content:
+            return content, False
+
+        level = len(header) - len(header.lstrip("#"))
+        if level == 0:
+            return content, False
+
+        start_idx = content.index(header)
+        after_header = start_idx + len(header)
+
+        # Find next header of same or higher level
+        end_offset = len(content)
+        remaining = content[after_header:]
+        search_pos = 0
+        for line in remaining.split("\n"):
+            line_start = after_header + search_pos
+            stripped = line.lstrip()
+            if stripped.startswith("#") and search_pos > 0:
+                line_level = len(stripped) - len(stripped.lstrip("#"))
+                if line_level <= level and line_level > 0:
+                    end_offset = line_start
+                    break
+            search_pos += len(line) + 1
+
+        result = content[:start_idx] + header + "\n\n" + new_content + "\n\n" + content[end_offset:]
+        return result, True
+
+    @staticmethod
+    def _replace_between(content: str, start: str, end: str, new_content: str) -> tuple[str, bool]:
+        """Replace everything between two anchor texts (inclusive)."""
+        if not start or not end:
+            return content, False
+        if content.count(start) != 1 or content.count(end) != 1:
+            return content, False
+
+        start_idx = content.index(start)
+        end_idx = content.index(end, start_idx)
+        end_idx += len(end)
+
+        if start_idx >= end_idx:
+            return content, False
+
+        result = content[:start_idx] + new_content + content[end_idx:]
+        return result, True
+
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 
     def generate_task_proposal(self, agent: Agent) -> dict | None:

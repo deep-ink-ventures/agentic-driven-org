@@ -334,3 +334,107 @@ class TestDocumentLocking:
     def test_is_locked_defaults_to_false(self):
         field = Document._meta.get_field("is_locked")
         assert field.default is False
+
+
+class TestApplyRevisions:
+    @pytest.fixture
+    def blueprint(self):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        return WritersRoomLeaderBlueprint()
+
+    def test_replace_single_match(self, blueprint):
+        content = "The cat sat on the mat. The dog ran in the park."
+        revisions = [{"type": "replace", "old_text": "sat on the mat", "new_text": "slept on the rug"}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert "slept on the rug" in result
+        assert "sat on the mat" not in result
+        assert len(failed) == 0
+
+    def test_replace_not_found(self, blueprint):
+        content = "The cat sat on the mat."
+        revisions = [{"type": "replace", "old_text": "the dog barked", "new_text": "the dog whispered"}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert result == content
+        assert len(failed) == 1
+        assert failed[0]["reason"] == "not_found"
+
+    def test_replace_ambiguous(self, blueprint):
+        content = "The cat sat. The cat sat. The dog ran."
+        revisions = [{"type": "replace", "old_text": "The cat sat.", "new_text": "The cat slept."}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert result == content
+        assert len(failed) == 1
+        assert "ambiguous" in failed[0]["reason"]
+
+    def test_replace_section_basic(self, blueprint):
+        content = "# Title\n\nIntro.\n\n## Section A\n\nOld content A.\n\n## Section B\n\nContent B."
+        revisions = [{"type": "replace_section", "section": "## Section A", "new_content": "New content A."}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert "New content A." in result
+        assert "Old content A." not in result
+        assert "Content B." in result
+        assert len(failed) == 0
+
+    def test_replace_section_not_found(self, blueprint):
+        content = "## Section A\n\nContent."
+        revisions = [{"type": "replace_section", "section": "## Section Z", "new_content": "New."}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert result == content
+        assert len(failed) == 1
+        assert failed[0]["reason"] == "section_not_found"
+
+    def test_replace_section_last_section(self, blueprint):
+        content = "## Section A\n\nContent A.\n\n## Section B\n\nOld content B."
+        revisions = [{"type": "replace_section", "section": "## Section B", "new_content": "New content B."}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert "New content B." in result
+        assert "Old content B." not in result
+        assert "Content A." in result
+
+    def test_replace_between_basic(self, blueprint):
+        content = "Opening.\n\nStart marker text.\n\nMiddle content to replace.\n\nEnd marker text.\n\nClosing."
+        revisions = [
+            {
+                "type": "replace_between",
+                "start": "Start marker text.",
+                "end": "End marker text.",
+                "new_content": "Completely new middle.",
+            }
+        ]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert "Completely new middle." in result
+        assert "Middle content to replace." not in result
+        assert "Opening." in result
+        assert "Closing." in result
+        assert len(failed) == 0
+
+    def test_replace_between_anchors_not_found(self, blueprint):
+        content = "Some content."
+        revisions = [
+            {"type": "replace_between", "start": "nonexistent start", "end": "nonexistent end", "new_content": "new"}
+        ]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert result == content
+        assert len(failed) == 1
+        assert failed[0]["reason"] == "anchors_not_found"
+
+    def test_multiple_revisions_applied_sequentially(self, blueprint):
+        content = "Alice went home. Bob went to work. Carol stayed."
+        revisions = [
+            {"type": "replace", "old_text": "Alice went home.", "new_text": "Alice ran home."},
+            {"type": "replace", "old_text": "Bob went to work.", "new_text": "Bob drove to work."},
+        ]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert "Alice ran home." in result
+        assert "Bob drove to work." in result
+        assert "Carol stayed." in result
+        assert len(failed) == 0
+
+    def test_replace_section_respects_header_level(self, blueprint):
+        content = "## Main\n\nIntro.\n\n### Sub A\n\nSub content A.\n\n### Sub B\n\nSub content B.\n\n## Other\n\nOther content."
+        revisions = [{"type": "replace_section", "section": "## Main", "new_content": "New main content."}]
+        result, failed = blueprint._apply_revisions(content, revisions)
+        assert "New main content." in result
+        assert "Sub content A." not in result
+        assert "Other content." in result
