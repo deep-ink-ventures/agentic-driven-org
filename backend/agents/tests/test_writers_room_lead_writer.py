@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agents.blueprints import get_blueprint
-from projects.models import Document
+from projects.models import Document, Output
 
 
 class TestStageDocTypes:
@@ -658,3 +658,64 @@ class TestRevisionInstructions:
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION ROUND" in step_plan
         assert "Critique" in step_plan
+
+
+class TestSprintOutput:
+    @pytest.fixture
+    def leader_blueprint(self):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        return WritersRoomLeaderBlueprint()
+
+    @pytest.fixture
+    def sprint_setup(self, db):
+        from django.contrib.auth import get_user_model
+
+        from agents.models import Agent
+        from projects.models import Department, Project, Sprint
+
+        User = get_user_model()
+        user = User.objects.create_user(email="sprint-output@test.com", password="test")
+        project = Project.objects.create(name="OutputTest", goal="Test", owner=user)
+        dept = Department.objects.create(project=project, department_type="writers_room")
+        leader = Agent.objects.create(
+            department=dept,
+            name="Showrunner",
+            agent_type="leader",
+            is_leader=True,
+            status="active",
+            internal_state={"format_type": "standalone"},
+        )
+        sprint = Sprint.objects.create(project=project, text="Write a pitch", created_by=user)
+        sprint.departments.add(dept)
+        return leader, sprint
+
+    @pytest.mark.django_db
+    def test_update_sprint_output_creates_output(self, leader_blueprint, sprint_setup):
+        leader, sprint = sprint_setup
+        leader_blueprint._update_sprint_output(leader, sprint, "pitch", "The pitch content")
+        output = Output.objects.filter(sprint=sprint, department=leader.department).first()
+        assert output is not None
+        assert output.title == "Pitch"
+        assert output.label == "pitch"
+        assert output.output_type == "markdown"
+        assert output.content == "The pitch content"
+
+    @pytest.mark.django_db
+    def test_update_sprint_output_updates_in_place(self, leader_blueprint, sprint_setup):
+        leader, sprint = sprint_setup
+        leader_blueprint._update_sprint_output(leader, sprint, "pitch", "v1")
+        leader_blueprint._update_sprint_output(leader, sprint, "pitch", "v2")
+        assert Output.objects.filter(sprint=sprint, department=leader.department).count() == 1
+        output = Output.objects.get(sprint=sprint, department=leader.department)
+        assert output.content == "v2"
+
+    @pytest.mark.django_db
+    def test_series_output_titled_concept(self, leader_blueprint, sprint_setup):
+        leader, sprint = sprint_setup
+        leader.internal_state = {"format_type": "series"}
+        leader.save(update_fields=["internal_state"])
+        leader_blueprint._update_sprint_output(leader, sprint, "treatment", "Series concept")
+        output = Output.objects.get(sprint=sprint, department=leader.department)
+        assert output.title == "Concept"
+        assert output.label == "concept"
