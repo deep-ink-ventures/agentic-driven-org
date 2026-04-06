@@ -59,6 +59,10 @@ class Document(models.Model):
         related_name="documents",
     )
     is_archived = models.BooleanField(default=False)
+    is_locked = models.BooleanField(
+        default=False,
+        help_text="Locked documents are protected from consolidation and archiving by automated processes.",
+    )
     tags = models.ManyToManyField("projects.Tag", blank=True, related_name="documents")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -325,3 +325,12 @@ class TestDocumentCreation:
         doc = Document.objects.filter(department=mock_leader_agent.department, doc_type="stage_deliverable").first()
         assert doc is not None
         assert "Treatment" in doc.title
+
+
+class TestDocumentLocking:
+    def test_document_has_is_locked_field(self):
+        assert hasattr(Document, "is_locked")
+
+    def test_is_locked_defaults_to_false(self):
+        field = Document._meta.get_field("is_locked")
+        assert field.default is False

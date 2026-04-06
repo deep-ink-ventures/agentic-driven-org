@@ -94,6 +94,7 @@ def consolidate_sprint_documents(sprint_id):
                 department=department,
                 sprint=sprint,
                 is_archived=False,
+                is_locked=False,
             )
             .exclude(document_type="sprint_summary")
             .order_by("created_at")
@@ -127,6 +128,7 @@ def consolidate_monthly_documents():
     departments_with_old_docs = (
         Document.objects.filter(
             is_archived=False,
+            is_locked=False,
             created_at__lt=cutoff,
         )
         .values_list("department_id", flat=True)
@@ -139,6 +141,7 @@ def consolidate_monthly_documents():
             Document.objects.filter(
                 department=department,
                 is_archived=False,
+                is_locked=False,
                 created_at__lt=cutoff,
             ).order_by("created_at")
         )
@@ -163,7 +166,7 @@ def consolidate_department_documents(department_id):
 
     department = Department.objects.get(id=department_id)
 
-    active_docs = Document.objects.filter(department=department, is_archived=False)
+    active_docs = Document.objects.filter(department=department, is_archived=False, is_locked=False)
     total_chars = active_docs.aggregate(total=Sum(Length("content")))["total"] or 0
 
     if total_chars < VOLUME_THRESHOLD_CHARS:
