@@ -284,6 +284,38 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         result = content[:start_idx] + new_content + content[end_idx:]
         return result, True
 
+    def _apply_revision_or_replace(self, agent, doc_type: str, new_content: str, stage: str) -> tuple[str, bool]:
+        """Try to parse new_content as revision JSON and apply to existing doc.
+
+        Returns (final_content, was_revision_applied).
+        If new_content is not valid revision JSON, returns it as-is for full replacement.
+        """
+        try:
+            data = json.loads(new_content)
+            if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
+                effective = self._get_effective_stage(agent, stage)
+                stage_display = effective.replace("_", " ").title()
+                existing_doc = Document.objects.filter(
+                    department=agent.department,
+                    doc_type=doc_type,
+                    is_archived=False,
+                    title__startswith=f"{stage_display} v",
+                ).first()
+                if existing_doc and existing_doc.content:
+                    revised, failed = self._apply_revisions(existing_doc.content, data["revisions"])
+                    if failed:
+                        logger.warning(
+                            "Writers Room: %d revision(s) failed for %s: %s",
+                            len(failed),
+                            doc_type,
+                            failed,
+                        )
+                    return revised, True
+        except (ValueError, TypeError, KeyError):
+            pass
+
+        return new_content, False
+
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 
     def generate_task_proposal(self, agent: Agent) -> dict | None:
@@ -995,19 +1027,22 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 title=title,
                 content=content,
                 sprint=sprint,
+                is_locked=True,
             )
 
             if existing:
+                existing.is_locked = False
                 existing.is_archived = True
                 existing.consolidated_into = new_doc
-                existing.save(update_fields=["is_archived", "consolidated_into", "updated_at"])
+                existing.save(update_fields=["is_locked", "is_archived", "consolidated_into", "updated_at"])
 
     def _create_deliverable_and_research_docs(self, agent, stage, sprint=None):
         """Create Deliverable and Research & Notes documents."""
         from agents.models import AgentTask
 
         internal_state = agent.internal_state or {}
-        version = internal_state.get("stage_status", {}).get(stage, {}).get("iterations", 0) + 1
+        iteration = internal_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
+        version = iteration + 1
 
         lead_writer_task = (
             AgentTask.objects.filter(
@@ -1018,7 +1053,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             .order_by("-completed_at")
             .first()
         )
-        deliverable_content = lead_writer_task.report if lead_writer_task else ""
+        raw_deliverable = lead_writer_task.report if lead_writer_task else ""
 
         effective_stage = self._get_effective_stage(agent, stage)
         creative_types = CREATIVE_MATRIX.get(effective_stage, [])
@@ -1036,6 +1071,20 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             if report:
                 research_parts.append(f"## {agent_name} ({agent_type})\n\n{report}")
         research_content = "\n\n---\n\n".join(research_parts)
+
+        # Deliverable: apply revisions if iteration > 0
+        if raw_deliverable and iteration > 0:
+            deliverable_content, was_revision = self._apply_revision_or_replace(
+                agent, "stage_deliverable", raw_deliverable, stage
+            )
+            if was_revision:
+                logger.info(
+                    "Writers Room: applied revision to stage deliverable for '%s' v%d",
+                    stage,
+                    version,
+                )
+        else:
+            deliverable_content = raw_deliverable
 
         contents = {}
         if deliverable_content:

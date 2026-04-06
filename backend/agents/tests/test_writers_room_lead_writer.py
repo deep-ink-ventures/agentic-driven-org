@@ -473,3 +473,111 @@ class TestStructureRequirements:
         directive = CRAFT_DIRECTIVES["write_first_draft"]
         assert "SCREENPLAY" in directive or "screenplay" in directive
         assert "slugline" in directive.lower() or "INT." in directive
+
+
+class TestRevisionAwareDocCreation:
+    @pytest.fixture
+    def leader_blueprint(self):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        return WritersRoomLeaderBlueprint()
+
+    @pytest.fixture
+    def mock_leader_agent(self, db):
+        from django.contrib.auth import get_user_model
+
+        from agents.models import Agent
+        from projects.models import Department, Project
+
+        User = get_user_model()
+        user = User.objects.create_user(email="rev-test@example.com", password="pass1234")
+        project = Project.objects.create(name="RevTest", goal="Test story", owner=user)
+        dept = Department.objects.create(project=project, department_type="writers_room")
+        return Agent.objects.create(
+            department=dept,
+            name="Showrunner",
+            agent_type="leader",
+            is_leader=True,
+            status="active",
+            internal_state={},
+        )
+
+    @pytest.mark.django_db
+    def test_new_documents_are_locked(self, leader_blueprint, mock_leader_agent):
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "The pitch"},
+        )
+        doc = Document.objects.filter(department=mock_leader_agent.department, doc_type="stage_deliverable").first()
+        assert doc.is_locked is True
+
+    @pytest.mark.django_db
+    def test_archived_documents_are_unlocked(self, leader_blueprint, mock_leader_agent):
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "v1"},
+        )
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=2,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "v2"},
+        )
+        archived = Document.objects.filter(
+            department=mock_leader_agent.department, doc_type="stage_deliverable", is_archived=True
+        ).first()
+        assert archived.is_locked is False
+
+    @pytest.mark.django_db
+    def test_revision_json_applied_to_existing_doc(self, leader_blueprint, mock_leader_agent):
+        import json
+
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "The old pitch content. This part stays."},
+        )
+        revision_json = json.dumps(
+            {
+                "revisions": [
+                    {"type": "replace", "old_text": "The old pitch content.", "new_text": "The new pitch content."}
+                ],
+                "preserved": "Kept: This part stays.",
+            }
+        )
+        revised, applied = leader_blueprint._apply_revision_or_replace(
+            agent=mock_leader_agent,
+            doc_type="stage_deliverable",
+            new_content=revision_json,
+            stage="pitch",
+        )
+        assert "The new pitch content." in revised
+        assert "This part stays." in revised
+        assert applied is True
+
+    @pytest.mark.django_db
+    def test_prose_fallback_when_not_json(self, leader_blueprint, mock_leader_agent):
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "Old content."},
+        )
+        revised, applied = leader_blueprint._apply_revision_or_replace(
+            agent=mock_leader_agent,
+            doc_type="stage_deliverable",
+            new_content="Completely new prose content.",
+            stage="pitch",
+        )
+        assert revised == "Completely new prose content."
+        assert applied is False
