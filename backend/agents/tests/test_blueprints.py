@@ -478,7 +478,7 @@ class TestWorkforceDefaultExecuteTask:
             "agents.ai.claude_client.call_claude",
             return_value=("Test response from Claude", {"input_tokens": 10, "output_tokens": 20}),
         ) as mock_call:
-            bp = get_blueprint("prospector", "sales")
+            bp = get_blueprint("researcher", "sales")
             task = AgentTask.objects.create(
                 agent=twitter_agent,
                 status=AgentTask.Status.PROCESSING,
@@ -501,17 +501,17 @@ class TestWorkforceDefaultExecuteTask:
             "agents.ai.claude_client.call_claude",
             return_value=("OK", {}),
         ) as mock_call:
-            bp = get_blueprint("outreach_writer", "sales")
+            bp = get_blueprint("strategist", "sales")
             task = AgentTask.objects.create(
                 agent=twitter_agent,
                 status=AgentTask.Status.PROCESSING,
-                exec_summary="Draft outreach",
+                exec_summary="Draft strategy",
             )
 
             bp.execute_task(twitter_agent, task)
 
             user_message = mock_call.call_args.kwargs.get("user_message", "")
-            assert "OUTREACH METHODOLOGY" in user_message
+            assert "STRATEGY METHODOLOGY" in user_message
 
     def test_get_max_tokens_passed_to_claude(self, twitter_agent):
         """Agents with get_max_tokens have it passed to call_claude."""
@@ -540,7 +540,7 @@ class TestWorkforceDefaultExecuteTask:
             "agents.ai.claude_client.call_claude",
             return_value=("OK", {}),
         ) as mock_call:
-            bp = get_blueprint("prospector", "sales")
+            bp = get_blueprint("researcher", "sales")
             task = AgentTask.objects.create(
                 agent=twitter_agent,
                 status=AgentTask.Status.PROCESSING,
@@ -559,16 +559,16 @@ class TestWorkforceDefaultExecuteTask:
         assert bp.get_task_suffix(None, None) == ""
 
     def test_agents_without_override_use_default(self):
-        """Agents that removed execute_task should NOT have it on their class."""
-        from agents.blueprints.sales.workforce.outreach_writer.agent import OutreachWriterBlueprint
-        from agents.blueprints.sales.workforce.prospector.agent import ProspectorBlueprint
+        """Agents that don't override execute_task should NOT have it on their class."""
+        from agents.blueprints.sales.workforce.researcher.agent import ResearcherBlueprint
+        from agents.blueprints.sales.workforce.strategist.agent import StrategistBlueprint
 
         # These classes should NOT define execute_task — they inherit from WorkforceBlueprint
-        assert "execute_task" not in OutreachWriterBlueprint.__dict__
-        assert "execute_task" not in ProspectorBlueprint.__dict__
+        assert "execute_task" not in ResearcherBlueprint.__dict__
+        assert "execute_task" not in StrategistBlueprint.__dict__
         # But they should define get_task_suffix
-        assert "get_task_suffix" in OutreachWriterBlueprint.__dict__
-        assert "get_task_suffix" in ProspectorBlueprint.__dict__
+        assert "get_task_suffix" in ResearcherBlueprint.__dict__
+        assert "get_task_suffix" in StrategistBlueprint.__dict__
 
     def test_agents_with_integrations_still_override(self):
         """Agents with external integrations keep their custom execute_task."""
@@ -596,7 +596,13 @@ class TestReviewDimensions:
         from agents.blueprints import get_blueprint
 
         cases = {
-            ("outreach_reviewer", "sales"): ["personalization", "value_proposition", "tone", "cta", "length"],
+            ("sales_qa", "sales"): [
+                "research_accuracy",
+                "strategy_quality",
+                "storyline_effectiveness",
+                "profile_accuracy",
+                "pitch_personalization",
+            ],
             ("partnership_reviewer", "community"): ["mutual_value", "specificity", "tone", "structure", "next_steps"],
             ("content_reviewer", "marketing"): [
                 "brand_alignment",
@@ -773,7 +779,7 @@ class TestVerdictToolInjection:
             "agents.ai.claude_client.call_claude",
             return_value=("Here are some leads!", {"input_tokens": 50, "output_tokens": 100}),
         ) as mock_call:
-            bp = get_blueprint("prospector", "sales")
+            bp = get_blueprint("researcher", "sales")
             result = bp.execute_task(twitter_agent, task)
 
             assert mock_call.called
