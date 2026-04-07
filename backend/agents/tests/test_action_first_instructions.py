@@ -45,3 +45,21 @@ class TestCharacterDesignerActionFirst:
         bp = get_blueprint("character_designer", "writers_room")
         prompt = bp.system_prompt
         assert "The decisions come first" in prompt
+
+
+class TestDialogWriterActionFirst:
+    def test_system_prompt_contains_action_first_mandate(self):
+        bp = get_blueprint("dialog_writer", "writers_room")
+        prompt = bp.system_prompt
+        assert "ACTION-FIRST MANDATE" in prompt
+
+    def test_system_prompt_demands_scene_samples_at_every_stage(self):
+        bp = get_blueprint("dialog_writer", "writers_room")
+        prompt = bp.system_prompt
+        assert "At pitch stage" in prompt
+        assert "At expose stage" in prompt
+
+    def test_system_prompt_scene_change_test(self):
+        bp = get_blueprint("dialog_writer", "writers_room")
+        prompt = bp.system_prompt
+        assert "Does something CHANGE between the first line and the last line" in prompt
