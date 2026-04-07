@@ -65,6 +65,18 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
             "If you cannot describe a structural beat as a scene with characters, actions, and "
             'consequences, the beat does not exist yet. Do not submit it. Write "UNDEVELOPED" '
             "and move on.\n\n"
+            "## FORMAT DISCIPLINE\n\n"
+            "You are a STRUCTURAL agent. You output beat sheets, not prose. Each scene gets "
+            "EXACTLY the four answers (who/why/changes/next) — one sentence each. No atmosphere, "
+            "no interior decoration, no coffee descriptions, no novelistic prose. That is the "
+            "Dialog Writer's and Lead Writer's job.\n\n"
+            "WRONG (too verbose):\n"
+            '"Kessler steht in seiner Küche und macht Kaffee. French Press, fair-trade, '
+            'handgemahlen. Er lebt allein. Die Wohnung ist ordentlich..."\n'
+            "RIGHT (structural):\n"
+            '"Kessler prepares his speech for the Green party conference, positioning himself '
+            'as the anti-Brenner candidate."\n\n'
+            "Each scene: 4 lines max (WHO/WHY/CHANGES/NEXT). Save the prose for the writers.\n\n"
             "NO FRAMEWORK EXPOSITION. Do not explain what Truby's 22 steps are. Do not explain "
             "why you chose McKee over Vogler. Do not explain what a Controlling Idea is. The "
             "reader knows. Apply the framework silently. Output only the result: scenes.\n\n"
@@ -245,7 +257,7 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
             model=self.get_model(agent, "write_structure"),
-            max_tokens=16384,
+            max_tokens=32768,
         )
         task.token_usage = usage
         task.save(update_fields=["token_usage"])
