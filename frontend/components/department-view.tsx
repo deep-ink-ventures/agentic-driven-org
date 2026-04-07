@@ -15,14 +15,16 @@ export function DepartmentView({
   deptStatus,
   onSelectAgent,
   onRefresh,
-  taskWsEvent,
+  wsEventQueue,
+  wsEventTick,
 }: {
   dept: DepartmentDetail;
   projectId: string;
   deptStatus?: "working" | "setup" | "provisioning" | "ready" | "idle";
   onSelectAgent: (a: AgentSummary) => void;
   onRefresh: () => void;
-  taskWsEvent?: { type: string; task: import("@/lib/types").AgentTask } | null;
+  wsEventQueue?: Array<{ type: string; task: import("@/lib/types").AgentTask }>;
+  wsEventTick?: number;
 }) {
   const leader = dept.agents.find((a) => a.is_leader);
   const workforce = dept.agents.filter((a) => !a.is_leader);
@@ -52,6 +54,7 @@ export function DepartmentView({
   }, []);
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>([]);
   const [provisioning, setProvisioning] = useState<Set<string>>(new Set());
+  const [togglingAgents, setTogglingAgents] = useState<Set<string>>(new Set());
   const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
   const [configSaving, setConfigSaving] = useState(false);
   const [deptSprints, setDeptSprints] = useState<import("@/lib/types").Sprint[]>([]);
@@ -66,15 +69,51 @@ export function DepartmentView({
   }
 
   async function toggleAutoApprove(agent: AgentSummary) {
-    await api.updateAgent(agent.id, { auto_approve: !agent.auto_approve });
-    onRefresh();
+    setTogglingAgents((prev) => new Set(prev).add(agent.id));
+    try {
+      const cmds = agent.enabled_commands || {};
+      const allEnabled = Object.keys(cmds).length > 0 && Object.values(cmds).every(Boolean);
+      if (allEnabled) {
+        await api.updateAgent(agent.id, { enabled_commands: {} });
+      } else {
+        const bp = await api.getAgentBlueprint(agent.id);
+        const dict: Record<string, boolean> = {};
+        for (const cmd of bp.commands) {
+          dict[cmd.name] = true;
+        }
+        await api.updateAgent(agent.id, { enabled_commands: dict });
+      }
+      onRefresh();
+    } finally {
+      setTogglingAgents((prev) => {
+        const next = new Set(prev);
+        next.delete(agent.id);
+        return next;
+      });
+    }
   }
 
   async function toggleAllAutoApprove() {
     if (activeAgents.length === 0) return;
     const newValue = !deptAllApproved;
-    await Promise.all(activeAgents.map((a) => api.updateAgent(a.id, { auto_approve: newValue })));
-    onRefresh();
+    setTogglingAgents(new Set(activeAgents.map((a) => a.id)));
+    try {
+      await Promise.all(activeAgents.map(async (a) => {
+        if (newValue) {
+          const bp = await api.getAgentBlueprint(a.id);
+          const dict: Record<string, boolean> = {};
+          for (const cmd of bp.commands) {
+            dict[cmd.name] = true;
+          }
+          await api.updateAgent(a.id, { enabled_commands: dict });
+        } else {
+          await api.updateAgent(a.id, { enabled_commands: {} });
+        }
+      }));
+      onRefresh();
+    } finally {
+      setTogglingAgents(new Set());
+    }
   }
 
   // Sync config draft when department changes or settings tab opens
@@ -156,7 +195,10 @@ export function DepartmentView({
   }
 
   const activeAgents = [...(leader ? [leader] : []), ...workforce].filter((a) => a.status === "active" || a.status === "inactive");
-  const deptAllApproved = activeAgents.length > 0 && activeAgents.every((a) => a.auto_approve);
+  const deptAllApproved = activeAgents.length > 0 && activeAgents.every((a) => {
+    const cmds = a.enabled_commands || {};
+    return Object.keys(cmds).length > 0 && Object.values(cmds).every(Boolean);
+  });
 
   return (
     <>
@@ -248,6 +290,7 @@ export function DepartmentView({
                 onClick={() => onSelectAgent(leader)}
                 onToggle={() => toggleAgent(leader)}
                 onToggleAutoApprove={() => toggleAutoApprove(leader)}
+                toggling={togglingAgents.has(leader.id)}
               />
             </div>
           )}
@@ -266,6 +309,7 @@ export function DepartmentView({
                   onClick={() => agent.status !== "provisioning" && onSelectAgent(agent)}
                   onToggle={() => toggleAgent(agent)}
                   onToggleAutoApprove={() => toggleAutoApprove(agent)}
+                  toggling={togglingAgents.has(agent.id)}
                 />
               </div>
             ))}
@@ -322,7 +366,8 @@ export function DepartmentView({
         <TaskQueue
           projectId={projectId}
           department={dept.id}
-          wsEvent={taskWsEvent}
+          wsEventQueue={wsEventQueue}
+          wsEventTick={wsEventTick}
           departments={[dept]}
         />
       )}

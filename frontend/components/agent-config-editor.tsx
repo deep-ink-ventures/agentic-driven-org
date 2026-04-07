@@ -17,9 +17,25 @@ export function AgentConfigEditor({
   onSaved: () => void;
 }) {
   const [config, setConfig] = useState(agent.config);
-  const [autoApprove, setAutoApprove] = useState(agent.auto_approve);
+  const [enabledCommands, setEnabledCommands] = useState<Record<string, boolean>>(agent.enabled_commands || {});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const allEnabled = blueprint.commands.length > 0
+    && blueprint.commands.every((cmd: { name: string }) => enabledCommands[cmd.name]);
+
+  function toggleCommand(name: string) {
+    setEnabledCommands((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
+
+  function toggleAllCommands() {
+    const newValue = !allEnabled;
+    const updated: Record<string, boolean> = {};
+    for (const cmd of blueprint.commands) {
+      updated[cmd.name] = newValue;
+    }
+    setEnabledCommands(updated);
+  }
 
   const schema = blueprint.config_schema as {
     required?: string[];
@@ -37,7 +53,7 @@ export function AgentConfigEditor({
     try {
       await api.updateAgent(agent.id, {
         config,
-        auto_approve: autoApprove,
+        enabled_commands: enabledCommands,
       });
       onSaved();
       setSaved(true);
@@ -87,24 +103,37 @@ export function AgentConfigEditor({
         </button>
       </div>
 
-      {/* Auto-approve all toggle */}
-      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-bg-surface">
-        <div>
-          <p className="text-sm font-medium text-text-primary">Auto-approve tasks</p>
-          <p className="text-xs text-text-secondary mt-0.5">
-            {autoApprove ? "All tasks execute without manual approval" : "Tasks require manual approval before execution"}
-          </p>
+      {/* Per-command auto-approve */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs uppercase text-text-secondary font-medium">
+            Command Approval
+          </h3>
+          <button
+            onClick={toggleAllCommands}
+            disabled={saving}
+            className={`text-[10px] transition-colors ${saving ? "animate-pulse opacity-50" : "hover:text-accent-violet"} ${allEnabled ? "text-accent-violet" : "text-text-secondary"}`}
+          >
+            {allEnabled ? "Revoke all" : "Auto-approve all"}
+          </button>
         </div>
-        <button
-          onClick={() => setAutoApprove(!autoApprove)}
-          className={`transition-colors ${autoApprove ? "text-accent-violet" : "text-text-secondary hover:text-accent-violet"}`}
-        >
-          {autoApprove ? (
-            <ToggleRight className="h-8 w-8" />
-          ) : (
-            <ToggleLeft className="h-8 w-8" />
-          )}
-        </button>
+        <div className="space-y-2">
+          {blueprint.commands.map((cmd: { name: string; description: string }) => (
+            <div key={cmd.name} className="flex items-center justify-between p-3 rounded-lg border border-border bg-bg-surface">
+              <div>
+                <p className="text-sm font-medium text-text-primary">{cmd.name}</p>
+                <p className="text-xs text-text-secondary mt-0.5">{cmd.description}</p>
+              </div>
+              <button
+                onClick={() => toggleCommand(cmd.name)}
+                disabled={saving}
+                className={`transition-colors ${saving ? "animate-pulse opacity-50" : ""} ${enabledCommands[cmd.name] ? "text-accent-violet" : "text-text-secondary hover:text-accent-violet"}`}
+              >
+                {enabledCommands[cmd.name] ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Config fields */}

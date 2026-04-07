@@ -171,7 +171,7 @@ export const api = {
     data: {
       instructions?: string;
       config?: Record<string, unknown>;
-      auto_approve?: boolean;
+      enabled_commands?: Record<string, boolean>;
       status?: string;
     },
   ) => request<unknown>(`/api/agents/${agentId}/`, { method: "PATCH", body: JSON.stringify(data) }),

@@ -60,7 +60,7 @@ export interface AgentSummary {
   status: "provisioning" | "active" | "inactive" | "failed";
   instructions: string;
   config: Record<string, unknown>;
-  auto_approve: boolean;
+  enabled_commands: Record<string, boolean>;
   pending_task_count: number;
   effective_config: Record<string, unknown>;
   config_source: Record<string, string>;
@@ -128,6 +128,7 @@ export interface Sprint {
 export interface AgentTask {
   id: string;
   agent: string;
+  department: string;
   agent_name: string;
   agent_type: string;
   created_by_agent: string | null;

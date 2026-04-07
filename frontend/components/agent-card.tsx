@@ -8,14 +8,18 @@ export function AgentCard({
   onClick,
   onToggle,
   onToggleAutoApprove,
+  toggling,
 }: {
   agent: AgentSummary;
   onClick: () => void;
   onToggle?: () => void;
   onToggleAutoApprove?: () => void;
+  toggling?: boolean;
 }) {
   const clickable = agent.status === "active" || agent.status === "inactive";
   const toggleable = agent.status === "active" || agent.status === "inactive";
+  const allEnabled = Object.keys(agent.enabled_commands || {}).length > 0
+    && Object.values(agent.enabled_commands || {}).every(Boolean);
   return (
     <div
       onClick={clickable ? onClick : undefined}
@@ -60,11 +64,16 @@ export function AgentCard({
         {toggleable && onToggleAutoApprove && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleAutoApprove(); }}
-            className={`flex items-center gap-1 text-[10px] transition-colors ${agent.auto_approve ? "text-accent-violet" : "text-text-secondary/50 hover:text-accent-violet"}`}
-            title={agent.auto_approve ? "Disable auto-approve" : "Enable auto-approve"}
+            className={`flex items-center gap-1 text-[10px] transition-colors ${allEnabled ? "text-accent-violet" : "text-text-secondary/50 hover:text-accent-violet"}`}
+            title={allEnabled ? "Revoke auto-approve" : "Auto-approve all"}
+            disabled={toggling}
           >
-            <CheckCircle className="h-3 w-3" />
-            <span>Auto</span>
+            {toggling ? (
+              <CheckCircle className="h-3 w-3 animate-pulse opacity-50" />
+            ) : (
+              <CheckCircle className="h-3 w-3" />
+            )}
+            <span className={toggling ? "animate-pulse opacity-50" : ""}>Auto</span>
           </button>
         )}
       </div>
