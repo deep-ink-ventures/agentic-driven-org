@@ -13,5 +13,5 @@ MODEL_PRICING = {
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Estimate cost in USD based on model and token counts."""
-    prices = MODEL_PRICING.get(model, MODEL_PRICING["claude-sonnet-4-6"])
+    prices = MODEL_PRICING.get(model, MODEL_PRICING["claude-opus-4-6"])
     return (input_tokens * prices["input"] + output_tokens * prices["output"]) / 1_000_000

@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Revise personalized pitches based on QA feedback. Deepen personalization, "
         "strengthen hooks, fix any generic or template-obvious elements."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def revise_pitches(self, agent) -> dict:
     return {

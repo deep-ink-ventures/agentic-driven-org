@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Craft the narrative arc for outreach — how we tell our story, why it matters, "
         "why someone would care, and how it avoids feeling like spam."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def design_storyline(self, agent) -> dict:
     return {

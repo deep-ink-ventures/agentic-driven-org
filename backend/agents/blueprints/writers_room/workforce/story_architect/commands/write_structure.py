@@ -13,7 +13,7 @@ from agents.blueprints.base import command
         "architecture at expose, full beat-sheet roadmap at treatment, scene-by-scene causality "
         "chain at step outline, and beat-level backbone with pacing annotations at draft stages."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def write_structure(self, agent, **kwargs):
     pass  # Dispatched via execute_task

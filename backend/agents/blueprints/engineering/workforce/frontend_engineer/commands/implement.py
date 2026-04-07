@@ -14,7 +14,7 @@ from agents.blueprints.base import command
         "dispatches the claude-implement.yml workflow, tracking the pending run for webhook completion."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def implement(self, agent) -> dict:
     return {

@@ -10,7 +10,7 @@ from agents.blueprints.base import command
         "Addresses each flagged issue with updated analysis, corrected data, or additional research. "
         "Produces a complete, standalone updated brief — not a diff."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def revise_research(self, agent, **kwargs):
     pass  # Dispatched via execute_task

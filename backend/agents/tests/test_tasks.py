@@ -234,7 +234,7 @@ class TestCreateNextLeaderTask:
                     ],
                 }
             ),
-            {"model": "claude-sonnet-4-6", "input_tokens": 100, "output_tokens": 50},
+            {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50},
         )
 
         from agents.tasks import create_next_leader_task

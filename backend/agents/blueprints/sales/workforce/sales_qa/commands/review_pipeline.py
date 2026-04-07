@@ -10,7 +10,7 @@ from agents.blueprints.base import command
         "strategy quality, storyline effectiveness, profile accuracy, pitch personalization. "
         "Score each dimension and submit verdict."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def review_pipeline(self, agent) -> dict:
     return {

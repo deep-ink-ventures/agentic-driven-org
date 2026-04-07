@@ -10,7 +10,7 @@ from agents.blueprints.base import command
         "market positioning map, platform/publisher appetite, audience demographics and psychographics, "
         "cultural zeitgeist assessment, format requirements, and creative implications for the writing team"
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def research(self, agent, **kwargs):
     pass  # Dispatched via execute_task

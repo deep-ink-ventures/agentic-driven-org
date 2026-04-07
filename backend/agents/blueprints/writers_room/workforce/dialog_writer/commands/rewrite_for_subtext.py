@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "mean too directly, replaces with indirect expression through deflection, silence, "
         "subject changes, and loaded mundane conversation."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def rewrite_for_subtext(self, agent, **kwargs):
     pass  # Dispatched via execute_task

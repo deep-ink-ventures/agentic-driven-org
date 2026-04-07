@@ -28,12 +28,12 @@ class TestStoryArchitectIdeationCommands:
     def test_generate_concepts_metadata(self):
         bp = get_blueprint("story_architect", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["generate_concepts"]["model"] == "claude-sonnet-4-6"
+        assert cmds["generate_concepts"]["model"] == "claude-opus-4-6"
 
     def test_develop_concept_metadata(self):
         bp = get_blueprint("story_architect", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["develop_concept"]["model"] == "claude-sonnet-4-6"
+        assert cmds["develop_concept"]["model"] == "claude-opus-4-6"
 
     def test_existing_commands_still_registered(self):
         bp = get_blueprint("story_architect", "writers_room")
@@ -96,7 +96,7 @@ class TestFormatDetectionLegacy:
         ):
             mock_claude.return_value = (
                 '{"format_type": "series"}',
-                {"model": "claude-sonnet-4-6", "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
+                {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
             )
             mock_parse.return_value = {
                 "format_type": "series",
@@ -126,7 +126,7 @@ class TestFormatDetectionLegacy:
         ):
             mock_claude.return_value = (
                 '{"format_type": "standalone"}',
-                {"model": "claude-sonnet-4-6", "input_tokens": 200, "output_tokens": 50, "cost_usd": 0.02},
+                {"model": "claude-opus-4-6", "input_tokens": 200, "output_tokens": 50, "cost_usd": 0.02},
             )
             mock_parse.return_value = {
                 "format_type": "standalone",

@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "relationship arc progression, secondary character distinctiveness, and knowledge-tracking "
         "errors. Produces a complete standalone character document with a change log."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def fix_characters(self, agent, **kwargs):
     pass  # Dispatched via execute_task

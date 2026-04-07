@@ -27,11 +27,11 @@ class TestCallClaude:
         )
 
         assert result == "Hello from Claude"
-        assert usage["model"] == "claude-sonnet-4-6"
+        assert usage["model"] == "claude-opus-4-6"
         assert usage["input_tokens"] == 100
         assert usage["output_tokens"] == 50
         mock_client.messages.create.assert_called_once_with(
-            model="claude-sonnet-4-6",
+            model="claude-opus-4-6",
             max_tokens=8192,
             system="You are helpful",
             messages=[{"role": "user", "content": "Hi"}],
@@ -131,7 +131,7 @@ class TestCallClaudeWithTools:
 
         assert text == "Here is my analysis."
         assert tool_input == {"verdict": "approved", "score": 9}
-        assert usage["model"] == "claude-sonnet-4-6"
+        assert usage["model"] == "claude-opus-4-6"
         assert usage["input_tokens"] == 150
         assert usage["output_tokens"] == 75
         call_kwargs = mock_client.messages.create.call_args

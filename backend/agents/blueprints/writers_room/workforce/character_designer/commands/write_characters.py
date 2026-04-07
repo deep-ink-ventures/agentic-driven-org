@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "relationship dynamics with every other main character, arc trajectory with turning points, "
         "and specific scene suggestions that establish each character. Depth scales with project stage."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def write_characters(self, agent, **kwargs):
     pass  # Dispatched via execute_task

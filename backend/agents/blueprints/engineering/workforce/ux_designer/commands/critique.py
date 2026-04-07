@@ -12,7 +12,7 @@ from agents.blueprints.base import command
         "new user, accessibility-dependent, stressed/rushing, non-native speaker), specific "
         "violations with fix suggestions. Every finding must be actionable."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def critique(self, agent, **kwargs):
     pass  # Dispatched via execute_task

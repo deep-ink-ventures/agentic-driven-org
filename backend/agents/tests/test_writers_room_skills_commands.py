@@ -35,8 +35,8 @@ class TestStoryArchitectSkillsAndCommands:
     def test_command_metadata_preserved(self):
         bp = get_blueprint("story_architect", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["write_structure"]["model"] == "claude-sonnet-4-6"
-        assert cmds["fix_structure"]["model"] == "claude-sonnet-4-6"
+        assert cmds["write_structure"]["model"] == "claude-opus-4-6"
+        assert cmds["fix_structure"]["model"] == "claude-opus-4-6"
 
 
 class TestDialogWriterSkillsAndCommands:
@@ -69,8 +69,8 @@ class TestDialogWriterSkillsAndCommands:
     def test_command_metadata_preserved(self):
         bp = get_blueprint("dialog_writer", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["write_content"]["model"] == "claude-sonnet-4-6"
-        assert cmds["fix_content"]["model"] == "claude-sonnet-4-6"
+        assert cmds["write_content"]["model"] == "claude-opus-4-6"
+        assert cmds["fix_content"]["model"] == "claude-opus-4-6"
 
 
 class TestCharacterDesignerSkillsAndCommands:

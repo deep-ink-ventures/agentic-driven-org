@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "Score each dimension 1-10, overall = minimum. Threshold: 9.5/10. "
         "Submit verdict via tool call."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def review_content(self, agent) -> dict:
     return {

@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "For each prospect profile, research the person, adapt the storyline for them, "
         "and assign the best outreach channel from available agents."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def personalize_pitches(self, agent) -> dict:
     return {

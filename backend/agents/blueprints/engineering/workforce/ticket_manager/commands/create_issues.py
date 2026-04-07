@@ -13,7 +13,7 @@ from agents.blueprints.base import command
         "with >80% match threshold, and cross-references dependencies (Blocked by #X, Related to #X) across the batch."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def create_issues(self, agent) -> dict:
     return {

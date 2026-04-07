@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "rhythm monotony, weak scene buttons, unfilmables, and format violations. Produces "
         "a complete revised document with a change log, not a diff."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def fix_content(self, agent, **kwargs):
     pass  # Dispatched via execute_task

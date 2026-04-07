@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Review a partnership proposal for mutual value clarity, professional tone, "
         "specificity, realistic structure, and clear next steps. Submit verdict via tool call."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def review_proposal(self, agent) -> dict:
     return {

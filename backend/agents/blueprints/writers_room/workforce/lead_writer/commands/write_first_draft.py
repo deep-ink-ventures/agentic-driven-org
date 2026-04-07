@@ -10,7 +10,7 @@ from agents.blueprints.base import command
         "The actual screenplay, manuscript, or play script. Must be complete, not perfect. "
         "Medium-specific formatting. Standalone works only."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
     max_tokens=65536,
 )
 def write_first_draft(self, agent, **kwargs):

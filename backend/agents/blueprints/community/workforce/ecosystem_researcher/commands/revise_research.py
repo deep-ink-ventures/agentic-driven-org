@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Refine ecosystem research based on analyst feedback. Fill gaps, re-assess flagged "
         "entries, explore missed categories or entities."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def revise_research(self, agent) -> dict:
     return {

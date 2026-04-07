@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "showing transformation, sustained tonal throughline. Must reveal complete "
         "story including resolution."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
     max_tokens=16384,
 )
 def write_expose(self, agent, **kwargs):

@@ -14,7 +14,7 @@ from agents.blueprints.base import command
         "the pending run for webhook-based completion notification."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def implement(self, agent) -> dict:
     return {

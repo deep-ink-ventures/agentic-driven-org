@@ -12,7 +12,7 @@ from agents.blueprints.base import command
         "act break (McKee), and validates that causality -- not coincidence -- drives each "
         "transition. Produces a visual tension map showing how energy escalates across the full arc."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def outline_act_structure(self, agent, **kwargs):
     pass  # Dispatched via execute_task

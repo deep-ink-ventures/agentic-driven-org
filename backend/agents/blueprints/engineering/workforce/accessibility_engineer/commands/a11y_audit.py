@@ -14,7 +14,7 @@ from agents.blueprints.base import command
         "(significantly impacts usability), or MINOR (sub-optimal but accessible)."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def a11y_audit(self, agent) -> dict:
     return {

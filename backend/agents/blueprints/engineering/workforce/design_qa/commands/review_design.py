@@ -16,7 +16,7 @@ from agents.blueprints.base import command
         "P0 = blocks ship, P1 = fix before next release, P2 = fix soon, P3 = nice to have."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def review_design(self, agent) -> dict:
     return {

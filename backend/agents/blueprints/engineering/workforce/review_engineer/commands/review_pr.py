@@ -13,7 +13,7 @@ from agents.blueprints.base import command
         "focuses only on new changes since last round. Escalates to the leader if the iteration cap is reached."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def review_pr(self, agent) -> dict:
     return {

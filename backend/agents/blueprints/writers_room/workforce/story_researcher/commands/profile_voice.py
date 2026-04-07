@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "anti-patterns (what this voice is NOT), and concrete voice commandments for creative agents. "
         "Stored as an inviolable constraint for all subsequent writing."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def profile_voice(self, agent, **kwargs):
     pass  # Dispatched via execute_task

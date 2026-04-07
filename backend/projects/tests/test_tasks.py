@@ -58,7 +58,7 @@ _VALID_JSON = json.dumps(
     }
 )
 
-_USAGE = {"model": "claude-sonnet-4-6", "input_tokens": 500, "output_tokens": 200}
+_USAGE = {"model": "claude-opus-4-6", "input_tokens": 500, "output_tokens": 200}
 
 VALID_RESPONSE = (_VALID_JSON, _USAGE)
 

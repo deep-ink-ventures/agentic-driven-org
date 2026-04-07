@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Revise target area strategy based on QA feedback. Address specific weaknesses "
         "in thesis reasoning, target selection, or market positioning."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def revise_strategy(self, agent) -> dict:
     return {

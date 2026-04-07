@@ -14,7 +14,7 @@ from agents.blueprints.base import command
         "internal_state for the leader to track."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def check_coverage(self, agent) -> dict:
     return {

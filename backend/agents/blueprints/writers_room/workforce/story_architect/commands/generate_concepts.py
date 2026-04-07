@@ -12,7 +12,7 @@ from agents.blueprints.base import command
         "deliberately vary across genre, format, tone, and audience to present real creative "
         "alternatives -- not five variations of the same idea."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def generate_concepts(self, agent, **kwargs):
     pass  # Dispatched via execute_task

@@ -132,7 +132,7 @@ class TestSalesBlueprintProperties:
     def test_other_agents_use_sonnet(self):
         for slug in ["strategist", "pitch_architect", "pitch_personalizer", "sales_qa"]:
             bp = get_blueprint(slug, "sales")
-            assert bp.default_model == "claude-sonnet-4-6", f"{slug} should use sonnet"
+            assert bp.default_model == "claude-opus-4-6", f"{slug} should use sonnet"
 
     def test_sales_qa_is_essential(self):
         bp = get_blueprint("sales_qa", "sales")

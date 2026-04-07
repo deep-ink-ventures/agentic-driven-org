@@ -1621,7 +1621,7 @@ def _run_format_detection(agent, sprint_text: str) -> dict:
         user_message=prompt,
         tools=[FORMAT_DETECTION_TOOL],
         force_tool="classify_sprint",
-        model="claude-sonnet-4-6",
+        model="claude-opus-4-6",
         max_tokens=1024,
     )
 

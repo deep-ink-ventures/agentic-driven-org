@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "and proposal drafting to Partnership Writer. Triggers review cycles for completed work."
     ),
     schedule="weekly",
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def plan_community(self, agent) -> dict:
     return {

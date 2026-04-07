@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Write a partnership proposal for a specific target. Articulates mutual value, proposed "
         "structure, and concrete next steps. Uses ecosystem research and project context."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def draft_proposal(self, agent) -> dict:
     return {

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
         "parallelism between backend and frontend work streams."
     ),
     schedule="daily",
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def plan_sprint(self, agent: Agent) -> dict:
     from agents.ai.claude_client import call_claude, parse_json_response

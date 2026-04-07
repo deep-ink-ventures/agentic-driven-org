@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "Subtext over dialogue. Progressive complications build relentlessly. "
         "Standalone works only (movie, play, book)."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
     max_tokens=32768,
 )
 def write_treatment(self, agent, **kwargs):

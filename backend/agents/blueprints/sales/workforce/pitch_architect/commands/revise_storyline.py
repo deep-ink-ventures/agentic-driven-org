@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Revise the outreach storyline based on QA feedback. Strengthen hooks, "
         "sharpen value proposition, improve anti-spam qualities."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def revise_storyline(self, agent) -> dict:
     return {

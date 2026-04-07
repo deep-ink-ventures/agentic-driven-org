@@ -13,7 +13,7 @@ from agents.blueprints.base import command
         "design for state transitions (100/300/500ms timing), and accessibility requirements. "
         "Output is a complete spec document the frontend engineer can implement directly."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def design_component(self, agent, **kwargs):
     pass  # Dispatched via execute_task

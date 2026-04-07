@@ -10,7 +10,7 @@ from agents.blueprints.base import command
         "businesses, influencers. Uses web search. Returns structured map with organizations, "
         "key contacts, relevance notes, and partnership potential."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def map_ecosystem(self, agent) -> dict:
     return {

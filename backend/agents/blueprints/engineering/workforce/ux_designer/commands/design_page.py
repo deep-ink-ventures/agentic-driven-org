@@ -12,7 +12,7 @@ from agents.blueprints.base import command
         "that makes this page unforgettable. Includes wireframe-level specification with exact "
         "spacing values."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def design_page(self, agent, **kwargs):
     pass  # Dispatched via execute_task

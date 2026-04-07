@@ -34,7 +34,7 @@ def reset_client():
 def call_claude(
     system_prompt: str,
     user_message: str,
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-opus-4-6",
     max_tokens: int = 8192,
 ) -> tuple[str, dict]:
     """
@@ -79,7 +79,7 @@ def call_claude_with_tools(
     system_prompt: str,
     user_message: str,
     tools: list[dict],
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-opus-4-6",
     max_tokens: int = 8192,
     force_tool: str | None = None,
 ) -> tuple[str, dict | None, dict]:
@@ -146,7 +146,7 @@ def call_claude_tool_loop(
     user_message: str,
     tools: list[dict],
     handle_tool_call: callable,
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-opus-4-6",
     max_tokens: int = 8192,
     max_turns: int = 50,
 ) -> tuple[str, dict]:
@@ -232,7 +232,7 @@ def call_claude_tool_loop(
 def stream_claude(
     system_prompt: str,
     user_message: str,
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-opus-4-6",
     max_tokens: int = 8192,
     on_progress: callable = None,
 ) -> tuple[str, dict]:

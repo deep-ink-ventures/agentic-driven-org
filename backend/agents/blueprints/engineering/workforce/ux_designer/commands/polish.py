@@ -12,7 +12,7 @@ from agents.blueprints.base import command
         "micro-interactions (state transitions, loading states), and visual details (shadows, "
         "borders, decorative elements that reinforce brand, NOT generic)."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def polish(self, agent, **kwargs):
     pass  # Dispatched via execute_task

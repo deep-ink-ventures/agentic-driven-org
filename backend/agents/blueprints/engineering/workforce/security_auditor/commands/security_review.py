@@ -14,7 +14,7 @@ from agents.blueprints.base import command
         "validation). Only findings with confidence >= 0.8 are reported."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def security_review(self, agent) -> dict:
     return {

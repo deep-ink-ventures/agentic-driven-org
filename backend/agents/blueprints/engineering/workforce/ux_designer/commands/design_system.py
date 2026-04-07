@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "(4pt base), elevation/depth system, component library inventory, motion principles, and "
         "dark mode strategy. Produces a .impeccable.md context file for the project."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def design_system(self, agent, **kwargs):
     pass  # Dispatched via execute_task

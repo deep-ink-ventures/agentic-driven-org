@@ -13,7 +13,7 @@ from agents.blueprints.base import command
         "instructions."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def check_consistency(self, agent) -> dict:
     return {

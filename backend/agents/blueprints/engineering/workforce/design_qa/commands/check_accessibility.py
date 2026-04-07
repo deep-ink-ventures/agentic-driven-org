@@ -14,7 +14,7 @@ from agents.blueprints.base import command
         "findings with specific remediation instructions."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def check_accessibility(self, agent) -> dict:
     return {

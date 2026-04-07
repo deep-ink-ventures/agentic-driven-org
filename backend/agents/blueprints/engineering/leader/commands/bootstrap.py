@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
         "Requires github_token with repo + workflow permissions and github_repos in department config."
     ),
     schedule="once",
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def bootstrap(self, agent: Agent) -> dict:
     department = agent.department

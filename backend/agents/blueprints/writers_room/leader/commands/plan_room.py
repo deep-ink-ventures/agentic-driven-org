@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     name="plan-room",
     description="Assess project state, determine current stage, assign creative or feedback tasks for the ping-pong loop",
     schedule="daily",
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def plan_room(self, agent: Agent) -> dict | None:
     """

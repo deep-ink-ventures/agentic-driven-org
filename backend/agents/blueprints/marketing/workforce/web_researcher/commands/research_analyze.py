@@ -12,7 +12,7 @@ from agents.blueprints.base import command
         "with specific suggested angles, target audiences, and timing windows. Results are stored as a "
         "research document on the department for cross-agent reference."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def research_analyze(self, agent) -> dict:
     return {

@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Analyze research briefing and draft a thesis with 3-5 target areas for outreach. "
         "Each target area includes rationale, estimated potential, and suggested approach."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def draft_strategy(self, agent) -> dict:
     return {

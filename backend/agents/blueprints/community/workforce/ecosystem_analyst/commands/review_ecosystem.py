@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "Review ecosystem research for completeness, strategic prioritization, and missed "
         "opportunities. Score each entity on partnership potential. Submit verdict via tool call."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def review_ecosystem(self, agent) -> dict:
     return {

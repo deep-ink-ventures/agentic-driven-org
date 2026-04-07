@@ -164,7 +164,7 @@ Return JSON:
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
-            model="claude-sonnet-4-6",
+            model="claude-opus-4-6",
             max_tokens=16384,
         )
         task.token_usage = usage

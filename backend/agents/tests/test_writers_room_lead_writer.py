@@ -55,7 +55,7 @@ class TestLeadWriterBlueprint:
         bp = get_blueprint("lead_writer", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
         for name in ["write_pitch", "write_expose", "write_treatment", "write_concept", "write_first_draft"]:
-            assert cmds[name]["model"] == "claude-sonnet-4-6", f"{name} should use claude-sonnet-4-6"
+            assert cmds[name]["model"] == "claude-opus-4-6", f"{name} should use claude-opus-4-6"
 
     def test_system_prompt_contains_key_principles(self):
         bp = get_blueprint("lead_writer", "writers_room")

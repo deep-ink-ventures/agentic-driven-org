@@ -11,7 +11,7 @@ from agents.blueprints.base import command
         "contradiction, behavioral patterns under pressure, and the complete arc trajectory with "
         "catalytic incident, point of no return, dark night, and transformation moment."
     ),
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def build_character_profile(self, agent, **kwargs):
     pass  # Dispatched via execute_task

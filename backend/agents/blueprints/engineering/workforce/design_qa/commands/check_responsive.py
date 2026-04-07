@@ -13,7 +13,7 @@ from agents.blueprints.base import command
         "notched devices. Produces severity-scored responsive findings with specific fix instructions."
     ),
     schedule=None,
-    model="claude-sonnet-4-6",
+    model="claude-opus-4-6",
 )
 def check_responsive(self, agent) -> dict:
     return {
