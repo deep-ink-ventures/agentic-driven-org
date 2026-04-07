@@ -1,9 +1,12 @@
 """WebSocket consumers for project real-time updates."""
 
 import json
+import logging
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+
+logger = logging.getLogger(__name__)
 
 
 @database_sync_to_async
@@ -20,17 +23,21 @@ class BootstrapConsumer(AsyncWebsocketConsumer):
 
         user = self.scope.get("user")
         if not user or user.is_anonymous:
+            logger.warning("BootstrapConsumer rejected: anonymous user, project=%s", self.project_id)
             await self.close()
             return
 
         if not await is_project_member(user, self.project_id):
+            logger.warning("BootstrapConsumer rejected: user=%s not member of project=%s", user.pk, self.project_id)
             await self.close()
             return
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        logger.info("BootstrapConsumer connected: project=%s user=%s", self.project_id, user.pk)
 
     async def disconnect(self, close_code):
+        logger.debug("BootstrapConsumer disconnected: project=%s code=%s", getattr(self, "project_id", "?"), close_code)
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
@@ -74,17 +81,21 @@ class ProjectConsumer(AsyncWebsocketConsumer):
 
         user = self.scope.get("user")
         if not user or user.is_anonymous:
+            logger.warning("ProjectConsumer rejected: anonymous user, project=%s", self.project_id)
             await self.close()
             return
 
         if not await is_project_member(user, self.project_id):
+            logger.warning("ProjectConsumer rejected: user=%s not member of project=%s", user.pk, self.project_id)
             await self.close()
             return
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        logger.info("ProjectConsumer connected: project=%s user=%s", self.project_id, user.pk)
 
     async def disconnect(self, close_code):
+        logger.debug("ProjectConsumer disconnected: project=%s code=%s", getattr(self, "project_id", "?"), close_code)
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
