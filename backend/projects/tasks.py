@@ -823,7 +823,7 @@ def _broadcast_department(project_id, department_id, dept_status, error_message=
 @shared_task(bind=True, max_retries=3, default_retry_delay=10)
 def provision_single_agent(self, agent_id: str):
     """Generate tailored instructions for a single agent using Claude."""
-    from agents.ai.claude_client import call_claude, parse_json_response
+    from agents.ai.claude_client import call_claude_structured
     from agents.models import Agent
 
     try:
@@ -844,11 +844,6 @@ def provision_single_agent(self, agent_id: str):
         # Get the agent's locale from department config cascade
         locale = agent.get_config_value("locale") or "en"
 
-        # Get the blueprint's actual system prompt for context
-        bp_system_prompt = ""
-        with contextlib.suppress(Exception):
-            bp_system_prompt = bp.system_prompt if hasattr(bp, "system_prompt") else ""
-
         user_message = f"""# Project: {project.name}
 
 <project_goal>
@@ -866,49 +861,58 @@ Locale: {locale}
 ## Agent to Configure
 - Type: {agent.agent_type}
 - Name: {bp.name}
-- Description: {bp.description}
-
-## Agent's Built-in System Prompt (for context — this is what the agent sees when executing tasks):
-<system_prompt>
-{bp_system_prompt or "Not available."}
-</system_prompt>
+- Role: {bp.description}
 
 ## Your Task
 
-Write the agent's project-specific instructions. These instructions are prepended to every task the agent executes. They must:
+Write project-specific instructions for this agent. These instructions tell the agent what to focus on IN THIS PROJECT — not how to do its job (that's already built into the agent).
 
-1. Ground the agent in THIS project — reference specific characters, settings, themes, plot arcs, tone references from the sources
-2. Define what this specific agent owns and delivers (not generic role descriptions)
-3. Set the quality bar — what "good" looks like for this agent's output in this project
-4. Specify the output language as {locale}
-5. Be written in {locale}
+WRONG (generic role description): "Du recherchierst marktrelevante Grundlagen für die Serie."
+WRONG (methodology): "Analyze narrative structure using McKee's gap mechanism and Truby's 22 steps."
+RIGHT (project-specific): "Du recherchierst den Berliner Immobilienmarkt als Serienkulisse — insbesondere die Verflechtung von Politik, Bankenwesen und Familienimperien."
 
-Bad example: "Du recherchierst marktrelevante Grundlagen für die Serie."
-Good example: "Du recherchierst den Berliner Immobilienmarkt als Serienkulisse — insbesondere die Verflechtung von Politik, Bankenwesen und Familienimperien. Deine Kernaufgabe ist..."
+The instructions must:
+1. Reference specific characters, settings, themes, conflicts, and tone from the project goal and sources
+2. Name the concrete elements this agent should focus on in THIS project
+3. Be written in {locale}
 
-Write 3-5 substantial paragraphs. Also suggest a display name in {locale}.
+Do NOT describe the agent's methodology, skills, or general capabilities — those are built in.
+Do NOT repeat the agent's role description — that's already known.
+Write 2-4 paragraphs of project-specific context. Also suggest a display name in {locale}."""
 
-Respond with JSON only, no markdown fences:
-{{"instructions": "detailed project-specific instructions in {locale}...", "name": "Display Name in {locale}"}}"""
+        provision_schema = {
+            "type": "object",
+            "properties": {
+                "instructions": {
+                    "type": "string",
+                    "description": "Project-specific instructions for this agent (2-4 paragraphs)",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Display name for this agent in the project's language",
+                },
+            },
+            "required": ["instructions", "name"],
+        }
 
-        response, _usage = call_claude(
+        result, _usage = call_claude_structured(
             system_prompt=(
-                "You are a senior creative writing consultant configuring AI agents for a writers room. "
-                "Your job: write project-specific instructions that make each agent deeply knowledgeable about "
-                "THIS project's world, characters, themes, and goals. Generic role descriptions are unacceptable — "
-                "every instruction must reference concrete details from the source materials. "
-                "Write in the project's language. Respond with valid JSON only, no markdown fences."
+                "You are configuring an AI agent for a specific project. "
+                "Write project-specific instructions that reference concrete details from the source materials — "
+                "characters, settings, themes, conflicts. Do NOT describe generic methodology or capabilities. "
+                "Write in the project's language."
             ),
             user_message=user_message,
+            output_schema=provision_schema,
+            tool_name="submit_agent_config",
+            tool_description="Submit the agent's project-specific instructions and display name",
             max_tokens=4096,
         )
 
-        result = parse_json_response(response)
-        if result:
-            if result.get("instructions"):
-                agent.instructions = result["instructions"]
-            if result.get("name"):
-                agent.name = result["name"]
+        if result.get("instructions"):
+            agent.instructions = result["instructions"]
+        if result.get("name"):
+            agent.name = result["name"]
 
         agent.status = Agent.Status.ACTIVE
         agent.save(update_fields=["instructions", "name", "status", "updated_at"])
