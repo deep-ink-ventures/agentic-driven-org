@@ -74,6 +74,10 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             "Structure your research as a brief with clear sections. Use markdown. "
             "Be specific -- name titles, cite trends, quote data where possible. "
             "Every finding must connect back to actionable creative guidance.\n\n"
+            "Do NOT produce meta-analysis of narrative frameworks. Your job is facts: market data, "
+            "comparable titles, legal research, world-building details. Do not analyze the story's "
+            "structure — that is the Story Architect's job. Do not evaluate character consistency — "
+            "that is the Character Analyst's job. Stay in your lane.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             'in English. If "fr", French. This is non-negotiable. The source material may be '

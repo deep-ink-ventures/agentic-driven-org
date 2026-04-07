@@ -225,3 +225,52 @@ class TestCreativeReviewerActionFirst:
         prompt = bp.system_prompt
         assert "DRAMATIC ACTION" in prompt
         assert "Overall score = 0" in prompt
+
+
+class TestAuthenticityAnalystActionFirst:
+    def test_system_prompt_scene_retelling_test(self):
+        bp = get_blueprint("authenticity_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "SCENE RETELLING TEST" in prompt
+
+    def test_system_prompt_scene_retelling_is_check_1(self):
+        bp = get_blueprint("authenticity_analyst", "writers_room")
+        prompt = bp.system_prompt
+        check1_pos = prompt.find("CHECK 1")
+        assert check1_pos != -1
+        assert "SCENE RETELLING" in prompt[check1_pos : check1_pos + 200]
+
+    def test_system_prompt_line_by_line_logic(self):
+        bp = get_blueprint("authenticity_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "LINE-BY-LINE" in prompt
+
+    def test_system_prompt_calibration_point(self):
+        bp = get_blueprint("authenticity_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "1/10" in prompt
+
+    def test_system_prompt_framework_exposition_is_defect(self):
+        bp = get_blueprint("authenticity_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "framework exposition" in prompt.lower()
+
+    def test_task_suffix_scene_retelling_first(self):
+        from agents.blueprints.writers_room.workforce.authenticity_analyst.agent import WRITERS_ROOM_TASK_SUFFIX
+
+        assert "SCENE RETELLING" in WRITERS_ROOM_TASK_SUFFIX
+        scene_pos = WRITERS_ROOM_TASK_SUFFIX.find("SCENE RETELLING")
+        causal_pos = WRITERS_ROOM_TASK_SUFFIX.find("CAUSAL CHAIN")
+        assert scene_pos < causal_pos
+
+
+class TestStoryResearcherActionFirst:
+    def test_system_prompt_stay_in_lane(self):
+        bp = get_blueprint("story_researcher", "writers_room")
+        prompt = bp.system_prompt
+        assert "Stay in your lane" in prompt or "stay in your lane" in prompt
+
+    def test_system_prompt_no_meta_analysis(self):
+        bp = get_blueprint("story_researcher", "writers_room")
+        prompt = bp.system_prompt
+        assert "Do NOT produce meta-analysis" in prompt or "not produce meta-analysis" in prompt
