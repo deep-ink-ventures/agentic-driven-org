@@ -153,3 +153,59 @@ class TestStructureAnalystActionFirst:
         assert "- Save the Cat (Blake Snyder)" not in prompt
         assert "- Story (Robert McKee)" not in prompt
         assert "- Anatomy of Story (Truby)" not in prompt
+
+
+class TestCharacterAnalystActionFirst:
+    def test_system_prompt_action_existence_check(self):
+        bp = get_blueprint("character_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "CONCRETE ACTION" in prompt
+        assert "character does not exist" in prompt.lower()
+
+    def test_system_prompt_agent_execution_test(self):
+        bp = get_blueprint("character_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "execute" in prompt.lower()
+
+    def test_task_suffix_action_existence(self):
+        bp = get_blueprint("character_analyst", "writers_room")
+        agent = MagicMock()
+        agent.get_config_value.return_value = "en"
+        task = MagicMock()
+        suffix = bp.get_task_suffix(agent, task)
+        assert "CONCRETE ACTION" in suffix
+
+
+class TestDialogueAnalystActionFirst:
+    def test_system_prompt_line_by_line(self):
+        bp = get_blueprint("dialogue_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "EVERY line of dialogue" in prompt or "every line of dialogue" in prompt
+
+    def test_system_prompt_character_would_say_this(self):
+        bp = get_blueprint("dialogue_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "Would this character say this" in prompt
+
+    def test_system_prompt_no_meta_analysis(self):
+        bp = get_blueprint("dialogue_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "NO META-ANALYSIS" in prompt
+
+    def test_system_prompt_no_dialogue_flag(self):
+        bp = get_blueprint("dialogue_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "No dialogue to analyze" in prompt
+
+
+class TestMarketAnalystActionFirst:
+    def test_system_prompt_action_test(self):
+        bp = get_blueprint("market_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "ACTION TEST" in prompt
+        assert "does not contain a story" in prompt.lower()
+
+    def test_system_prompt_no_market_fit_without_story(self):
+        bp = get_blueprint("market_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "Cannot assess market fit" in prompt

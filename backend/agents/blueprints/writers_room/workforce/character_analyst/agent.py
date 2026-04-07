@@ -32,7 +32,7 @@ You work with ANY creative writing format — screenplay, novel, theatre play, s
 ### Full Mode
 Run all 7 checks:
 1. Want vs. Need — for main characters (defined? in tension? resolved?)
-2. Action Plausibility — flag unmotivated significant actions
+2. Action Existence & Plausibility — for every character: list every CONCRETE ACTION they take. If you cannot list a single concrete action, the character does not exist in this deliverable — flag as critical. For each action: could you, as an agent, execute this task on behalf of the character? Do you understand SPECIFICALLY what they do? "She discovers the truth" is vague. "Selin opens the Bürgschaft file, sees the liability number, compares it to the parliamentary approval, photographs the discrepancy" is concrete.
 3. Consistency Drift — voice, attitude, knowledge drift scene-by-scene / chapter-by-chapter
 4. Relationship Development Arcs — earned? arbitrary? resolved?
 5. Secondary Character Function — structural/thematic purpose or decorative?
@@ -120,16 +120,18 @@ class CharacterAnalystBlueprint(WritersRoomFeedbackBlueprint):
         return (
             f"Output language: {locale}\n\n"
             "Analyze this material using the full character methodology:\n"
-            "0. Pitch fidelity check — read the creator's original pitch in <project_goal>. "
+            "0. ACTION EXISTENCE — for every character, list every CONCRETE ACTION they take. "
+            "If you cannot name a single concrete action, the character does not exist — flag as critical.\n"
+            "1. Pitch fidelity check — read the creator's original pitch in <project_goal>. "
             "Flag any characters, family structures, or conflicts that were NOT in the pitch "
             "but appear to be borrowed from reference shows. If the pitch says 'three brothers' "
             "but the output has 'a patriarch and his children', flag as 🔴 CRITICAL.\n"
-            "1. Consistency audit — check each character's actions against their established traits scene by scene.\n"
-            "2. Arc progression — track where each principal character starts vs ends, flag flat or regressive arcs.\n"
-            "3. Ensemble balance — assess screen time / page time equity across the cast, flag imbalances.\n"
-            "4. Motivation clarity — for every significant action, can you trace it to a stated or inferred motivation?\n"
-            "5. Relationship dynamics — map how key relationships shift, flag arbitrary or unearned changes.\n"
-            "6. Voice distinction test — 'could you tell who is speaking without attribution?' Apply to 3+ dialogue samples.\n"
+            "2. Consistency audit — check each character's actions against their established traits scene by scene.\n"
+            "3. Arc progression — track where each principal character starts vs ends, flag flat or regressive arcs.\n"
+            "4. Ensemble balance — assess screen time / page time equity across the cast, flag imbalances.\n"
+            "5. Motivation clarity — for every significant action, can you trace it to a stated or inferred motivation?\n"
+            "6. Relationship dynamics — map how key relationships shift, flag arbitrary or unearned changes.\n"
+            "7. Voice distinction test — 'could you tell who is speaking without attribution?' Apply to 3+ dialogue samples.\n"
             "Each flag must name the character and cite the specific scene or chapter."
         )
 
