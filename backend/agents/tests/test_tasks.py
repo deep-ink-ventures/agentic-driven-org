@@ -35,7 +35,7 @@ def twitter_agent(department):
         name="Twitter Bot",
         agent_type="twitter",
         department=department,
-        auto_approve=True,
+        enabled_commands={"place-content": True, "post-content": True, "search-trends": True},
         status="active",
     )
 
@@ -46,7 +46,7 @@ def twitter_agent_disabled(department):
         name="Twitter Disabled",
         agent_type="twitter",
         department=department,
-        auto_approve=False,
+        enabled_commands={},
         status="active",
     )
 
@@ -58,7 +58,6 @@ def leader_agent(department):
         agent_type="leader",
         department=department,
         is_leader=True,
-        auto_approve=True,
         status="active",
     )
 
@@ -127,7 +126,7 @@ class TestRunScheduledActions:
             name="Daily Twitter",
             agent_type="twitter",
             department=department,
-            auto_approve=True,
+            enabled_commands={"place-content": True, "post-content": True, "search-trends": True},
             status="active",
         )
         run_scheduled_actions("daily")
@@ -403,3 +402,118 @@ class TestFailedTaskCascade:
         c.refresh_from_db()
         assert b.status == AgentTask.Status.FAILED
         assert c.status == AgentTask.Status.FAILED
+
+
+# ── Command name validation ────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestCommandNameValidation:
+    """Test that task creation validates command_name."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from accounts.models import User
+        from agents.models import Agent
+        from projects.models import Department, Project
+
+        user = User.objects.create_user(email="cmd@test.com", password="pass")
+        project = Project.objects.create(name="Cmd Project", owner=user)
+        self.dept = Department.objects.create(project=project, department_type="marketing")
+        self.leader = Agent.objects.create(
+            name="Leader",
+            agent_type="leader",
+            department=self.dept,
+            is_leader=True,
+            status=Agent.Status.ACTIVE,
+        )
+        self.worker = Agent.objects.create(
+            name="Twitter Bot",
+            agent_type="twitter",
+            department=self.dept,
+            status=Agent.Status.ACTIVE,
+            enabled_commands={"post-content": True},
+        )
+
+    @patch("agents.tasks._broadcast_task")
+    @patch("agents.ai.claude_client.call_claude")
+    def test_invalid_command_creates_failed_task(self, mock_claude, mock_broadcast):
+        """Leader proposing an invalid command_name should create a FAILED task."""
+        import json
+
+        mock_claude.return_value = (
+            json.dumps(
+                {
+                    "exec_summary": "Do something",
+                    "tasks": [
+                        {
+                            "target_agent_type": "twitter",
+                            "command_name": "nonexistent-command",
+                            "exec_summary": "Invalid task",
+                            "step_plan": "1. Fail",
+                        }
+                    ],
+                }
+            ),
+            {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50},
+        )
+
+        from agents.tasks import create_next_leader_task
+
+        create_next_leader_task(str(self.leader.id))
+
+        task = AgentTask.objects.filter(agent=self.worker).first()
+        assert task is not None
+        assert task.status == AgentTask.Status.FAILED
+        assert task.command_name == "nonexistent-command"
+        assert "Invalid command" in task.error_message
+        assert task.completed_at is not None
+
+    @patch("agents.tasks._broadcast_task")
+    @patch("agents.ai.claude_client.call_claude")
+    def test_empty_command_creates_failed_task(self, mock_claude, mock_broadcast):
+        """Leader proposing an empty command_name should create a FAILED task."""
+        import json
+
+        mock_claude.return_value = (
+            json.dumps(
+                {
+                    "exec_summary": "Do something",
+                    "tasks": [
+                        {
+                            "target_agent_type": "twitter",
+                            "command_name": "",
+                            "exec_summary": "No command task",
+                            "step_plan": "1. Fail",
+                        }
+                    ],
+                }
+            ),
+            {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50},
+        )
+
+        from agents.tasks import create_next_leader_task
+
+        create_next_leader_task(str(self.leader.id))
+
+        task = AgentTask.objects.filter(agent=self.worker).first()
+        assert task is not None
+        assert task.status == AgentTask.Status.FAILED
+        assert task.command_name == "INVALID"
+        assert "Invalid command" in task.error_message
+
+    @patch("agents.tasks.execute_agent_task")
+    def test_scheduled_command_sets_command_name(self, mock_exec):
+        """run_scheduled_actions should set command_name on created tasks."""
+        from agents.tasks import run_scheduled_actions
+
+        # The twitter worker has post-content enabled but the scheduled commands
+        # come from the blueprint. Use an agent with auto_approve-style enabled commands.
+        self.worker.enabled_commands = {"engage-tweets": True, "search-trends": True}
+        self.worker.save(update_fields=["enabled_commands"])
+
+        run_scheduled_actions("hourly")
+
+        tasks = AgentTask.objects.filter(agent=self.worker)
+        for task in tasks:
+            assert task.command_name != "", f"Task {task.id} missing command_name"

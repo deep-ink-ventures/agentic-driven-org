@@ -22,6 +22,7 @@ def _broadcast_task(task, event_type="task.updated"):
                 "task": {
                     "id": str(task.id),
                     "agent": str(task.agent_id),
+                    "department": str(task.agent.department_id),
                     "agent_name": task.agent.name,
                     "agent_type": task.agent.agent_type,
                     "created_by_agent": str(task.created_by_agent_id) if task.created_by_agent_id else None,
@@ -86,6 +87,7 @@ def run_scheduled_actions(schedule: str):
                     agent=agent,
                     status=AgentTask.Status.QUEUED,
                     auto_execute=True,
+                    command_name=cmd_name,
                     exec_summary=result.get("exec_summary", cmd["description"]),
                     step_plan=result.get("step_plan", ""),
                 )
@@ -100,6 +102,36 @@ def run_scheduled_actions(schedule: str):
 
             except Exception as e:
                 logger.exception("Failed to run scheduled command %s for %s: %s", cmd_name, agent.name, e)
+
+
+def _mark_task_failed(task, error_message: str):
+    """Mark a task as failed, retrying with a fresh DB connection if needed.
+
+    When PostgreSQL drops the connection (AdminShutdown, timeouts), the original
+    connection is dead.  We attempt the save; on OperationalError we close stale
+    connections and retry once so the task doesn't stay stuck in PROCESSING.
+    """
+    from django.db import OperationalError as DjangoOpError
+    from django.db import close_old_connections
+
+    def _do_save():
+        task.status = task.__class__.Status.FAILED
+        task.error_message = error_message
+        task.completed_at = timezone.now()
+        task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+        _broadcast_task(task)
+        _fail_dependents(task)
+        _trigger_next_sprint_work(task)
+
+    try:
+        _do_save()
+    except DjangoOpError:
+        logger.warning("DB connection dead while marking task %s failed — retrying with fresh connection", task.id)
+        try:
+            close_old_connections()
+            _do_save()
+        except Exception:
+            logger.exception("Could not mark task %s as failed (DB unavailable)", task.id)
 
 
 @shared_task(bind=True, max_retries=0)
@@ -150,14 +182,7 @@ def execute_agent_task(self, task_id: str):
 
     except Exception as e:
         logger.exception("Task %s failed: %s", task_id, e)
-        task.status = AgentTask.Status.FAILED
-        task.error_message = str(e)[:500]
-        task.completed_at = timezone.now()
-        task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
-
-        _broadcast_task(task)
-        _fail_dependents(task)
-        _trigger_next_sprint_work(task)
+        _mark_task_failed(task, str(e)[:500])
 
 
 def _fail_dependents(failed_task):
@@ -340,11 +365,39 @@ def create_next_leader_task(leader_agent_id: str):
                 depends_on_previous = task_data.get("depends_on_previous", False)
                 command_name = task_data.get("command_name", "")
 
+                # Validate command_name against blueprint
+                bp = target_agent.get_blueprint()
+                valid_commands = {c["name"] for c in bp.get_commands()} if bp else set()
+
+                if not command_name or command_name not in valid_commands:
+                    error_msg = (
+                        f"Invalid command '{command_name}' for {target_type}. "
+                        f"Valid commands: {sorted(valid_commands)}"
+                    )
+                    logger.warning("Leader %s: %s", agent.name, error_msg)
+                    failed_task = AgentTask.objects.create(
+                        agent=target_agent,
+                        created_by_agent=agent,
+                        status=AgentTask.Status.FAILED,
+                        command_name=command_name or "INVALID",
+                        sprint_id=sprint_id,
+                        exec_summary=task_data.get("exec_summary", "Invalid task"),
+                        error_message=error_msg,
+                        completed_at=timezone.now(),
+                    )
+                    failed_task = AgentTask.objects.select_related(
+                        "agent__department__project",
+                        "blocked_by",
+                        "created_by_agent",
+                    ).get(id=failed_task.id)
+                    _broadcast_task(failed_task, "task.created")
+                    continue
+
                 # Determine initial status
                 if depends_on_previous and previous_task:
                     initial_status = AgentTask.Status.AWAITING_DEPENDENCIES
                     blocked_by = previous_task
-                elif (command_name and target_agent.is_action_enabled(command_name)) or target_agent.auto_approve:
+                elif target_agent.is_action_enabled(command_name):
                     initial_status = AgentTask.Status.QUEUED
                     blocked_by = None
                 else:
@@ -380,27 +433,6 @@ def create_next_leader_task(leader_agent_id: str):
 
             logger.info("Leader %s proposed %d task(s): %s", agent.name, created, proposal.get("exec_summary", "")[:80])
             return
-
-        # Fallback: single task on the leader itself
-        if proposal.get("exec_summary"):
-            initial_status = AgentTask.Status.QUEUED if agent.auto_approve else AgentTask.Status.AWAITING_APPROVAL
-            new_task = AgentTask.objects.create(
-                agent=agent,
-                status=initial_status,
-                auto_execute=False,
-                sprint_id=sprint_id,
-                exec_summary=proposal.get("exec_summary", "Leader task"),
-                step_plan=proposal.get("step_plan", ""),
-            )
-            new_task = AgentTask.objects.select_related(
-                "agent__department__project",
-                "blocked_by",
-                "created_by_agent",
-            ).get(id=new_task.id)
-            _broadcast_task(new_task, "task.created")
-            if initial_status == AgentTask.Status.QUEUED:
-                execute_agent_task.delay(str(new_task.id))
-            logger.info("Leader %s proposed own task: %s", agent.name, proposal.get("exec_summary", "")[:80])
 
     except Exception as e:
         logger.exception("Failed to create next leader task for %s: %s", agent.name, e)
