@@ -21,6 +21,27 @@ logger = logging.getLogger(__name__)
 
 CRAFT_DIRECTIVES = {
     "write_pitch": (
+        "## ACTION-FIRST MANDATE (OVERRIDES ALL OTHER INSTRUCTIONS)\n\n"
+        "A pitch is not an essay about a series. A pitch is the story told in compressed "
+        "form. Every sentence must answer: WHAT HAPPENS?\n\n"
+        'WRONG: "Der dramatische Mechanismus funktioniert wie folgt: Ein Bezirksstadtrat '
+        "blockiert ein Immobilienprojekt der Brenner-Brüder — nicht aus Überzeugung, sondern "
+        'weil die Ablehnung ihm politisches Kapital verschafft."\n'
+        'RIGHT: "Ratzmann liest den Antrag, macht eine Notiz auf ein Post-it, klebt es auf '
+        "einen Stapel außerhalb der Akte. Er trinkt Kaffee. Am nächsten Montag steht er auf "
+        "einer Bürgerversammlung in Friedrichshain und sagt: 'Wir haben den Antrag abgelehnt.' "
+        'Er hat ihn nie gelesen."\n\n'
+        "The test for every paragraph: Could a director shoot this? Could an actor play this? "
+        "If the answer is no, you are writing an essay, not a pitch.\n\n"
+        "FORBIDDEN PHRASES:\n"
+        '- "Der dramatische Mechanismus funktioniert wie folgt"\n'
+        '- "Das ist der Motor dieser Serie"\n'
+        '- "Die zentrale Dynamik besteht in"\n'
+        '- "Der erneuerbare Konflikt"\n'
+        "- Any sentence that describes the story's mechanics instead of telling the story\n\n"
+        "CAUSAL CHAIN RULE: If you claim A causes B, you must show A causing B in a scene. "
+        '"Die Bürgschaftskettenreaktion" is not a scene. Jakob signing a document while Felix '
+        "is in the next room IS a scene.\n\n"
         "You are writing the PITCH — 2-3 pages that prove this story is worth telling.\n\n"
         "## Craft Directives\n"
         "- Open with the logline: protagonist defined by contradiction (not name), "
@@ -48,6 +69,14 @@ CRAFT_DIRECTIVES = {
         "- Describing the ending in full — pitch documents should leave the reader wanting resolution\n"
     ),
     "write_expose": (
+        "## ACTION-FIRST MANDATE (OVERRIDES ALL OTHER INSTRUCTIONS)\n\n"
+        "Every paragraph must contain concrete dramatic action. Characters do things. Things "
+        "have consequences. If you claim A causes B, show the scene where A causes B.\n\n"
+        "The test for every paragraph: Could a director shoot this? Could an actor play this? "
+        "If the answer is no, rewrite it as a scene.\n\n"
+        "FORBIDDEN: Sentences that describe mechanics instead of telling the story. "
+        '"The funding structure collapses" is not a scene. "Marta opens the file and sees '
+        'the number" IS a scene.\n\n'
         "You are writing the EXPOSE — 5-10 pages providing a bird's-eye view of the complete story.\n\n"
         "## Craft Directives\n"
         "- Restate the logline and premise with more specificity than the pitch\n"
@@ -81,6 +110,14 @@ CRAFT_DIRECTIVES = {
         "- Underdeveloped antagonism\n"
     ),
     "write_treatment": (
+        "## ACTION-FIRST MANDATE (OVERRIDES ALL OTHER INSTRUCTIONS)\n\n"
+        "Every paragraph must contain concrete dramatic action. Characters do things. Things "
+        "have consequences. If you claim A causes B, show the scene where A causes B.\n\n"
+        "The test for every paragraph: Could a director shoot this? Could an actor play this? "
+        "If the answer is no, rewrite it as a scene.\n\n"
+        "FORBIDDEN: Sentences that describe mechanics instead of telling the story. "
+        '"The funding structure collapses" is not a scene. "Marta opens the file and sees '
+        'the number" IS a scene.\n\n'
         "You are writing the TREATMENT — 20-40+ pages. The full story told in prose. "
         "Standalone works only (movie, play, book).\n\n"
         "## Craft Directives\n"
@@ -118,6 +155,14 @@ CRAFT_DIRECTIVES = {
         "- Forgetting tone — letting the prose go flat\n"
     ),
     "write_concept": (
+        "## ACTION-FIRST MANDATE (OVERRIDES ALL OTHER INSTRUCTIONS)\n\n"
+        "Every paragraph must contain concrete dramatic action. Characters do things. Things "
+        "have consequences. If you claim A causes B, show the scene where A causes B.\n\n"
+        "The test for every paragraph: Could a director shoot this? Could an actor play this? "
+        "If the answer is no, rewrite it as a scene.\n\n"
+        "FORBIDDEN: Sentences that describe mechanics instead of telling the story. "
+        '"The funding structure collapses" is not a scene. "Marta opens the file and sees '
+        'the number" IS a scene.\n\n'
         "You are writing the SERIES CONCEPT / BIBLE — 15-25 pages. The master reference "
         "document for a continuing narrative. Series works only.\n\n"
         "## Craft Directives\n"
@@ -164,6 +209,14 @@ CRAFT_DIRECTIVES = {
         "- Over-building world at the expense of character and story\n"
     ),
     "write_first_draft": (
+        "## ACTION-FIRST MANDATE (OVERRIDES ALL OTHER INSTRUCTIONS)\n\n"
+        "Every paragraph must contain concrete dramatic action. Characters do things. Things "
+        "have consequences. If you claim A causes B, show the scene where A causes B.\n\n"
+        "The test for every paragraph: Could a director shoot this? Could an actor play this? "
+        "If the answer is no, rewrite it as a scene.\n\n"
+        "FORBIDDEN: Sentences that describe mechanics instead of telling the story. "
+        '"The funding structure collapses" is not a scene. "Marta opens the file and sees '
+        'the number" IS a scene.\n\n'
         "You are writing the FIRST DRAFT — the actual screenplay, manuscript, or play script. "
         "Standalone works only.\n\n"
         "## Craft Directives\n"
@@ -204,14 +257,38 @@ CRAFT_DIRECTIVES = {
 
 INTEGRATION_MANDATE = (
     "\n## Integration Mandate\n"
-    "Build EXCLUSIVELY from the creative agents' fragments in the department documents and "
-    "sibling task reports. Use the story_architect's structure, the character_designer's ensemble, "
-    "the dialog_writer's voice work, and the story_researcher's research. Do NOT invent new "
-    "characters, conflicts, world elements, or plot points. Your job is synthesis and prose craft, "
-    "not ideation. If you find gaps, flag them — do not fill them with your own inventions.\n\n"
+    "Use the creative agents' fragments (structure, ensemble, voice work, research) as INPUT, "
+    "but the CREATOR'S ORIGINAL PITCH in <project_goal> is your primary authority. If an agent's "
+    "output drifts from the pitch — softens the moral register, promotes a subplot to the center, "
+    "adds causal claims without concrete mechanisms, or introduces elements the creator never "
+    "mentioned — discard the drift. Go back to the pitch.\n\n"
+    "Do NOT invent new characters, conflicts, world elements, or plot points. Your job is "
+    "synthesis and prose craft, not ideation. If you find gaps, flag them — do not fill them "
+    "with your own inventions.\n\n"
+    "## Voice Fidelity\n"
+    "Your prose voice must match the CREATOR'S voice from the pitch, not a generic literary "
+    "register. Read the pitch text carefully: its sentence rhythm, vocabulary, directness, and "
+    "attitude ARE the target voice. If the creator writes short, blunt, cynical sentences — "
+    "you write short, blunt, cynical sentences. Do not 'elevate' their voice into Feuilleton "
+    "prose. Do not write longer, more elaborate, more literary sentences than the creator does. "
+    "The creator's pitch is the voice benchmark. Match it.\n\n"
+    "## Moral Register\n"
+    "If the creator describes characters as corrupt, selfish, cynical, or power-hungry — write "
+    "them that way. Do NOT soften them into 'people who believe they are doing the right thing' "
+    "or 'well-meaning actors who accidentally cause harm.' The creator chose their moral register "
+    "deliberately. Preserve it.\n\n"
+    "## Causal Claims\n"
+    "If you describe a causal chain (A causes B), you must explain the actual mechanism in "
+    "concrete terms. 'The funding sources overlap' is not an explanation. WHICH funding source? "
+    "WHY can't both projects coexist? HOW does one interfere with the other? If you cannot "
+    "explain the mechanism, cut the claim.\n\n"
+    "## Platform / Distribution\n"
+    "Do NOT include specific platform targets (e.g., 'developed for Sky Deutschland') in the "
+    "deliverable. The pitch deck goes to many parties. The creator decides pitch strategy.\n\n"
     "FIDELITY CHECK (before submitting): Re-read the creator's pitch in <project_goal>. "
-    "Does your output preserve EVERY specific element they provided? If you introduced anything "
-    "the creator did NOT mention, delete it.\n"
+    "Does your output preserve EVERY specific element they provided? Does it preserve their "
+    "TONE and MORAL REGISTER? If you introduced anything the creator did NOT mention, delete it. "
+    "If you softened their characters, harden them back.\n"
 )
 
 ANTI_AI_RULES = (
@@ -227,10 +304,29 @@ ANTI_AI_RULES = (
     "the same rhythm, break the pattern)\n"
     '- On-the-nose emotional statements ("I feel sad about what happened")\n'
     "- Perfectly balanced pros-and-cons reasoning in dialogue\n\n"
+    "SELF-REFERENTIAL PROSE — THE WORST AI TELL (ZERO TOLERANCE):\n"
+    "NEVER write a sentence that explains what the previous sentence does, means, or "
+    "achieves. NEVER comment on your own craft. NEVER tell the reader how to interpret "
+    "an image, gesture, or moment. Examples of what to NEVER write:\n"
+    '- "Das ist zwölf Jahre in einem Satz." (author applauding their own metaphor)\n'
+    '- "Das ist der Motor dieser Serie." (explaining what the scene just showed)\n'
+    '- "Das ist nicht Unaufmerksamkeit." (telling the reader what they already understood)\n'
+    '- "Das ist das Gefährlichste an ihr." (evaluating your own character for the reader)\n'
+    "If a gesture, image, or moment works — it works WITHOUT you explaining it. If it "
+    "doesn't work without explanation, the gesture is too weak. Fix the gesture, don't "
+    "add commentary. Trust the reader. Trust the image. Shut up after the image lands.\n\n"
+    "NO META-COMMENTARY IN THE DELIVERABLE:\n"
+    "The deliverable is a creative document, not a process log. NEVER include:\n"
+    "- Preambles listing what the creator said vs. what you inferred\n"
+    "- [Revision: ...] annotations explaining what you changed and why\n"
+    "- Sections titled 'Vorbemerkung', 'Pitch-Extraktion', or 'Revisionsnachweis'\n"
+    "- Self-referential positioning ('Was dieses Tonmuster zeigt: ...')\n"
+    "The deliverable speaks for itself. No footnotes. No process artifacts.\n\n"
     "INSTEAD:\n"
     "- Write messy, specific, surprising details over clean generic ones\n"
     "- Vary sentence length dramatically — a 3-word sentence after a 30-word one\n"
     "- Use the voice profile from the Story Researcher as your north star\n"
+    "- End on the image. Not on the explanation of the image.\n"
 )
 
 
@@ -350,7 +446,15 @@ class LeadWriterBlueprint(WorkforceBlueprint):
                 )
         except Exception:
             logger.exception("Failed to fetch voice profile")
-        return ""
+        # No voice profile available — derive voice from the pitch itself
+        return (
+            "\n\n## VOICE CONSTRAINT (no voice profile available)\n"
+            "No formal voice profile has been created yet. Derive your writing voice "
+            "DIRECTLY from the creator's pitch text in <project_goal>. Study the pitch's "
+            "sentence length, rhythm, vocabulary, directness, and attitude. Write in THAT "
+            "voice — not in a more literary, more elaborate, or more polished register. "
+            "The creator's raw pitch voice is the target. Match it, do not 'improve' it.\n"
+        )
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         """Route to the appropriate craft directive based on command name."""

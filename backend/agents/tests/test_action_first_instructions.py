@@ -63,3 +63,41 @@ class TestDialogWriterActionFirst:
         bp = get_blueprint("dialog_writer", "writers_room")
         prompt = bp.system_prompt
         assert "Does something CHANGE between the first line and the last line" in prompt
+
+
+class TestLeadWriterActionFirst:
+    def test_pitch_directive_contains_action_first_mandate(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "ACTION-FIRST MANDATE" in CRAFT_DIRECTIVES["write_pitch"]
+
+    def test_pitch_directive_forbids_mechanism_language(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "FORBIDDEN PHRASES" in CRAFT_DIRECTIVES["write_pitch"]
+        assert "Der dramatische Mechanismus funktioniert wie folgt" in CRAFT_DIRECTIVES["write_pitch"]
+
+    def test_pitch_directive_demands_shootable_test(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "Could a director shoot this" in CRAFT_DIRECTIVES["write_pitch"]
+
+    def test_expose_directive_contains_action_first_mandate(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "ACTION-FIRST MANDATE" in CRAFT_DIRECTIVES["write_expose"]
+
+    def test_treatment_directive_contains_action_first_mandate(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "ACTION-FIRST MANDATE" in CRAFT_DIRECTIVES["write_treatment"]
+
+    def test_concept_directive_contains_action_first_mandate(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "ACTION-FIRST MANDATE" in CRAFT_DIRECTIVES["write_concept"]
+
+    def test_first_draft_directive_contains_action_first_mandate(self):
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
+
+        assert "ACTION-FIRST MANDATE" in CRAFT_DIRECTIVES["write_first_draft"]
