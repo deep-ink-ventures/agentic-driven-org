@@ -43,7 +43,7 @@ def agent(department):
         status=Agent.Status.ACTIVE,
         instructions="Be nice",
         config={"api_key": "xxx"},
-        auto_approve=True,
+        enabled_commands={"post_content": True, "place_content": True, "search_trends": True},
     )
 
 
@@ -69,7 +69,7 @@ class TestAgentModel:
         assert agent.agent_type == "twitter"
         assert agent.instructions == "Be nice"
         assert agent.config == {"api_key": "xxx"}
-        assert agent.auto_approve is True
+        assert agent.enabled_commands == {"post_content": True, "place_content": True, "search_trends": True}
         assert agent.status == Agent.Status.ACTIVE
         assert agent.is_leader is False
         assert agent.created_at is not None
@@ -99,21 +99,59 @@ class TestAgentModel:
         )
         assert second_leader.pk is not None
 
-    def test_is_action_enabled_true(self, agent):
-        assert agent.is_action_enabled("place-content") is True
+    def test_enabled_commands_default_empty(self, department):
+        a = Agent.objects.create(name="New", agent_type="twitter", department=department)
+        assert a.enabled_commands == {}
 
-    def test_is_action_enabled_false(self, department):
-        agent = Agent.objects.create(
-            name="No Auto",
+    def test_is_action_enabled_true_when_command_enabled(self, department):
+        a = Agent.objects.create(
+            name="Test",
             agent_type="twitter",
             department=department,
-            auto_approve=False,
             status=Agent.Status.ACTIVE,
+            enabled_commands={"post_content": True},
         )
-        assert agent.is_action_enabled("post-content") is False
+        assert a.is_action_enabled("post_content") is True
 
-    def test_is_action_enabled_returns_auto_approve(self, agent):
-        assert agent.is_action_enabled("nonexistent") is True
+    def test_is_action_enabled_false_when_command_disabled(self, department):
+        a = Agent.objects.create(
+            name="Test",
+            agent_type="twitter",
+            department=department,
+            status=Agent.Status.ACTIVE,
+            enabled_commands={"post_content": False},
+        )
+        assert a.is_action_enabled("post_content") is False
+
+    def test_is_action_enabled_false_when_command_absent(self, department):
+        a = Agent.objects.create(
+            name="Test",
+            agent_type="twitter",
+            department=department,
+            status=Agent.Status.ACTIVE,
+            enabled_commands={"research": True},
+        )
+        assert a.is_action_enabled("post_content") is False
+
+    def test_all_commands_enabled(self, department):
+        a = Agent.objects.create(
+            name="Test",
+            agent_type="twitter",
+            department=department,
+            status=Agent.Status.ACTIVE,
+            enabled_commands={"post_content": True, "search_trends": True},
+        )
+        assert a.all_commands_enabled is True
+
+    def test_all_commands_enabled_false_when_mixed(self, department):
+        a = Agent.objects.create(
+            name="Test",
+            agent_type="twitter",
+            department=department,
+            status=Agent.Status.ACTIVE,
+            enabled_commands={"post_content": True, "search_trends": False},
+        )
+        assert a.all_commands_enabled is False
 
     def test_get_blueprint_returns_correct_instance(self, agent):
         from agents.blueprints.marketing.workforce.twitter.agent import TwitterBlueprint

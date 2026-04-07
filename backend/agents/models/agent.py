@@ -33,9 +33,10 @@ class Agent(models.Model):
         blank=True,
         help_text="Agent-managed state (last_tweet_at, emails_sent_today, etc.). Read/written by blueprints.",
     )
-    auto_approve = models.BooleanField(
-        default=False,
-        help_text="When true, all tasks for this agent skip approval and execute immediately.",
+    enabled_commands = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Maps command names to booleans. True = auto-execute, False/absent = needs approval.",
     )
     outreach = models.BooleanField(
         default=False,
@@ -67,9 +68,23 @@ class Agent(models.Model):
             ),
         ]
 
+    @property
+    def auto_approve(self) -> bool:
+        """Backward-compat shim — returns True when all commands are enabled.
+
+        TODO: Remove once admin, serializers, and tasks.py are migrated
+        to use enabled_commands directly (Tasks 3-5).
+        """
+        return self.all_commands_enabled
+
     def is_action_enabled(self, command_name: str) -> bool:
-        """Check if tasks for this agent auto-execute."""
-        return self.auto_approve
+        """Check if a specific command auto-executes (True in enabled_commands)."""
+        return self.enabled_commands.get(command_name, False)
+
+    @property
+    def all_commands_enabled(self) -> bool:
+        """True when every command in enabled_commands is set to True."""
+        return bool(self.enabled_commands) and all(self.enabled_commands.values())
 
     def get_config_value(self, key, default=None):
         """Look up config value with cascading: agent → department → project."""
