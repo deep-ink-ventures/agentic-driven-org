@@ -98,14 +98,14 @@ class TestWritersRoomAuthenticityAnalyst:
 
         assert issubclass(AuthenticityAnalystBlueprint, AuthenticityAnalystMixin)
 
-    def test_system_prompt_comes_from_mixin(self):
-        from agents.ai.archetypes.authenticity_analyst import SYSTEM_PROMPT
+    def test_system_prompt_is_writers_room_specific(self):
         from agents.blueprints.writers_room.workforce.authenticity_analyst.agent import (
+            WRITERS_ROOM_SYSTEM_PROMPT,
             AuthenticityAnalystBlueprint,
         )
 
         bp = AuthenticityAnalystBlueprint()
-        assert bp.system_prompt == SYSTEM_PROMPT
+        assert bp.system_prompt == WRITERS_ROOM_SYSTEM_PROMPT
 
     def test_get_context_strips_sibling_reports(self):
         from unittest.mock import patch
