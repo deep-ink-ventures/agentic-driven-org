@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useProjectWebSocket } from "@/lib/useProjectWebSocket";
@@ -123,20 +123,34 @@ export default function ProjectDetailPage() {
     load();
   }, [load]);
 
+  // Refs for WS callback to read current state without re-creating the callback
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const projectIdRef = useRef<string | null>(null);
+  projectIdRef.current = project?.id ?? null;
+
   // WebSocket for real-time updates
   useProjectWebSocket(project?.id ?? null, (data) => {
     if (data.type === "task.created" || data.type === "task.updated") {
       const task = data.task as import("@/lib/types").AgentTask;
       setTaskWsEvent({ type: data.type, task });
-      const agentId = task.agent;
-      setProject((prev) => {
-        if (!prev) return prev;
-        const dept = prev.departments.find((d) => d.agents.some((a) => a.id === agentId));
+
+      // Update activeTasks map using project ref (not setState-as-reader)
+      const currentProject = projectRef.current;
+      if (currentProject) {
+        const agentId = task.agent;
+        const dept = currentProject.departments.find((d) =>
+          d.agents.some((a) => a.id === agentId),
+        );
         if (dept) {
+          const deptId = dept.id;
+          const isActive = task.status === "processing" || task.status === "queued";
           setActiveTasks((prevMap) => {
+            const deptTasks = prevMap.get(deptId);
+            const hadTask = deptTasks?.has(task.id) ?? false;
+            if (isActive && hadTask) return prevMap;
+            if (!isActive && !hadTask) return prevMap;
             const next = new Map(prevMap);
-            const isActive = task.status === "processing" || task.status === "queued";
-            const deptTasks = next.get(dept.id) || new Set<string>();
             const updated = new Set(deptTasks);
             if (isActive) {
               updated.add(task.id);
@@ -144,18 +158,20 @@ export default function ProjectDetailPage() {
               updated.delete(task.id);
             }
             if (updated.size > 0) {
-              next.set(dept.id, updated);
+              next.set(deptId, updated);
             } else {
-              next.delete(dept.id);
+              next.delete(deptId);
             }
             return next;
           });
         }
-        return prev;
-      });
+      }
     }
     if (data.type === "sprint.created" || data.type === "sprint.updated") {
-      api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+      const pid = projectIdRef.current;
+      if (pid) {
+        api.listSprints(pid, { status: "running,paused" }).then(setSprints).catch(() => {});
+      }
     }
     if (data.type === "agent.status") {
       const agentId = data.agent_id as string;
