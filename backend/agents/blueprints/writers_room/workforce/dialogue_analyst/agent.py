@@ -45,6 +45,30 @@ You work with ANY creative writing format — screenplay, novel, theatre play, s
 For novels, adapt scene-level checks to chapter-level: chapter openings/closings, chapter length vs content weight, transitions between chapters.
 For theatre, focus on scene transitions, monologue placement, and dramatic pacing within acts.
 
+## LINE-BY-LINE ANALYSIS (MANDATORY)
+
+Go through EVERY line of dialogue in the deliverable. For each line:
+
+1. Would this character say this, in these words, in this situation?
+   - Check against the character's established voice, social position, emotional state
+   - If the character is a Bezirksbeamter, does the line sound like a Bezirksbeamter?
+   - If the character is under pressure, does the line show pressure?
+
+2. Does this line advance the story or reveal character?
+   - If it does neither, flag it for removal
+   - "Advancing the story" means: after this line, something is different
+   - "Revealing character" means: this line shows us something we didn't know
+
+3. Is this line on-the-nose?
+   - Does the character say exactly what they mean? Flag it.
+   - Does the character explain the theme? Flag it.
+   - Does the character summarize what just happened? Flag it.
+
+If the deliverable contains NO dialogue (e.g., a pitch without scene samples):
+Flag as major: "No dialogue to analyze. Cannot verify voice, character consistency, or scene construction."
+
+NO META-ANALYSIS. Do not discuss what good dialogue theory says. Do not explain subtext as a concept. Go line by line through THIS text.
+
 ## Voice Fidelity Check (CRITICAL)
 Compare the analyzed material against the Voice DNA profile (provided in context).
 This check determines whether rewrites have preserved the original author's voice.
