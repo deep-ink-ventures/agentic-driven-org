@@ -1,5 +1,7 @@
 """Tests for action-first instruction mandates across all writers room agents."""
 
+from unittest.mock import MagicMock, patch
+
 from agents.blueprints import get_blueprint
 
 
@@ -101,3 +103,53 @@ class TestLeadWriterActionFirst:
         from agents.blueprints.writers_room.workforce.lead_writer.agent import CRAFT_DIRECTIVES
 
         assert "ACTION-FIRST MANDATE" in CRAFT_DIRECTIVES["write_first_draft"]
+
+
+class TestFeedbackBaseCheck0:
+    def test_review_methodology_contains_check_0(self):
+        from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlueprint
+
+        bp = WritersRoomFeedbackBlueprint()
+        bp.system_prompt = ""
+        bp.name = "Test"
+        bp.slug = "test"
+
+        fake_ctx = {
+            "project_name": "Test",
+            "project_goal": "A story",
+            "department_name": "Writers Room",
+            "department_documents": "",
+            "sibling_agents": "",
+            "own_recent_tasks": "",
+            "agent_instructions": "",
+        }
+
+        with patch.object(bp.__class__.__bases__[0], "get_context", return_value=fake_ctx):
+            ctx = bp.get_context(MagicMock())
+
+        assert "CHECK 0" in ctx["department_documents"]
+        assert "ACTION TEST" in ctx["department_documents"]
+        assert "retell what happens" in ctx["department_documents"].lower()
+        assert "Score: 0/10" in ctx["department_documents"]
+
+
+class TestStructureAnalystActionFirst:
+    def test_system_prompt_scene_sequence_method(self):
+        bp = get_blueprint("structure_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "What happens?" in prompt
+        assert "Why does it happen?" in prompt
+        assert "What changes?" in prompt
+
+    def test_system_prompt_forbids_framework_exposition(self):
+        bp = get_blueprint("structure_analyst", "writers_room")
+        prompt = bp.system_prompt
+        assert "NO FRAMEWORK EXPOSITION" in prompt
+
+    def test_system_prompt_no_framework_listing(self):
+        bp = get_blueprint("structure_analyst", "writers_room")
+        prompt = bp.system_prompt
+        # The old prompt listed 13+ frameworks as bullet points
+        assert "- Save the Cat (Blake Snyder)" not in prompt
+        assert "- Story (Robert McKee)" not in prompt
+        assert "- Anatomy of Story (Truby)" not in prompt
