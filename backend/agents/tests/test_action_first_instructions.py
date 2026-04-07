@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agents.blueprints import get_blueprint
 
 
@@ -274,3 +276,133 @@ class TestStoryResearcherActionFirst:
         bp = get_blueprint("story_researcher", "writers_room")
         prompt = bp.system_prompt
         assert "Do NOT produce meta-analysis" in prompt or "not produce meta-analysis" in prompt
+
+
+@pytest.fixture
+def mock_leader_agent(db):
+    """Create a minimal leader agent with department and project."""
+    from django.contrib.auth import get_user_model
+
+    from agents.models import Agent
+    from projects.models import Department, Project, Sprint
+
+    User = get_user_model()
+    user = User.objects.create_user(email="action-first-test@example.com", password="pass1234")
+    project = Project.objects.create(name="Action First Test", goal="A test story", owner=user)
+    dept = Department.objects.create(project=project, department_type="writers_room")
+    leader = Agent.objects.create(
+        department=dept,
+        name="Showrunner",
+        agent_type="leader",
+        is_leader=True,
+        status="active",
+        internal_state={},
+    )
+    for agent_type in [
+        "story_researcher",
+        "story_architect",
+        "character_designer",
+        "dialog_writer",
+        "lead_writer",
+        "market_analyst",
+        "structure_analyst",
+        "character_analyst",
+        "creative_reviewer",
+        "authenticity_analyst",
+    ]:
+        Agent.objects.create(
+            department=dept,
+            name=agent_type.replace("_", " ").title(),
+            agent_type=agent_type,
+            is_leader=False,
+            status="active",
+        )
+    sprint = Sprint.objects.create(
+        project=project,
+        text="Write a series pitch",
+        status=Sprint.Status.RUNNING,
+        created_by=user,
+    )
+    sprint.departments.add(dept)
+    return leader
+
+
+class TestAuthenticityGateStates:
+    @pytest.mark.django_db
+    def test_creative_writing_done_dispatches_creative_gate(self, mock_leader_agent):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        bp = WritersRoomLeaderBlueprint()
+        mock_leader_agent.internal_state = {
+            "current_stage": "pitch",
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_detected": True,
+            "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        proposal = bp.generate_task_proposal(mock_leader_agent)
+
+        assert proposal is not None
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert "authenticity_analyst" in agent_types
+        assert "lead_writer" not in agent_types
+
+    @pytest.mark.django_db
+    def test_creative_gate_done_dispatches_lead_writer(self, mock_leader_agent):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        bp = WritersRoomLeaderBlueprint()
+        mock_leader_agent.internal_state = {
+            "current_stage": "pitch",
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_detected": True,
+            "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        proposal = bp.generate_task_proposal(mock_leader_agent)
+
+        assert proposal is not None
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert agent_types == ["lead_writer"]
+
+    @pytest.mark.django_db
+    def test_lead_writing_done_dispatches_deliverable_gate(self, mock_leader_agent):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        bp = WritersRoomLeaderBlueprint()
+        mock_leader_agent.internal_state = {
+            "current_stage": "pitch",
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_detected": True,
+            "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        with patch.object(bp, "_create_deliverable_and_research_docs"):
+            proposal = bp.generate_task_proposal(mock_leader_agent)
+
+        assert proposal is not None
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert "authenticity_analyst" in agent_types
+        assert "market_analyst" not in agent_types
+
+    @pytest.mark.django_db
+    def test_deliverable_gate_done_dispatches_feedback(self, mock_leader_agent):
+        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+
+        bp = WritersRoomLeaderBlueprint()
+        mock_leader_agent.internal_state = {
+            "current_stage": "pitch",
+            "format_type": "series",
+            "terminal_stage": "concept",
+            "entry_detected": True,
+            "stage_status": {"pitch": {"status": "deliverable_gate_done", "iterations": 0}},
+        }
+        mock_leader_agent.save(update_fields=["internal_state"])
+        proposal = bp.generate_task_proposal(mock_leader_agent)
+
+        assert proposal is not None
+        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
+        assert "market_analyst" in agent_types or "structure_analyst" in agent_types

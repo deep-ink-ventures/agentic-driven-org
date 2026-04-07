@@ -441,31 +441,63 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config))
 
         if status == "creative_writing":
-            # Creative agents done → dispatch lead writer
+            # Creative agents done → dispatch authenticity gate
             logger.info(
-                "Writers Room: stage '%s' creative writing complete — dispatching lead writer",
+                "Writers Room: stage '%s' creative writing complete — dispatching authenticity gate",
                 current_stage,
             )
-            stage_status[current_stage]["status"] = "creative_done"
+            stage_status[current_stage]["status"] = "creative_gate"
+            internal_state["stage_status"] = stage_status
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            return _tag_sprint(self._propose_creative_gate_tasks(agent, effective_stage, config))
+
+        if status == "creative_gate":
+            # Authenticity gate for creative agents done → dispatch lead writer
+            logger.info(
+                "Writers Room: stage '%s' creative gate passed — dispatching lead writer",
+                current_stage,
+            )
+            stage_status[current_stage]["status"] = "creative_gate_done"
             internal_state["stage_status"] = stage_status
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
             return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config))
 
-        if status in ("creative_done", "lead_writing"):
-            # Lead writer done → create docs, dispatch feedback
+        if status == "creative_gate_done":
+            # Lead writer dispatch retry
+            return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config))
+
+        if status == "lead_writing":
+            # Lead writer done → create docs, dispatch deliverable gate
             logger.info(
-                "Writers Room: stage '%s' lead writing complete — creating docs and dispatching feedback",
+                "Writers Room: stage '%s' lead writing complete — dispatching deliverable gate",
                 current_stage,
             )
             self._create_deliverable_and_research_docs(agent, current_stage, sprint)
-            stage_status[current_stage]["status"] = "docs_created"
+            stage_status[current_stage]["status"] = "deliverable_gate"
+            internal_state["stage_status"] = stage_status
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
+            return _tag_sprint(self._propose_deliverable_gate_task(agent, current_stage, config))
+
+        if status == "deliverable_gate":
+            # Deliverable gate done → dispatch feedback agents
+            logger.info(
+                "Writers Room: stage '%s' deliverable gate passed — dispatching feedback",
+                current_stage,
+            )
+            stage_status[current_stage]["status"] = "deliverable_gate_done"
             internal_state["stage_status"] = stage_status
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
             return _tag_sprint(self._propose_feedback_tasks(agent, effective_stage, config))
 
-        if status in ("docs_created", "feedback"):
+        if status == "deliverable_gate_done":
+            # Feedback dispatch retry
+            return _tag_sprint(self._propose_feedback_tasks(agent, effective_stage, config))
+
+        if status == "feedback":
             # Feedback done → dispatch creative_reviewer
             logger.info(
                 "Writers Room: stage '%s' feedback complete — dispatching review",
@@ -962,6 +994,50 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             "exec_summary": f"Stage '{stage}': assign creative agents to write",
             "tasks": tasks,
             "_on_dispatch": {"set_status": "creative_writing", "stage": dispatch_stage},
+        }
+
+    # ── Authenticity gate proposals ──────────────────────────────────────
+
+    def _propose_creative_gate_tasks(self, agent, effective_stage, config):
+        """Dispatch authenticity_analyst to review each creative agent's output."""
+        creative_agents = CREATIVE_MATRIX.get(effective_stage, [])
+        tasks = []
+        for agent_type in creative_agents:
+            tasks.append(
+                {
+                    "target_agent_type": "authenticity_analyst",
+                    "exec_summary": f"Authenticity gate: review {agent_type} output",
+                    "step_plan": (
+                        f"Review the {agent_type}'s output for this stage. "
+                        "Apply the full action-first methodology: scene retelling test, "
+                        "causal chain verification, line-by-line logic test. "
+                        "If the output contains no concrete dramatic action, score 0/10."
+                    ),
+                    "command_name": "analyze",
+                }
+            )
+        return {
+            "exec_summary": f"Authenticity gate for creative agents ({effective_stage})",
+            "tasks": tasks,
+        }
+
+    def _propose_deliverable_gate_task(self, agent, current_stage, config):
+        """Dispatch authenticity_analyst to review the lead writer's deliverable."""
+        return {
+            "exec_summary": f"Authenticity gate for deliverable ({current_stage})",
+            "tasks": [
+                {
+                    "target_agent_type": "authenticity_analyst",
+                    "exec_summary": f"Authenticity gate: review {current_stage} deliverable",
+                    "step_plan": (
+                        "Review the stage deliverable for dramatic action. "
+                        "Apply the full action-first methodology: scene retelling test, "
+                        "causal chain verification, line-by-line logic test. "
+                        "This is the gate before feedback agents see the deliverable."
+                    ),
+                    "command_name": "analyze",
+                }
+            ],
         }
 
     # ── Lead Writer task proposal ──────────────────────────────────────
