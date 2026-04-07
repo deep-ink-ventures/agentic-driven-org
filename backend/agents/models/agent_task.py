@@ -37,8 +37,7 @@ class AgentTask(models.Model):
     auto_execute = models.BooleanField(default=False)
     command_name = models.CharField(
         max_length=100,
-        blank=True,
-        help_text="Command on the agent's blueprint this task executes.",
+        help_text="Command on the agent's blueprint this task executes. Required.",
     )
     blocked_by = models.ForeignKey(
         "self",
@@ -91,6 +90,22 @@ class AgentTask(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if not self.command_name:
+            raise ValidationError({"command_name": "command_name is required for every task."})
+
+        bp = self.agent.get_blueprint()
+        if bp:
+            valid_commands = {c["name"] for c in bp.get_commands()}
+            if valid_commands and self.command_name not in valid_commands:
+                raise ValidationError(
+                    {
+                        "command_name": f"'{self.command_name}' is not a valid command for {self.agent.agent_type}. Valid: {sorted(valid_commands)}"
+                    }
+                )
 
     def approve(self):
         """Approve task: schedule or queue for execution. If leader task, auto-propose next."""

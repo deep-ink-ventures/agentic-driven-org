@@ -43,7 +43,7 @@ def agent(department):
         status=Agent.Status.ACTIVE,
         instructions="Be nice",
         config={"api_key": "xxx"},
-        enabled_commands={"post_content": True, "place_content": True, "search_trends": True},
+        enabled_commands={"post-content": True, "place-content": True, "search-trends": True},
     )
 
 
@@ -69,7 +69,7 @@ class TestAgentModel:
         assert agent.agent_type == "twitter"
         assert agent.instructions == "Be nice"
         assert agent.config == {"api_key": "xxx"}
-        assert agent.enabled_commands == {"post_content": True, "place_content": True, "search_trends": True}
+        assert agent.enabled_commands == {"post-content": True, "place-content": True, "search-trends": True}
         assert agent.status == Agent.Status.ACTIVE
         assert agent.is_leader is False
         assert agent.created_at is not None
@@ -109,9 +109,9 @@ class TestAgentModel:
             agent_type="twitter",
             department=department,
             status=Agent.Status.ACTIVE,
-            enabled_commands={"post_content": True},
+            enabled_commands={"post-content": True},
         )
-        assert a.is_action_enabled("post_content") is True
+        assert a.is_action_enabled("post-content") is True
 
     def test_is_action_enabled_false_when_command_disabled(self, department):
         a = Agent.objects.create(
@@ -119,9 +119,9 @@ class TestAgentModel:
             agent_type="twitter",
             department=department,
             status=Agent.Status.ACTIVE,
-            enabled_commands={"post_content": False},
+            enabled_commands={"post-content": False},
         )
-        assert a.is_action_enabled("post_content") is False
+        assert a.is_action_enabled("post-content") is False
 
     def test_is_action_enabled_false_when_command_absent(self, department):
         a = Agent.objects.create(
@@ -131,7 +131,7 @@ class TestAgentModel:
             status=Agent.Status.ACTIVE,
             enabled_commands={"research": True},
         )
-        assert a.is_action_enabled("post_content") is False
+        assert a.is_action_enabled("post-content") is False
 
     def test_all_commands_enabled(self, department):
         a = Agent.objects.create(
@@ -139,7 +139,7 @@ class TestAgentModel:
             agent_type="twitter",
             department=department,
             status=Agent.Status.ACTIVE,
-            enabled_commands={"post_content": True, "search_trends": True},
+            enabled_commands={"post-content": True, "search-trends": True},
         )
         assert a.all_commands_enabled is True
 
@@ -149,7 +149,7 @@ class TestAgentModel:
             agent_type="twitter",
             department=department,
             status=Agent.Status.ACTIVE,
-            enabled_commands={"post_content": True, "search_trends": False},
+            enabled_commands={"post-content": True, "search-trends": False},
         )
         assert a.all_commands_enabled is False
 
@@ -189,6 +189,7 @@ class TestAgentTaskModel:
             agent=agent,
             status=AgentTask.Status.AWAITING_APPROVAL,
             exec_summary="Do stuff",
+            command_name="post-content",
         )
         result = task.approve()
         assert result is True
@@ -204,6 +205,7 @@ class TestAgentTaskModel:
             agent=agent,
             status=AgentTask.Status.AWAITING_APPROVAL,
             exec_summary="Future task",
+            command_name="post-content",
             proposed_exec_at=future,
         )
         result = task.approve()
@@ -219,6 +221,7 @@ class TestAgentTaskModel:
             agent=agent,
             status=AgentTask.Status.QUEUED,
             exec_summary="Already queued",
+            command_name="post-content",
         )
         result = task.approve()
         assert result is False
@@ -231,6 +234,7 @@ class TestAgentTaskModel:
             agent=leader_agent,
             status=AgentTask.Status.AWAITING_APPROVAL,
             exec_summary="Leader task",
+            command_name="post-content",
         )
         task.approve()
         mock_next.delay.assert_called_once_with(str(leader_agent.id))
@@ -241,16 +245,51 @@ class TestAgentTaskModel:
             agent=agent,
             status=AgentTask.Status.AWAITING_APPROVAL,
             exec_summary="Worker task",
+            command_name="post-content",
         )
         with patch("agents.tasks.create_next_leader_task") as mock_next:
             task.approve()
             mock_next.delay.assert_not_called()
+
+    def test_command_name_required(self, agent):
+        from django.core.exceptions import ValidationError
+
+        task = AgentTask(
+            agent=agent,
+            status=AgentTask.Status.AWAITING_APPROVAL,
+            exec_summary="No command",
+            command_name="",
+        )
+        with pytest.raises(ValidationError, match="command_name"):
+            task.full_clean()
+
+    def test_command_name_validated_against_blueprint(self, agent):
+        from django.core.exceptions import ValidationError
+
+        task = AgentTask(
+            agent=agent,
+            status=AgentTask.Status.AWAITING_APPROVAL,
+            exec_summary="Invalid command",
+            command_name="nonexistent_command",
+        )
+        with pytest.raises(ValidationError, match="not a valid command"):
+            task.full_clean()
+
+    def test_valid_command_name_passes_validation(self, agent):
+        task = AgentTask(
+            agent=agent,
+            status=AgentTask.Status.AWAITING_APPROVAL,
+            exec_summary="Valid command",
+            command_name="post-content",
+        )
+        task.full_clean()  # Should not raise
 
     def test_str_format(self, agent):
         task = AgentTask.objects.create(
             agent=agent,
             status=AgentTask.Status.AWAITING_APPROVAL,
             exec_summary="Engage with high-impact tweets in the crypto space right now",
+            command_name="post-content",
         )
         s = str(task)
         assert s.startswith("[Awaiting Approval]")
@@ -267,6 +306,7 @@ class TestAgentTaskReviewFields:
         task = AgentTask.objects.create(
             agent=agent,
             exec_summary="Default fields check",
+            command_name="post-content",
         )
         task.refresh_from_db()
         assert task.review_verdict == ""
@@ -276,6 +316,7 @@ class TestAgentTaskReviewFields:
         task = AgentTask.objects.create(
             agent=agent,
             exec_summary="Review fields persist check",
+            command_name="post-content",
             review_verdict="APPROVED",
             review_score=9.5,
         )
