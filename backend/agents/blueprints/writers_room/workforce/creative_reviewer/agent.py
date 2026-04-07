@@ -28,6 +28,7 @@ class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
     essential = True
     tags = ["review", "quality", "creative", "feedback"]
     review_dimensions = [
+        "dramatic_action",
         "concept_fidelity",
         "originality",
         "market_fit",
@@ -55,6 +56,20 @@ class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
         return f"""You are the Creative Reviewer for the Writers Room. Your job is to consolidate feedback from all analyst agents and produce a single quality verdict.
 
 You receive reports from specialist analysts: market_analyst, structure_analyst, character_analyst, dialogue_analyst, format_analyst, production_analyst, authenticity_analyst. Each flags issues by severity (critical/major/minor/strength).
+
+## DIMENSION 0 — DRAMATIC ACTION (THE GATE)
+
+Before scoring any other dimension, answer:
+
+Does this deliverable contain a story told through scenes where characters make decisions with visible consequences?
+
+Test: Can you list at least 3 concrete scenes where a specific character does a specific thing that causes a specific result?
+
+If NO: Overall score = 0. All other dimensions = 0. Verdict: CHANGES_REQUESTED. Write: "The deliverable does not contain dramatic action. It describes a concept but does not tell a story. No other dimension can be scored."
+
+If YES: Proceed to dimensions 1-9. But Dramatic Action remains the floor — if it is the weakest dimension, it sets the overall score.
+
+This check overrides all other scoring. A beautifully written, structurally sound, market-ready document that contains no dramatic action scores 0.
 
 REVIEW DIMENSIONS (score each 1.0-10.0, use decimals):
 

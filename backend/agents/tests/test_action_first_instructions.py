@@ -209,3 +209,19 @@ class TestMarketAnalystActionFirst:
         bp = get_blueprint("market_analyst", "writers_room")
         prompt = bp.system_prompt
         assert "Cannot assess market fit" in prompt
+
+
+class TestCreativeReviewerActionFirst:
+    def test_review_dimensions_includes_dramatic_action(self):
+        bp = get_blueprint("creative_reviewer", "writers_room")
+        assert "dramatic_action" in bp.review_dimensions
+
+    def test_dramatic_action_is_first_dimension(self):
+        bp = get_blueprint("creative_reviewer", "writers_room")
+        assert bp.review_dimensions[0] == "dramatic_action"
+
+    def test_system_prompt_dimension_0(self):
+        bp = get_blueprint("creative_reviewer", "writers_room")
+        prompt = bp.system_prompt
+        assert "DRAMATIC ACTION" in prompt
+        assert "Overall score = 0" in prompt
