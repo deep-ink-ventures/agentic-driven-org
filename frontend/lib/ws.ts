@@ -1,6 +1,6 @@
 import { api } from "./api";
 
-const WS_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
+export const WS_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
   .replace("http://", "ws://")
   .replace("https://", "wss://");
 

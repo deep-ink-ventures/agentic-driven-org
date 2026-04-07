@@ -2,10 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { api } from "./api";
-
-const WS_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
-  .replace("http://", "ws://")
-  .replace("https://", "wss://");
+import { WS_URL } from "./ws";
 
 const MAX_RETRIES = 20;
 const BACKOFF_CAP_MS = 30_000;

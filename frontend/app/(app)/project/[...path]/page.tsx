@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { connectWs } from "@/lib/ws";
+import { useProjectWebSocket } from "@/lib/useProjectWebSocket";
 import type {
   ProjectDetail,
   AgentSummary,
@@ -123,83 +123,70 @@ export default function ProjectDetailPage() {
     load();
   }, [load]);
 
-  // WebSocket for real-time agent status updates
-  const wsRef = useRef<WebSocket | null>(null);
-  useEffect(() => {
-    if (!project) return;
-    let cancelled = false;
-    connectWs(`/ws/project/${project.id}/`, (data) => {
-      if (data.type === "task.created" || data.type === "task.updated") {
-        const task = data.task as import("@/lib/types").AgentTask;
-        setTaskWsEvent({ type: data.type, task });
-        // Track which departments have active tasks via a map of dept → active task count
-        const agentId = task.agent;
-        setProject((prev) => {
-          if (!prev) return prev;
-          const dept = prev.departments.find((d) => d.agents.some((a) => a.id === agentId));
-          if (dept) {
-            setActiveTasks((prevMap) => {
-              const next = new Map(prevMap);
-              const isActive = task.status === "processing" || task.status === "queued";
-              const deptTasks = next.get(dept.id) || new Set<string>();
-              const updated = new Set(deptTasks);
-              if (isActive) {
-                updated.add(task.id);
-              } else {
-                updated.delete(task.id);
-              }
-              if (updated.size > 0) {
-                next.set(dept.id, updated);
-              } else {
-                next.delete(dept.id);
-              }
-              return next;
-            });
-          }
-          return prev;
-        });
-      }
-      if (data.type === "sprint.created" || data.type === "sprint.updated") {
-        api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
-      }
-      if (data.type === "agent.status") {
-        const agentId = data.agent_id as string;
-        const newStatus = data.status as string;
-        setProject((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            departments: prev.departments.map((dept) => ({
-              ...dept,
-              agents: dept.agents.map((a) =>
-                a.id === agentId ? { ...a, status: newStatus as AgentSummary["status"] } : a,
-              ),
-            })),
-          };
-        });
-        setSelectedDept((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            agents: prev.agents.map((a) =>
+  // WebSocket for real-time updates
+  useProjectWebSocket(project?.id ?? null, (data) => {
+    if (data.type === "task.created" || data.type === "task.updated") {
+      const task = data.task as import("@/lib/types").AgentTask;
+      setTaskWsEvent({ type: data.type, task });
+      const agentId = task.agent;
+      setProject((prev) => {
+        if (!prev) return prev;
+        const dept = prev.departments.find((d) => d.agents.some((a) => a.id === agentId));
+        if (dept) {
+          setActiveTasks((prevMap) => {
+            const next = new Map(prevMap);
+            const isActive = task.status === "processing" || task.status === "queued";
+            const deptTasks = next.get(dept.id) || new Set<string>();
+            const updated = new Set(deptTasks);
+            if (isActive) {
+              updated.add(task.id);
+            } else {
+              updated.delete(task.id);
+            }
+            if (updated.size > 0) {
+              next.set(dept.id, updated);
+            } else {
+              next.delete(dept.id);
+            }
+            return next;
+          });
+        }
+        return prev;
+      });
+    }
+    if (data.type === "sprint.created" || data.type === "sprint.updated") {
+      api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+    }
+    if (data.type === "agent.status") {
+      const agentId = data.agent_id as string;
+      const newStatus = data.status as string;
+      setProject((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          departments: prev.departments.map((dept) => ({
+            ...dept,
+            agents: dept.agents.map((a) =>
               a.id === agentId ? { ...a, status: newStatus as AgentSummary["status"] } : a,
             ),
-          };
-        });
-        setSelectedAgent((prev) => {
-          if (!prev || prev.id !== agentId) return prev;
-          return { ...prev, status: newStatus as AgentSummary["status"] };
-        });
-      }
-    }).then((ws) => {
-      if (cancelled) { ws.close(); return; }
-      wsRef.current = ws;
-    }).catch(() => {});
-    return () => {
-      cancelled = true;
-      wsRef.current?.close();
-    };
-  }, [project?.id]);
+          })),
+        };
+      });
+      setSelectedDept((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          agents: prev.agents.map((a) =>
+            a.id === agentId ? { ...a, status: newStatus as AgentSummary["status"] } : a,
+          ),
+        };
+      });
+      setSelectedAgent((prev) => {
+        if (!prev || prev.id !== agentId) return prev;
+        return { ...prev, status: newStatus as AgentSummary["status"] };
+      });
+    }
+  });
 
   if (loading) {
     return (
