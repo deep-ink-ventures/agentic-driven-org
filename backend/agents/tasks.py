@@ -60,7 +60,7 @@ def run_scheduled_actions(schedule: str):
     Called by beat: hourly or daily.
 
     For each active agent, checks which commands with this schedule are enabled
-    with auto_approve enabled, and creates + executes tasks for them.
+    in enabled_commands, and creates + executes tasks for them.
     """
     from agents.models import Agent, AgentTask
 
@@ -216,7 +216,7 @@ def _unblock_dependents(completed_task):
     ).select_related("agent", "agent__department__project", "blocked_by", "created_by_agent")
 
     for dep in dependents:
-        if dep.command_name and dep.agent.is_action_enabled(dep.command_name):
+        if dep.agent.is_action_enabled(dep.command_name):
             dep.status = AgentTask.Status.QUEUED
             dep.save(update_fields=["status", "updated_at"])
             _broadcast_task(dep)

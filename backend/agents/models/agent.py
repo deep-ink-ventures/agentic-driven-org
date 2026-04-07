@@ -68,15 +68,6 @@ class Agent(models.Model):
             ),
         ]
 
-    @property
-    def auto_approve(self) -> bool:
-        """Backward-compat shim — returns True when all commands are enabled.
-
-        TODO: Remove once admin, serializers, and tasks.py are migrated
-        to use enabled_commands directly (Tasks 3-5).
-        """
-        return self.all_commands_enabled
-
     def is_action_enabled(self, command_name: str) -> bool:
         """Check if a specific command auto-executes (True in enabled_commands)."""
         return self.enabled_commands.get(command_name, False)

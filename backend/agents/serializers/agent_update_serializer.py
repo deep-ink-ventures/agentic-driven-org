@@ -6,7 +6,7 @@ from agents.models import Agent
 class AgentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Agent
-        fields = ["instructions", "config", "auto_approve", "status"]
+        fields = ["instructions", "config", "enabled_commands", "status"]
 
     def validate_config(self, value):
         agent = self.instance

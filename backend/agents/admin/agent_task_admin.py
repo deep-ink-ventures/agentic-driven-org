@@ -51,16 +51,16 @@ class AgentTaskAdmin(admin.ModelAdmin):
             approved += 1
         self.message_user(request, f"{approved} task(s) approved and queued/planned.")
 
-    @admin.action(description="Approve & enable auto-approve on agent")
+    @admin.action(description="Approve & auto-enable command on agent")
     def approve_and_auto_execute_similar(self, request, queryset):
-        """Approve tasks and enable auto_approve on their agents."""
+        """Approve tasks and enable their command in the agent's enabled_commands."""
         approved = 0
         for task in queryset.filter(status=AgentTask.Status.AWAITING_APPROVAL):
             task.approve()
             approved += 1
-            if not task.agent.auto_approve:
-                task.agent.auto_approve = True
-                task.agent.save(update_fields=["auto_approve"])
+            if task.command_name and not task.agent.is_action_enabled(task.command_name):
+                task.agent.enabled_commands[task.command_name] = True
+                task.agent.save(update_fields=["enabled_commands"])
         self.message_user(request, f"{approved} task(s) approved and queued/planned.")
 
     @admin.action(description="Reject selected tasks")

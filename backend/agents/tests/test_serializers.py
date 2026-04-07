@@ -42,6 +42,7 @@ class TestAgentTaskSerializer:
         expected_fields = {
             "id",
             "agent",
+            "department",
             "agent_name",
             "agent_type",
             "created_by_agent",
@@ -118,6 +119,55 @@ class TestAgentTaskSerializer:
         serializer = AgentTaskSerializer()
         for field_name in serializer.Meta.read_only_fields:
             assert field_name in serializer.fields
+
+
+@pytest.mark.django_db
+class TestAgentUpdateSerializer:
+    def _create_agent(self):
+        from accounts.models import User
+        from agents.models import Agent
+        from projects.models import Department, Project
+
+        user = User.objects.create_user(email="upd@test.com", password="pass")
+        project = Project.objects.create(name="Upd Project", owner=user)
+        dept = Department.objects.create(project=project, department_type="marketing")
+        return Agent.objects.create(
+            name="Test Agent",
+            agent_type="twitter",
+            department=dept,
+            status="active",
+        )
+
+    def test_update_enabled_commands(self):
+        from agents.serializers import AgentUpdateSerializer
+
+        agent = self._create_agent()
+        serializer = AgentUpdateSerializer(
+            agent,
+            data={"enabled_commands": {"post-content": True, "search-trends": False}},
+            partial=True,
+        )
+        assert serializer.is_valid(), serializer.errors
+        serializer.save()
+        agent.refresh_from_db()
+        assert agent.enabled_commands == {"post-content": True, "search-trends": False}
+
+    def test_agent_summary_includes_enabled_commands(self):
+        from projects.serializers.project_detail_serializer import AgentSummarySerializer
+
+        agent = self._create_agent()
+        agent.enabled_commands = {"post-content": True}
+        agent.save(update_fields=["enabled_commands"])
+        serializer = AgentSummarySerializer(agent)
+        assert "enabled_commands" in serializer.data
+        assert serializer.data["enabled_commands"] == {"post-content": True}
+
+    def test_agent_summary_does_not_include_auto_approve(self):
+        from projects.serializers.project_detail_serializer import AgentSummarySerializer
+
+        agent = self._create_agent()
+        serializer = AgentSummarySerializer(agent)
+        assert "auto_approve" not in serializer.data
 
 
 class TestBlueprintInfoSerializer:

@@ -16,13 +16,13 @@ class AgentTaskInline(admin.TabularInline):
 
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
-    list_display = ("name", "agent_type", "department", "is_leader", "auto_approve", "status")
-    list_filter = ("agent_type", "status", "is_leader", "auto_approve", "department__project")
+    list_display = ("name", "agent_type", "department", "is_leader", "status")
+    list_filter = ("agent_type", "status", "is_leader", "department__project")
     search_fields = ("name", "department__name")
     ordering = ("department", "-is_leader", "name")
     fieldsets = (
         (None, {"fields": ("name", "agent_type", "department", "is_leader")}),
-        ("Configuration", {"fields": ("instructions", "config", "auto_approve", "status")}),
+        ("Configuration", {"fields": ("instructions", "config", "enabled_commands", "status")}),
         ("Internal State", {"fields": ("internal_state",), "classes": ("collapse",)}),
     )
     inlines = [AgentTaskInline]

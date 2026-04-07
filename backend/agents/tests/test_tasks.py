@@ -112,7 +112,7 @@ class TestRunScheduledActions:
     def test_daily_creates_tasks_when_approved(self, mock_exec, twitter_agent):
         from agents.tasks import run_scheduled_actions
 
-        # twitter_agent has auto_approve=True, so daily command runs
+        # twitter_agent has enabled_commands with all commands enabled, so daily command runs
         run_scheduled_actions("daily")
 
         tasks = AgentTask.objects.filter(agent=twitter_agent)
@@ -243,7 +243,7 @@ class TestCreateNextLeaderTask:
         # Should create a task for the twitter agent
         task = AgentTask.objects.filter(agent=twitter_agent).first()
         assert task is not None
-        # auto_approve is True on twitter_agent, so task is auto-queued
+        # twitter_agent has enabled_commands set, so task is auto-queued
         assert task.status in [AgentTask.Status.QUEUED, AgentTask.Status.AWAITING_APPROVAL]
         assert task.created_by_agent == leader_agent
         assert task.command_name == "place-content"
@@ -508,7 +508,7 @@ class TestCommandNameValidation:
         from agents.tasks import run_scheduled_actions
 
         # The twitter worker has post-content enabled but the scheduled commands
-        # come from the blueprint. Use an agent with auto_approve-style enabled commands.
+        # come from the blueprint. Use an agent with all relevant commands enabled.
         self.worker.enabled_commands = {"engage-tweets": True, "search-trends": True}
         self.worker.save(update_fields=["enabled_commands"])
 

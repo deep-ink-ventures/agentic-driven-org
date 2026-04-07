@@ -39,7 +39,7 @@ class AgentSummarySerializer(serializers.ModelSerializer):
             "status",
             "instructions",
             "config",
-            "auto_approve",
+            "enabled_commands",
             "internal_state",
             "pending_task_count",
             "tags",

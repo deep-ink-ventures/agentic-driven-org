@@ -11,7 +11,7 @@ from agents.serializers.blueprint_info_serializer import get_blueprint_info
 
 
 class AgentUpdateView(UpdateAPIView):
-    """PATCH /api/agents/{id}/ — update agent instructions, config, auto_approve, status."""
+    """PATCH /api/agents/{id}/ — update agent instructions, config, enabled_commands, status."""
 
     serializer_class = AgentUpdateSerializer
     permission_classes = [IsAuthenticated]
