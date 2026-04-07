@@ -311,7 +311,54 @@ def parse_json_response(response: str) -> dict | None:
     last_brace = cleaned.rfind("}")
     if last_brace <= first_brace:
         return None
+    candidate = cleaned[first_brace : last_brace + 1]
     try:
-        return json.loads(cleaned[first_brace : last_brace + 1])
+        return json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Last resort: fix common Claude JSON issues (unescaped control chars in strings)
+    # Replace literal newlines/tabs inside JSON string values with their escaped forms
+    try:
+        fixed = _fix_json_control_chars(candidate)
+        return json.loads(fixed)
     except (json.JSONDecodeError, ValueError):
         return None
+
+
+def _fix_json_control_chars(s: str) -> str:
+    """Fix unescaped control characters inside JSON string values.
+
+    Claude sometimes produces JSON with literal newlines inside string values
+    (especially in enriched_goal fields containing markdown). This fixes them
+    by replacing literal control chars with their JSON escape sequences,
+    but only inside quoted strings.
+    """
+
+    result = []
+    in_string = False
+    escape_next = False
+    for char in s:
+        if escape_next:
+            result.append(char)
+            escape_next = False
+            continue
+        if char == "\\" and in_string:
+            result.append(char)
+            escape_next = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            result.append(char)
+            continue
+        if in_string:
+            if char == "\n":
+                result.append("\\n")
+                continue
+            if char == "\r":
+                result.append("\\r")
+                continue
+            if char == "\t":
+                result.append("\\t")
+                continue
+        result.append(char)
+    return "".join(result)

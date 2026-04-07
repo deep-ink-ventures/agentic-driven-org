@@ -194,3 +194,54 @@ class TestCallClaudeWithTools:
         )
 
         assert tool_input == {"first": True}
+
+
+class TestParseJsonResponse:
+    def test_plain_json(self):
+        from agents.ai.claude_client import parse_json_response
+
+        result = parse_json_response('{"key": "value"}')
+        assert result == {"key": "value"}
+
+    def test_fenced_json(self):
+        from agents.ai.claude_client import parse_json_response
+
+        result = parse_json_response('```json\n{"key": "value"}\n```')
+        assert result == {"key": "value"}
+
+    def test_fenced_json_no_lang(self):
+        from agents.ai.claude_client import parse_json_response
+
+        result = parse_json_response('```\n{"key": "value"}\n```')
+        assert result == {"key": "value"}
+
+    def test_json_with_surrounding_text(self):
+        from agents.ai.claude_client import parse_json_response
+
+        result = parse_json_response('Here is the JSON:\n{"key": "value"}\nDone.')
+        assert result == {"key": "value"}
+
+    def test_unescaped_newlines_in_string_values(self):
+        from agents.ai.claude_client import parse_json_response
+
+        # Simulate Claude putting literal newlines inside a JSON string value
+        raw = '```json\n{"enriched_goal": "Line 1\nLine 2\nLine 3", "summary": "ok"}\n```'
+        result = parse_json_response(raw)
+        assert result is not None
+        assert result["enriched_goal"] == "Line 1\nLine 2\nLine 3"
+        assert result["summary"] == "ok"
+
+    def test_unescaped_newlines_with_nested_objects(self):
+        from agents.ai.claude_client import parse_json_response
+
+        raw = '{"goal": "Has\nnewlines\nin it", "departments": [{"type": "writers_room"}]}'
+        result = parse_json_response(raw)
+        assert result is not None
+        assert "newlines" in result["goal"]
+        assert result["departments"][0]["type"] == "writers_room"
+
+    def test_returns_none_for_garbage(self):
+        from agents.ai.claude_client import parse_json_response
+
+        assert parse_json_response("not json at all") is None
+        assert parse_json_response("") is None
