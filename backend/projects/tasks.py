@@ -104,7 +104,7 @@ def bootstrap_project(self, proposal_id: str):
     """
     import re
 
-    from agents.ai.claude_client import stream_claude
+    from agents.ai.claude_client import call_claude_structured
     from agents.blueprints import DEPARTMENTS
     from projects.models import BootstrapProposal, Source
     from projects.prompts import BOOTSTRAP_SYSTEM_PROMPT, build_bootstrap_user_message
@@ -229,9 +229,50 @@ def bootstrap_project(self, proposal_id: str):
                 events=events[:],
             )
 
-        response, _usage = stream_claude(
+        # Use structured output via forced tool call — guarantees valid JSON
+        bootstrap_schema = {
+            "type": "object",
+            "properties": {
+                "enriched_goal": {
+                    "type": "string",
+                    "description": "The user's original goal with misspellings fixed and formatted as clean markdown",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "2-3 sentence analysis of the project",
+                },
+                "departments": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "department_type": {"type": "string"},
+                            "agents": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "agent_type": {"type": "string"},
+                                        "instructions": {"type": "string"},
+                                    },
+                                    "required": ["name", "agent_type", "instructions"],
+                                },
+                            },
+                        },
+                        "required": ["department_type", "agents"],
+                    },
+                },
+            },
+            "required": ["enriched_goal", "summary", "departments"],
+        }
+
+        proposal_data, _usage = call_claude_structured(
             system_prompt=BOOTSTRAP_SYSTEM_PROMPT,
             user_message=user_message,
+            output_schema=bootstrap_schema,
+            tool_name="submit_proposal",
+            tool_description="Submit the project bootstrap proposal with departments and agents",
             max_tokens=max_tokens,
             on_progress=on_progress,
         )
@@ -239,12 +280,6 @@ def bootstrap_project(self, proposal_id: str):
         _broadcast_bootstrap(
             project.id, proposal.id, "processing", phase="Validating proposal", progress=98, events=events[:]
         )
-
-        from agents.ai.claude_client import parse_json_response
-
-        proposal_data = parse_json_response(response)
-        if proposal_data is None:
-            raise ValueError(f"Failed to parse Claude response as JSON: {response[:200]}")
 
         # Ensure ALL workforce agents are included for each department
         # (Claude may cherry-pick despite instructions — enforce in code)

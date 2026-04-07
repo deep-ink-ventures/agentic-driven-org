@@ -196,6 +196,104 @@ class TestCallClaudeWithTools:
         assert tool_input == {"first": True}
 
 
+class TestCallClaudeStructured:
+    @patch("agents.ai.claude_client._client", None)
+    @patch("agents.ai.claude_client.anthropic")
+    def test_returns_structured_data(self, mock_anthropic):
+        from agents.ai.claude_client import call_claude_structured
+
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.input = {"name": "Test Project", "count": 3}
+
+        mock_message = MagicMock()
+        mock_message.content = [tool_block]
+        mock_message.usage.input_tokens = 200
+        mock_message.usage.output_tokens = 100
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "count": {"type": "integer"},
+            },
+            "required": ["name", "count"],
+        }
+
+        data, usage = call_claude_structured(
+            system_prompt="You are helpful",
+            user_message="Analyze this",
+            output_schema=schema,
+        )
+
+        assert data == {"name": "Test Project", "count": 3}
+        assert usage["model"] == "claude-opus-4-6"
+        # Verify tool_choice forces the tool
+        call_kwargs = mock_client.messages.create.call_args
+        assert call_kwargs.kwargs["tool_choice"] == {"type": "tool", "name": "structured_output"}
+        assert len(call_kwargs.kwargs["tools"]) == 1
+
+    @patch("agents.ai.claude_client._client", None)
+    @patch("agents.ai.claude_client.anthropic")
+    def test_raises_when_no_tool_call(self, mock_anthropic):
+        import pytest
+
+        from agents.ai.claude_client import call_claude_structured
+
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "No tool call"
+
+        mock_message = MagicMock()
+        mock_message.content = [text_block]
+        mock_message.usage.input_tokens = 100
+        mock_message.usage.output_tokens = 50
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with pytest.raises(ValueError, match="structured output failed"):
+            call_claude_structured(
+                system_prompt="sys",
+                user_message="msg",
+                output_schema={"type": "object", "properties": {}},
+            )
+
+    @patch("agents.ai.claude_client._client", None)
+    @patch("agents.ai.claude_client.anthropic")
+    def test_custom_tool_name(self, mock_anthropic):
+        from agents.ai.claude_client import call_claude_structured
+
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.input = {"result": "ok"}
+
+        mock_message = MagicMock()
+        mock_message.content = [tool_block]
+        mock_message.usage.input_tokens = 100
+        mock_message.usage.output_tokens = 50
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        data, _ = call_claude_structured(
+            system_prompt="sys",
+            user_message="msg",
+            output_schema={"type": "object", "properties": {"result": {"type": "string"}}},
+            tool_name="submit_proposal",
+        )
+
+        call_kwargs = mock_client.messages.create.call_args
+        assert call_kwargs.kwargs["tool_choice"]["name"] == "submit_proposal"
+        assert data == {"result": "ok"}
+
+
 class TestParseJsonResponse:
     def test_plain_json(self):
         from agents.ai.claude_client import parse_json_response

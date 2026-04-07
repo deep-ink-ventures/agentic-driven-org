@@ -287,6 +287,129 @@ def stream_claude(
     return accumulated, usage
 
 
+def call_claude_structured(
+    system_prompt: str,
+    user_message: str,
+    output_schema: dict,
+    tool_name: str = "structured_output",
+    tool_description: str = "Submit your structured response",
+    model: str = "claude-opus-4-6",
+    max_tokens: int = 8192,
+    on_progress: callable = None,
+) -> tuple[dict, dict]:
+    """
+    Call Claude and force structured JSON output via tool use.
+
+    Instead of asking Claude to return JSON in a text response (which it wraps
+    in markdown fences, adds literal newlines in strings, etc.), this forces
+    Claude to call a tool with a strict JSON schema. The SDK validates the
+    schema automatically — no parsing, no fences, no hacks.
+
+    Args:
+        output_schema: JSON Schema for the output (the tool's input_schema).
+        tool_name: Name for the forced tool.
+        tool_description: Description shown to Claude.
+        on_progress: Optional callback(text, tokens) for streaming progress.
+                     When provided, streams the response for UI feedback
+                     but still extracts the tool call result.
+
+    Returns:
+        (structured_data, usage_dict) where structured_data is the validated dict.
+
+    Raises:
+        ValueError: If Claude doesn't produce a valid tool call.
+    """
+    client = _get_client()
+
+    tool = {
+        "name": tool_name,
+        "description": tool_description,
+        "input_schema": output_schema,
+    }
+
+    logger.info(
+        "Calling Claude structured: model=%s, tool=%s, system_len=%d, msg_len=%d",
+        model,
+        tool_name,
+        len(system_prompt),
+        len(user_message),
+    )
+
+    messages = [{"role": "user", "content": user_message}]
+    kwargs = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system_prompt,
+        "messages": messages,
+        "tools": [tool],
+        "tool_choice": {"type": "tool", "name": tool_name},
+    }
+
+    if on_progress:
+        # Stream for progress updates, but still extract tool_use block
+        tool_input = None
+        accumulated_text = ""
+        input_tokens = 0
+        output_tokens = 0
+
+        with client.messages.stream(**kwargs) as stream:
+            for event in stream:
+                # Provide progress feedback from text deltas
+                if (
+                    hasattr(event, "type")
+                    and event.type == "content_block_delta"
+                    and hasattr(event.delta, "partial_json")
+                ):
+                    accumulated_text += event.delta.partial_json
+                    if len(accumulated_text) % 100 < 10:
+                        on_progress(accumulated_text, len(accumulated_text))
+
+            final = stream.get_final_message()
+            input_tokens = final.usage.input_tokens
+            output_tokens = final.usage.output_tokens
+
+            for block in final.content:
+                if block.type == "tool_use":
+                    tool_input = block.input
+                    break
+
+        if on_progress:
+            on_progress(accumulated_text, output_tokens)
+    else:
+        message = client.messages.create(**kwargs)
+        input_tokens = message.usage.input_tokens
+        output_tokens = message.usage.output_tokens
+        tool_input = None
+        for block in message.content:
+            if block.type == "tool_use":
+                tool_input = block.input
+                break
+
+    if tool_input is None:
+        raise ValueError("Claude did not produce a tool call — structured output failed")
+
+    from agents.ai.pricing import estimate_cost
+
+    cost = estimate_cost(model, input_tokens, output_tokens)
+
+    usage = {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": cost,
+    }
+
+    logger.info(
+        "Claude structured complete: model=%s input=%d output=%d cost=$%.4f",
+        model,
+        input_tokens,
+        output_tokens,
+        cost,
+    )
+
+    return tool_input, usage
+
+
 def parse_json_response(response: str) -> dict | None:
     """
     Parse a JSON response from Claude, stripping markdown fences if present.
