@@ -909,11 +909,20 @@ Write 2-4 paragraphs of project-specific context. Also suggest a display name in
             max_tokens=4096,
         )
 
-        if result.get("instructions"):
-            agent.instructions = result["instructions"]
-        if result.get("name"):
-            agent.name = result["name"]
+        # Validate result — never activate an agent with empty or garbage instructions
+        instructions = (result.get("instructions") or "").strip()
+        name = (result.get("name") or "").strip()
 
+        if len(instructions) < 50:
+            raise ValueError(
+                f"Provisioning produced empty or trivial instructions for {bp.name} "
+                f"({len(instructions)} chars). Retrying."
+            )
+        if not name:
+            raise ValueError(f"Provisioning produced no display name for {bp.name}. Retrying.")
+
+        agent.instructions = instructions
+        agent.name = name
         agent.status = Agent.Status.ACTIVE
         agent.save(update_fields=["instructions", "name", "status", "updated_at"])
 
