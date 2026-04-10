@@ -511,7 +511,7 @@ class TestWorkforceDefaultExecuteTask:
             bp.execute_task(twitter_agent, task)
 
             user_message = mock_call.call_args.kwargs.get("user_message", "")
-            assert "STRATEGY METHODOLOGY" in user_message
+            assert "STRATEGY & NARRATIVE METHODOLOGY" in user_message
 
     def test_get_max_tokens_passed_to_claude(self, twitter_agent):
         """Agents with get_max_tokens have it passed to call_claude."""

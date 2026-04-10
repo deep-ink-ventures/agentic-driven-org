@@ -7,7 +7,11 @@ if TYPE_CHECKING:
     pass
 
 from agents.blueprints.base import WorkforceBlueprint
-from agents.blueprints.sales.workforce.strategist.commands import draft_strategy, revise_strategy
+from agents.blueprints.sales.workforce.strategist.commands import (
+    draft_strategy,
+    finalize_outreach,
+    revise_strategy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +20,11 @@ class StrategistBlueprint(WorkforceBlueprint):
     name = "Sales Strategist"
     slug = "strategist"
     description = (
-        "Outreach strategist — analyzes research to identify 3-5 high-potential target areas "
-        "with thesis, rationale, and approach for each"
+        "Outreach strategist — analyzes research to identify high-potential target areas "
+        "with thesis, AIDA narrative arc, and approach for each. "
+        "Consolidates personalizer outputs into exec summary + CSV for dispatch."
     )
-    tags = ["strategy", "targeting", "segmentation", "market-positioning"]
+    tags = ["strategy", "targeting", "segmentation", "market-positioning", "narrative-design", "consolidation"]
     skills = [
         {
             "name": "Target Segmentation",
@@ -42,12 +47,31 @@ class StrategistBlueprint(WorkforceBlueprint):
                 "and competitive density. Prioritize high-potential, low-competition areas."
             ),
         },
+        {
+            "name": "AIDA Narrative Design",
+            "description": (
+                "Design an Attention-Interest-Desire-Action narrative arc per target area. "
+                "Craft hooks, interest framings, desire proof points, and action CTAs "
+                "that feel human and avoid spam patterns."
+            ),
+        },
+        {
+            "name": "Pipeline Consolidation",
+            "description": (
+                "Consolidate personalizer clone outputs into a 1-page exec summary "
+                "and a machine-readable CSV with columns: channel, identifier, subject, content."
+            ),
+        },
     ]
     config_schema = {}
 
     @property
     def system_prompt(self) -> str:
-        return """You are a sales strategist. Given a research briefing about an industry, your job is to identify the 3-5 most promising target areas for outreach and build a thesis for each.
+        return """You are a sales strategist and narrative designer. You own two phases of the outreach pipeline:
+
+## Phase 1: Strategy + Narrative Design (draft-strategy)
+
+Given a research briefing, identify the most promising target areas for outreach and build a thesis with AIDA narrative arc for each.
 
 A target area can be:
 - An industry sector (e.g. "B2B SaaS companies in logistics")
@@ -57,37 +81,49 @@ A target area can be:
 
 Your output must follow this structure:
 
-## Strategic Thesis
+### Strategic Thesis
 2-3 sentences: what's the overall outreach angle and why now.
-
-## Target Areas
 
 ### Target Area 1: [Name]
 - **Scope:** Who exactly is in this segment
 - **Size estimate:** Rough number of potential targets
 - **Rationale:** Why this segment is promising RIGHT NOW (cite specific signals from research)
 - **Competitive density:** How crowded is this space with competing outreach
-- **Approach:** What angle/message would resonate with this audience
+- **AIDA Narrative Arc:**
+  - **Attention:** Hook category and specific hook (pattern interrupt, contrarian insight, mutual connection, timely reference)
+  - **Interest:** Framing that bridges hook to product — why this matters to THEM
+  - **Desire:** Proof points — case studies, metrics, social proof that build wanting
+  - **Action:** CTA — low-friction, specific, time-bounded
+- **Anti-spam guidance:** What to avoid for this segment (tone, phrases, frequency)
 - **Potential:** High / Medium / Low with justification
-- **Timing:** Why now — what trigger event or trend makes this urgent
 
-[Repeat for each target area]
+[Repeat for each target area — use numbered headers: ### Target Area 1, ### Target Area 2, etc.]
 
-## Priority Ranking
+### Priority Ranking
 Rank all target areas from highest to lowest impact. Explain the ranking criteria.
 
-## Risks & Assumptions
+### Risks & Assumptions
 - What could go wrong with this strategy
 - What assumptions need validation
-- What information gaps could change the thesis
 
-IMPORTANT: Every target area must be grounded in specific signals from the research briefing. Do not propose generic segments without evidence."""
+IMPORTANT: Every target area must be grounded in specific signals from the research briefing. Do not propose generic segments without evidence.
+
+## Phase 2: Consolidation (finalize-outreach)
+
+After personalizer clones produce outreach for each target area, consolidate everything into:
+1. **Exec Summary** — max 1 page: what this is about, why it is the right approach, whom we target with what. No chat, no filler.
+2. **CSV** — output between ```csv markers with exact columns: channel, identifier, subject, content
+   - channel: outreach agent identifier (e.g. email)
+   - identifier: email address, Reddit username, Twitter handle, phone, etc.
+   - subject: subject line or headline
+   - content: the outreach message"""
 
     draft_strategy = draft_strategy
+    finalize_outreach = finalize_outreach
     revise_strategy = revise_strategy
 
     def get_task_suffix(self, agent, task):
-        return """# STRATEGY METHODOLOGY
+        return """# STRATEGY & NARRATIVE METHODOLOGY
 
 ## Target Area Quality Criteria
 - Each target area must cite at least 2 specific signals from the research briefing
@@ -100,6 +136,26 @@ IMPORTANT: Every target area must be grounded in specific signals from the resea
 - Identify positioning gaps — segments competitors ignore or serve poorly
 - Frame our strengths against specific competitor weaknesses
 - Use "landmine questions" — questions prospects should ask that favor us
+
+## Narrative Arc Methodology
+- Hook categories: pattern interrupt, contrarian insight, mutual connection, timely reference
+- Each hook must be specific to the target area — no generic "Did you know…" openers
+- AIDA must flow naturally: hook → relevance → proof → ask
+- Interest framing bridges the hook to the product — it answers "why should I care?"
+- Desire proof points must be concrete: numbers, names, outcomes — not vague claims
+- Action CTA must be low-friction (reply, 15-min call, link click) — never "sign up now"
+
+## Anti-Spam Standards
+- No buzzwords: "synergy", "leverage", "revolutionary", "game-changing"
+- No false urgency: "limited time", "act now", "don't miss out"
+- No fake personalization: "I noticed your company…" without citing what specifically
+- Tone must match the segment — formal for enterprise, direct for founders, technical for engineers
+
+## Consolidation Standards (finalize-outreach)
+- Exec summary must fit 1 page — ruthlessly cut filler
+- CSV must be valid with exact headers: channel, identifier, subject, content
+- Every row in the CSV must trace back to a personalizer output
+- No duplicate identifiers in the CSV
 
 ## Anti-Patterns to Avoid
 - Do not propose more than 5 target areas — focus beats breadth

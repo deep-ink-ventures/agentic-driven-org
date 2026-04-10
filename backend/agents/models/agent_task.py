@@ -47,6 +47,14 @@ class AgentTask(models.Model):
         related_name="dependents",
         help_text="This task can't run until the blocker completes.",
     )
+    cloned_agent = models.ForeignKey(
+        "agents.ClonedAgent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+        help_text="If set, this task runs on behalf of a cloned agent instance.",
+    )
     sprint = models.ForeignKey(
         "projects.Sprint",
         on_delete=models.SET_NULL,

@@ -128,8 +128,6 @@ _sales_workforce = {}
 _sales_imports = {
     "researcher": ("agents.blueprints.sales.workforce.researcher", "ResearcherBlueprint"),
     "strategist": ("agents.blueprints.sales.workforce.strategist", "StrategistBlueprint"),
-    "pitch_architect": ("agents.blueprints.sales.workforce.pitch_architect", "PitchArchitectBlueprint"),
-    "profile_selector": ("agents.blueprints.sales.workforce.profile_selector", "ProfileSelectorBlueprint"),
     "pitch_personalizer": ("agents.blueprints.sales.workforce.pitch_personalizer", "PitchPersonalizerBlueprint"),
     "sales_qa": ("agents.blueprints.sales.workforce.sales_qa", "SalesQaBlueprint"),
     "authenticity_analyst": (
@@ -150,8 +148,8 @@ if SalesLeaderBlueprint is not None:
     DEPARTMENTS["sales"] = {
         "name": "Sales",
         "description": (
-            "Outbound sales pipeline — industry research, target strategy, pitch design, "
-            "prospect profiling, personalized outreach with QA review loops"
+            "Outbound sales pipeline — industry research, target strategy with narrative design, "
+            "parallel personalization via cloned agents, QA review loops, CSV-driven dispatch"
         ),
         "leader": _sales_leader,
         "workforce": _sales_workforce,

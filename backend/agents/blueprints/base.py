@@ -113,6 +113,7 @@ class BaseBlueprint(ABC):
     outputs: list[str] = []  # metadata: what persistent artifacts this agent produces
     default_model: str = "claude-opus-4-6"
     config_schema: dict[str, dict] = {}  # {"key": {"type": "str", "required": bool, "description": "..."}}
+    uses_web_search: bool = False  # whether this agent needs web search tools at runtime
     essential: bool = False  # always pre-selected when department is added
     controls: str | list[str] | None = None  # auto-selected when controlled agent is selected
 
@@ -830,6 +831,38 @@ class LeaderBlueprint(BaseBlueprint):
 
         Override for post-creation logic (e.g., file lock claiming).
         """
+
+    # ── Clone lifecycle helpers ─────────────────────────────────────────
+
+    def create_clones(self, parent_agent: Agent, count: int, sprint, initial_state: dict | None = None) -> list:
+        """Create N ephemeral clones of parent_agent, scoped to this sprint."""
+        from agents.models import ClonedAgent
+
+        clones = []
+        for i in range(count):
+            clone = ClonedAgent.objects.create(
+                parent=parent_agent,
+                sprint=sprint,
+                clone_index=i,
+                internal_state=initial_state or {},
+            )
+            clones.append(clone)
+        logger.info(
+            "CLONES_CREATED parent=%s count=%d sprint=%s",
+            parent_agent.name,
+            count,
+            str(sprint.id)[:8],
+        )
+        return clones
+
+    def destroy_sprint_clones(self, sprint) -> int:
+        """Delete all clones for a sprint. Returns count deleted."""
+        from agents.models import ClonedAgent
+
+        count, _ = ClonedAgent.objects.filter(sprint=sprint).delete()
+        if count:
+            logger.info("CLONES_DESTROYED count=%d sprint=%s", count, str(sprint.id)[:8])
+        return count
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
         """Execute a leader task by calling Claude and processing delegated subtasks.
