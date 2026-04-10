@@ -115,7 +115,13 @@ class SalesLeaderBlueprint(LeaderBlueprint):
             ),
         },
     ]
-    config_schema = {}
+    config_schema = {
+        "include_inactive_outreach": {
+            "type": "bool",
+            "description": "Include inactive outreach agents as channels in the CSV. Their rows won't be auto-dispatched but can be used for manual outreach.",
+            "label": "Include Inactive Outreach Channels",
+        },
+    }
 
     def get_review_pairs(self):
         return [
@@ -588,7 +594,10 @@ You don't write pitches or do research directly — you create tasks for your wo
         # For strategy step, inject available outreach agents
         extra_context = ""
         if step == "strategy":
-            outreach_agents = list(agent.department.agents.filter(outreach=True).values_list("agent_type", "name"))
+            outreach_qs = agent.department.agents.filter(outreach=True)
+            if not agent.get_config_value("include_inactive_outreach", False):
+                outreach_qs = outreach_qs.filter(status="active")
+            outreach_agents = list(outreach_qs.values_list("agent_type", "name"))
             if outreach_agents:
                 agents_list = ", ".join(f"{name} ({atype})" for atype, name in outreach_agents)
                 extra_context = f"\n\n## Available Outreach Channels\nAvailable channels for assignment: {agents_list}"
