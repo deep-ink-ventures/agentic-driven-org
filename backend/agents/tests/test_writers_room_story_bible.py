@@ -359,3 +359,28 @@ class TestBibleContextInjection:
         bp = WritersRoomLeaderBlueprint()
         context = bp._get_delegation_context(leader)
         assert "Story Bible" not in context
+
+
+class TestCreativeReviewerEnhancements:
+    def test_system_prompt_includes_canon_verification(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("creative_reviewer", "writers_room")
+        prompt = bp.system_prompt
+        assert "CANON VERIFICATION" in prompt
+        assert "[ESTABLISHED]" in prompt
+
+    def test_system_prompt_includes_dramatic_weakness(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("creative_reviewer", "writers_room")
+        prompt = bp.system_prompt
+        assert "DRAMATIC WEAKNESS" in prompt or "WEAK_IDEA" in prompt
+        assert "stakes" in prompt.lower()
+
+    def test_system_prompt_includes_weak_idea_verdict(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("creative_reviewer", "writers_room")
+        prompt = bp.system_prompt
+        assert "WEAK_IDEA" in prompt
