@@ -12,7 +12,7 @@ from agents.blueprints.base import (
     command,
 )
 from agents.models import Agent, AgentTask
-from projects.models import Department, Document, Project
+from projects.models import Department, Document, Project, Sprint
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +32,13 @@ def project(user):
 @pytest.fixture
 def department(project):
     return Department.objects.create(department_type="marketing", project=project)
+
+
+@pytest.fixture
+def sprint(department, user):
+    s = Sprint.objects.create(project=department.project, text="Test sprint", created_by=user)
+    s.departments.add(department)
+    return s
 
 
 @pytest.fixture
@@ -633,11 +640,12 @@ class TestReviewDimensions:
         bp = get_blueprint("twitter", "marketing")
         assert bp.review_dimensions == []
 
-    def test_propose_review_chain_reads_from_blueprint(self, department, leader_agent, twitter_agent):
+    def test_propose_review_chain_reads_from_blueprint(self, department, leader_agent, twitter_agent, sprint):
         """_propose_review_chain reads dimensions from the reviewer blueprint."""
         bp = get_blueprint("leader", "marketing")
         task = AgentTask.objects.create(
             agent=twitter_agent,
+            sprint=sprint,
             status=AgentTask.Status.DONE,
             exec_summary="Tweet draft",
             report="Here is my tweet draft.",
@@ -656,40 +664,45 @@ class TestReviewDimensions:
 
 @pytest.mark.django_db
 class TestApplyQualityGate:
-    def test_accepts_excellent_score(self, leader_agent):
+    def test_accepts_excellent_score(self, leader_agent, sprint):
         bp = get_blueprint("leader", "marketing")
-        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, 9.5, "test_key")
+        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, sprint, 9.5, "test_key")
         assert accepted is True
 
-    def test_rejects_low_score(self, leader_agent):
+    def test_rejects_low_score(self, leader_agent, sprint):
         bp = get_blueprint("leader", "marketing")
-        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, 7.0, "test_key")
+        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, sprint, 7.0, "test_key")
         assert accepted is False
 
-    def test_accepts_near_excellence_after_max_polish(self, leader_agent):
+    def test_accepts_near_excellence_after_max_polish(self, leader_agent, sprint, department):
         """After MAX_POLISH_ATTEMPTS at >= 9.0, accepts even without reaching 9.5."""
         bp = get_blueprint("leader", "marketing")
-        # Seed state with existing polish attempts
-        leader_agent.internal_state = {
-            "review_rounds": {"test_key": 3},
-            "polish_attempts": {"test_key": 2},  # Will be incremented to 3 = MAX
-        }
-        leader_agent.save(update_fields=["internal_state"])
-        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, 9.2, "test_key")
+        # Seed state on sprint
+        sprint.set_department_state(
+            department.id,
+            {
+                "review_rounds": {"test_key": 3},
+                "polish_attempts": {"test_key": 2},  # Will be incremented to 3 = MAX
+            },
+        )
+        accepted, polish_count, round_num = bp._apply_quality_gate(leader_agent, sprint, 9.2, "test_key")
         assert accepted is True
         assert polish_count == 3
 
-    def test_clears_tracking_on_acceptance(self, leader_agent):
+    def test_clears_tracking_on_acceptance(self, leader_agent, sprint, department):
         bp = get_blueprint("leader", "marketing")
-        leader_agent.internal_state = {
-            "review_rounds": {"test_key": 1},
-            "polish_attempts": {"test_key": 0},
-        }
-        leader_agent.save(update_fields=["internal_state"])
-        bp._apply_quality_gate(leader_agent, 9.5, "test_key")
-        leader_agent.refresh_from_db()
-        assert "test_key" not in leader_agent.internal_state.get("review_rounds", {})
-        assert "test_key" not in leader_agent.internal_state.get("polish_attempts", {})
+        sprint.set_department_state(
+            department.id,
+            {
+                "review_rounds": {"test_key": 1},
+                "polish_attempts": {"test_key": 0},
+            },
+        )
+        bp._apply_quality_gate(leader_agent, sprint, 9.5, "test_key")
+        sprint.refresh_from_db()
+        dept_state = sprint.get_department_state(department.id)
+        assert "test_key" not in dept_state.get("review_rounds", {})
+        assert "test_key" not in dept_state.get("polish_attempts", {})
 
 
 # ── Output declarations ────────────────────────────────────────────────────
