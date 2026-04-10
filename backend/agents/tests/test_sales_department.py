@@ -17,7 +17,7 @@ from agents.blueprints.sales.leader.agent import (
     STEP_TO_COMMAND,
     SalesLeaderBlueprint,
 )
-from agents.models import Agent, AgentTask
+from agents.models import Agent, AgentTask, ClonedAgent
 from projects.models import Department, Project, Sprint
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -804,3 +804,58 @@ class TestOutreachField:
         outreach_agents = list(department.agents.filter(outreach=True))
         assert len(outreach_agents) == 1
         assert outreach_agents[0].agent_type == "email_outreach"
+
+
+# ── ClonedAgent Model ────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestClonedAgent:
+    def test_create_clone(self, department, workforce, sprint):
+        parent = workforce["pitch_personalizer"]
+        clone = ClonedAgent.objects.create(
+            parent=parent,
+            sprint=sprint,
+            clone_index=0,
+        )
+        assert clone.parent == parent
+        assert clone.sprint == sprint
+        assert clone.clone_index == 0
+        assert clone.internal_state == {}
+
+    def test_clone_resolves_parent_blueprint(self, department, workforce, sprint):
+        parent = workforce["pitch_personalizer"]
+        clone = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
+        bp = clone.parent.get_blueprint()
+        assert bp.slug == "pitch_personalizer"
+
+    def test_clone_destroyed_with_sprint_helper(self, leader, department, workforce, sprint):
+        parent = workforce["pitch_personalizer"]
+        ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
+        ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=1)
+        assert ClonedAgent.objects.filter(sprint=sprint).count() == 2
+
+        ClonedAgent.objects.filter(sprint=sprint).delete()
+        assert ClonedAgent.objects.filter(sprint=sprint).count() == 0
+
+    def test_task_can_reference_clone(self, department, workforce, sprint):
+        parent = workforce["pitch_personalizer"]
+        clone = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
+        task = AgentTask.objects.create(
+            agent=parent,
+            sprint=sprint,
+            command_name="personalize-pitches",
+            status=AgentTask.Status.QUEUED,
+            cloned_agent=clone,
+        )
+        assert task.cloned_agent == clone
+        assert task.cloned_agent.parent == parent
+
+    def test_task_without_clone_is_fine(self, department, workforce, sprint):
+        task = AgentTask.objects.create(
+            agent=workforce["researcher"],
+            sprint=sprint,
+            command_name="research-industry",
+            status=AgentTask.Status.QUEUED,
+        )
+        assert task.cloned_agent is None
