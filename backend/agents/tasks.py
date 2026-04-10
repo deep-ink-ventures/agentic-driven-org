@@ -349,18 +349,19 @@ def create_next_leader_task(leader_agent_id: str):
         logger.warning("Agent %s is not a leader blueprint", agent.name)
         return
 
-    # Hardcap: max 5 concurrent active tasks per department (safety net against runaway loops)
-    MAX_CONCURRENT_PER_DEPT = 5
+    from django.conf import settings as django_settings
+
+    max_concurrent = getattr(django_settings, "AGENT_MAX_CONCURRENT_PER_DEPT", 5)
     active_count = AgentTask.objects.filter(
         agent__department=agent.department,
         status__in=[AgentTask.Status.QUEUED, AgentTask.Status.PROCESSING],
     ).count()
-    if active_count >= MAX_CONCURRENT_PER_DEPT:
+    if active_count >= max_concurrent:
         logger.warning(
             "DEPT_CONCURRENCY_CAP dept=%s active=%d cap=%d — skipping proposal",
             agent.department.name,
             active_count,
-            MAX_CONCURRENT_PER_DEPT,
+            max_concurrent,
         )
         return
 
@@ -378,6 +379,41 @@ def create_next_leader_task(leader_agent_id: str):
         # Multi-task format: proposal has "tasks" list
         tasks_data = proposal.get("tasks", [])
         if tasks_data:
+            # Cap 1: per-proposal limit
+            max_per_proposal = getattr(django_settings, "AGENT_MAX_TASKS_PER_PROPOSAL", 20)
+            if len(tasks_data) > max_per_proposal:
+                logger.warning(
+                    "PROPOSAL_CAP leader=%s proposed=%d cap=%d — truncating",
+                    agent.name,
+                    len(tasks_data),
+                    max_per_proposal,
+                )
+                tasks_data = tasks_data[:max_per_proposal]
+
+            # Cap 2: per-sprint total limit
+            if sprint_id:
+                max_per_sprint = getattr(django_settings, "AGENT_MAX_TASKS_PER_SPRINT", 50)
+                existing_sprint_tasks = AgentTask.objects.filter(sprint_id=sprint_id).count()
+                remaining_budget = max(0, max_per_sprint - existing_sprint_tasks)
+                if remaining_budget == 0:
+                    logger.warning(
+                        "SPRINT_CAP leader=%s sprint=%s existing=%d cap=%d — refusing all tasks",
+                        agent.name,
+                        str(sprint_id)[:8],
+                        existing_sprint_tasks,
+                        max_per_sprint,
+                    )
+                    return
+                if len(tasks_data) > remaining_budget:
+                    logger.warning(
+                        "SPRINT_CAP leader=%s sprint=%s budget=%d proposed=%d — truncating",
+                        agent.name,
+                        str(sprint_id)[:8],
+                        remaining_budget,
+                        len(tasks_data),
+                    )
+                    tasks_data = tasks_data[:remaining_budget]
+
             workforce_agents = {
                 a.agent_type: a
                 for a in Agent.objects.filter(
