@@ -983,3 +983,39 @@ class TestPersonalizerExpanded:
     def test_uses_haiku_model(self):
         bp = get_blueprint("pitch_personalizer", "sales")
         assert bp.default_model == "claude-haiku-4-5"
+
+
+# ── Target Area Parsing ─────────────────────────────────────────────────────
+
+
+class TestTargetAreaParsing:
+    def test_parse_3_target_areas(self):
+        bp = SalesLeaderBlueprint()
+        report = (
+            "## Strategic Thesis\nSome thesis here.\n\n"
+            "### Target Area 1: Fintech CTOs\nScope: CFOs at fintech...\nRationale: Growing market...\n\n"
+            "### Target Area 2: SaaS Founders\nScope: Series A founders...\nRationale: Scaling needs...\n\n"
+            "### Target Area 3: DevOps Leads\nScope: Platform engineering...\nRationale: Cloud migration...\n\n"
+            "### Priority Ranking\n1. Fintech CTOs\n2. SaaS Founders\n3. DevOps Leads\n"
+        )
+        areas = bp._parse_target_areas(report)
+        assert len(areas) == 3
+        assert "Fintech CTOs" in areas[0][0]
+        assert "SaaS Founders" in areas[1][0]
+        assert "DevOps Leads" in areas[2][0]
+        assert "Growing market" in areas[0][1]
+
+    def test_parse_empty_report(self):
+        bp = SalesLeaderBlueprint()
+        assert bp._parse_target_areas("") == []
+
+    def test_parse_no_target_areas(self):
+        bp = SalesLeaderBlueprint()
+        assert bp._parse_target_areas("Just some text without target areas.") == []
+
+    def test_parse_areas_with_risks_section(self):
+        bp = SalesLeaderBlueprint()
+        report = "### Target Area 1: Enterprise\nDetails\n\n" "### Risks & Assumptions\nSome risks\n"
+        areas = bp._parse_target_areas(report)
+        assert len(areas) == 1
+        assert "Enterprise" in areas[0][0]
