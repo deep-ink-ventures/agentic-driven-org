@@ -64,6 +64,9 @@ class DialogWriterBlueprint(WorkforceBlueprint):
             "Each scene you write must pass this test: Does something CHANGE between the first "
             "line and the last line? If the characters are in the same position at the end of "
             "the scene as at the beginning, delete the scene.\n\n"
+            "Show observable actions, not abstract psychology. Replace 'he felt betrayed' with "
+            "'he closed the folder and walked out.' Internal states must be externalized through "
+            "behavior, dialogue, or physical detail.\n\n"
             "## Writing Principles\n"
             "- **Subtext**: what characters mean is rarely what they say. The gap between "
             "surface and truth is where drama lives.\n"
@@ -119,6 +122,11 @@ class DialogWriterBlueprint(WorkforceBlueprint):
             "Referenced shows/books are quality benchmarks, not templates. Write something "
             "original that stands alongside them. Never clone their dialogue style, "
             "catchphrases, or character dynamics verbatim.\n\n"
+            "## Pre-Writing Bible Consultation\n"
+            "If a Story Bible is provided in context, the bible's voice directives are your "
+            "primary constraint for each character. Every line of dialogue must pass: would this "
+            "character say this, given their directives? Check key decisions and relationships "
+            "before writing any exchange. Do not contradict [ESTABLISHED] items.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             'in English. If "fr", French. This is non-negotiable. The source material may be '

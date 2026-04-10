@@ -386,6 +386,46 @@ class TestCreativeReviewerEnhancements:
         assert "WEAK_IDEA" in prompt
 
 
+class TestCreativeWritingSkillsIntegration:
+    """Test that creative writing research skills are integrated into agent prompts."""
+
+    def test_lead_writer_has_continuity_protocol(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("lead_writer", "writers_room")
+        prompt = bp.system_prompt
+        assert "cross-reference" in prompt.lower() or "bible" in prompt.lower()
+        assert "contradiction" in prompt.lower()
+
+    def test_lead_writer_has_action_first_sharpening(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("lead_writer", "writers_room")
+        prompt = bp.system_prompt
+        assert "observable action" in prompt.lower() or "abstract psychology" in prompt.lower()
+
+    def test_story_architect_has_bible_consultation(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("story_architect", "writers_room")
+        prompt = bp.system_prompt
+        assert "bible" in prompt.lower() or "canon" in prompt.lower()
+
+    def test_dialog_writer_has_bible_consultation(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("dialog_writer", "writers_room")
+        prompt = bp.system_prompt
+        assert "bible" in prompt.lower() or "voice directive" in prompt.lower()
+
+    def test_character_designer_has_bible_consultation(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("character_designer", "writers_room")
+        prompt = bp.system_prompt
+        assert "bible" in prompt.lower() or "canon" in prompt.lower()
+
+
 class TestVoiceProfileReform:
     def test_voice_system_prompt_requires_directives(self):
         from agents.blueprints import get_blueprint
