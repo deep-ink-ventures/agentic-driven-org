@@ -1,4 +1,4 @@
-"""Tests for agent instructions review after sprint completion."""
+"""Tests for agent instructions review after sprint completion and goal changes."""
 
 import json
 from unittest.mock import patch
@@ -8,8 +8,8 @@ import pytest
 from agents.models import Agent, AgentTask
 from projects.models import Department, Project, Sprint
 from projects.tasks_consolidation import (
-    _review_department_agents,
     review_agent_instructions_after_sprint,
+    review_single_agent_instructions,
 )
 
 
@@ -92,7 +92,6 @@ class TestReviewAgentInstructionsAfterSprint:
 
     def test_skips_unaffected_departments(self, sprint, sales_dept, sales_leader, sales_agents):
         """When Claude says no departments are affected, no agent review happens."""
-        # Create a completed task on the sprint
         AgentTask.objects.create(
             agent=sales_leader,
             sprint=sprint,
@@ -117,8 +116,8 @@ class TestReviewAgentInstructionsAfterSprint:
             # Only called once for department assessment, not for agent review
             assert mock_claude.call_count == 1
 
-    def test_reviews_affected_departments(self, sprint, sales_dept, sales_leader, sales_agents):
-        """When Claude says sales is affected, proceeds to review sales agents."""
+    def test_fans_out_per_agent_for_affected_departments(self, sprint, sales_dept, sales_leader, sales_agents):
+        """When Claude says sales is affected, fans out one task per agent."""
         AgentTask.objects.create(
             agent=sales_leader,
             sprint=sprint,
@@ -127,86 +126,43 @@ class TestReviewAgentInstructionsAfterSprint:
             report="Product renamed from FinFlow to PayBridge.",
         )
 
-        call_count = [0]
-
-        def mock_claude_side_effect(system_prompt, user_message, max_tokens=8192):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                # Step 1: department assessment
-                return (
-                    json.dumps(
-                        {
-                            "affected_departments": ["sales"],
-                            "reasoning": "Product rebrand affects sales agent instructions referencing FinFlow",
-                        }
-                    ),
-                    {"input_tokens": 100, "output_tokens": 50},
-                )
-            else:
-                # Step 2+3: agent assessment
-                return (
-                    json.dumps(
-                        {
-                            "agents": [
-                                {
-                                    "agent_type": "researcher",
-                                    "affected": False,
-                                    "reason": "Research instructions don't reference product name",
-                                },
-                                {
-                                    "agent_type": "strategist",
-                                    "affected": True,
-                                    "reason": "References FinFlow which is now PayBridge",
-                                    "updated_instructions": "Focus target areas on European fintech. Product name: PayBridge.",
-                                },
-                            ]
-                        }
-                    ),
-                    {"input_tokens": 200, "output_tokens": 100},
-                )
-
-        with patch("projects.tasks_consolidation.call_claude", side_effect=mock_claude_side_effect):
-            review_agent_instructions_after_sprint(str(sprint.id))
-
-        # Should have created one awaiting-approval task for the strategist update
-        update_tasks = AgentTask.objects.filter(
-            status=AgentTask.Status.AWAITING_APPROVAL,
-            exec_summary__contains="Update instructions",
-        )
-        assert update_tasks.count() == 1
-
-        task = update_tasks.first()
-        assert "strategist" in task.exec_summary or "Strategist" in task.exec_summary
-        assert "PayBridge" in task.step_plan
-        assert "FinFlow" in task.step_plan  # reason references old name
-
-
-@pytest.mark.django_db
-class TestReviewDepartmentAgents:
-    def test_creates_update_task_for_affected_agent(self, sales_dept, sales_leader, sales_agents, sprint):
-        with patch("projects.tasks_consolidation.call_claude") as mock_claude:
+        with (
+            patch("projects.tasks_consolidation.call_claude") as mock_claude,
+            patch("projects.tasks_consolidation.review_single_agent_instructions") as mock_review,
+        ):
             mock_claude.return_value = (
                 json.dumps(
                     {
-                        "agents": [
-                            {
-                                "agent_type": "strategist",
-                                "affected": True,
-                                "reason": "Product name changed",
-                                "updated_instructions": "New instructions here.",
-                            },
-                            {
-                                "agent_type": "researcher",
-                                "affected": False,
-                                "reason": "Not affected",
-                            },
-                        ]
+                        "affected_departments": ["sales"],
+                        "reasoning": "Product rebrand affects sales agents",
                     }
                 ),
                 {"input_tokens": 100, "output_tokens": 50},
             )
 
-            _review_department_agents(sales_dept.id, sprint, "Product renamed")
+            review_agent_instructions_after_sprint(str(sprint.id))
+
+            # Should fan out one task per active agent in the sales dept
+            # (leader + 2 agents = 3 active agents)
+            assert mock_review.delay.call_count == 3
+
+
+@pytest.mark.django_db
+class TestReviewSingleAgentInstructions:
+    def test_creates_update_task_when_affected(self, project, sales_dept, sales_leader, sales_agents):
+        strategist = sales_agents["strategist"]
+
+        with patch("agents.ai.claude_client.call_claude_structured") as mock_claude:
+            mock_claude.return_value = (
+                {
+                    "affected": True,
+                    "reason": "Product name changed from FinFlow to PayBridge",
+                    "updated_instructions": "Focus target areas on European fintech. Product name: PayBridge.",
+                },
+                {"input_tokens": 100, "output_tokens": 50},
+            )
+
+            review_single_agent_instructions(str(strategist.id), str(project.id))
 
         tasks = AgentTask.objects.filter(
             status=AgentTask.Status.AWAITING_APPROVAL,
@@ -214,35 +170,54 @@ class TestReviewDepartmentAgents:
         )
         assert tasks.count() == 1
         assert tasks.first().agent == sales_leader  # assigned to leader
+        assert "PayBridge" in tasks.first().step_plan
 
-    def test_no_tasks_when_no_agents_affected(self, sales_dept, sales_leader, sales_agents, sprint):
-        with patch("projects.tasks_consolidation.call_claude") as mock_claude:
+    def test_no_task_when_not_affected(self, project, sales_dept, sales_leader, sales_agents):
+        researcher = sales_agents["researcher"]
+
+        with patch("agents.ai.claude_client.call_claude_structured") as mock_claude:
             mock_claude.return_value = (
-                json.dumps(
-                    {
-                        "agents": [
-                            {"agent_type": "strategist", "affected": False, "reason": "Not affected"},
-                            {"agent_type": "researcher", "affected": False, "reason": "Not affected"},
-                        ]
-                    }
-                ),
+                {
+                    "affected": False,
+                    "reason": "Research instructions don't reference product name",
+                },
                 {"input_tokens": 100, "output_tokens": 50},
             )
 
-            _review_department_agents(sales_dept.id, sprint, "Minor change")
+            review_single_agent_instructions(str(researcher.id), str(project.id))
 
         tasks = AgentTask.objects.filter(exec_summary__contains="Update instructions")
         assert tasks.count() == 0
 
-    def test_handles_parse_failure_gracefully(self, sales_dept, sales_leader, sales_agents, sprint):
-        with patch("projects.tasks_consolidation.call_claude") as mock_claude:
-            mock_claude.return_value = ("Not valid JSON at all", {"input_tokens": 50, "output_tokens": 20})
+    def test_restores_active_status_on_failure(self, project, sales_dept, sales_leader, sales_agents):
+        strategist = sales_agents["strategist"]
+        strategist.status = Agent.Status.PROVISIONING
+        strategist.save()
 
-            # Should not crash
-            _review_department_agents(sales_dept.id, sprint, "Some outcomes")
+        with (
+            patch("agents.ai.claude_client.call_claude_structured", side_effect=RuntimeError("API down")),
+            pytest.raises(RuntimeError),
+        ):
+            review_single_agent_instructions(str(strategist.id), str(project.id))
 
-        tasks = AgentTask.objects.filter(exec_summary__contains="Update instructions")
-        assert tasks.count() == 0
+        strategist.refresh_from_db()
+        assert strategist.status == Agent.Status.ACTIVE  # restored
+
+    def test_restores_active_on_success(self, project, sales_dept, sales_leader, sales_agents):
+        strategist = sales_agents["strategist"]
+        strategist.status = Agent.Status.PROVISIONING
+        strategist.save()
+
+        with patch("agents.ai.claude_client.call_claude_structured") as mock_claude:
+            mock_claude.return_value = (
+                {"affected": False, "reason": "No change needed"},
+                {"input_tokens": 100, "output_tokens": 50},
+            )
+
+            review_single_agent_instructions(str(strategist.id), str(project.id))
+
+        strategist.refresh_from_db()
+        assert strategist.status == Agent.Status.ACTIVE
 
 
 @pytest.mark.django_db
