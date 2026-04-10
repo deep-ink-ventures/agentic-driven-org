@@ -149,28 +149,29 @@ class TestReviewAgentInstructionsAfterSprint:
 
 @pytest.mark.django_db
 class TestReviewSingleAgentInstructions:
-    def test_creates_update_task_when_affected(self, project, sales_dept, sales_leader, sales_agents):
+    def test_updates_instructions_directly_when_affected(self, project, sales_dept, sales_leader, sales_agents):
         strategist = sales_agents["strategist"]
+        assert "FinFlow" in strategist.instructions
 
         with patch("agents.ai.claude_client.call_claude_structured") as mock_claude:
             mock_claude.return_value = (
                 {
                     "affected": True,
                     "reason": "Product name changed from FinFlow to PayBridge",
-                    "updated_instructions": "Focus target areas on European fintech. Product name: PayBridge.",
+                    "updated_instructions": "Focus target areas on European fintech. Product name: PayBridge. Expanded instructions for the new brand.",
                 },
                 {"input_tokens": 100, "output_tokens": 50},
             )
 
             review_single_agent_instructions(str(strategist.id), str(project.id))
 
-        tasks = AgentTask.objects.filter(
-            status=AgentTask.Status.AWAITING_APPROVAL,
-            exec_summary__contains="Update instructions",
-        )
-        assert tasks.count() == 1
-        assert tasks.first().agent == sales_leader  # assigned to leader
-        assert "PayBridge" in tasks.first().step_plan
+        strategist.refresh_from_db()
+        assert "PayBridge" in strategist.instructions
+        assert "FinFlow" not in strategist.instructions
+
+        # No approval tasks created — instructions are applied directly
+        tasks = AgentTask.objects.filter(exec_summary__contains="Update instructions")
+        assert tasks.count() == 0
 
     def test_no_task_when_not_affected(self, project, sales_dept, sales_leader, sales_agents):
         researcher = sales_agents["researcher"]

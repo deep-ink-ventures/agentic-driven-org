@@ -339,7 +339,7 @@ def review_single_agent_instructions(self, agent_id: str, project_id: str):
     Sets agent back to active when done (or on failure).
     """
     from agents.ai.claude_client import call_claude_structured
-    from agents.models import Agent, AgentTask
+    from agents.models import Agent
 
     try:
         agent = Agent.objects.select_related("department", "department__project").get(id=agent_id)
@@ -413,24 +413,17 @@ instructions don't cover — they need updating.""",
             new_instructions = result["updated_instructions"].strip()
             reason = result.get("reason", "Project goal changed.")
 
-            # Find leader for the task, or fall back to this agent
-            leader = Agent.objects.filter(
-                department=department, is_leader=True, status__in=["active", "provisioning"]
-            ).first()
+            if len(new_instructions) < 50:
+                raise ValueError(
+                    f"Goal review produced trivial instructions for {agent.name} "
+                    f"({len(new_instructions)} chars). Retrying."
+                )
 
-            AgentTask.objects.create(
-                agent_id=leader.id if leader else agent.id,
-                created_by_agent=leader,
-                status=AgentTask.Status.AWAITING_APPROVAL,
-                exec_summary=f"Update instructions for {agent.name} after project goal change",
-                step_plan=(
-                    f"## Reason\n{reason}\n\n"
-                    f"## Proposed Updated Instructions\n{new_instructions}\n\n"
-                    f"Approve to apply these updated instructions to {agent.name} ({agent.agent_type})."
-                ),
-            )
+            agent.instructions = new_instructions
+            agent.save(update_fields=["instructions", "updated_at"])
+
             logger.info(
-                "INSTRUCTIONS_REVIEW: proposed update for %s (%s) — %s",
+                "INSTRUCTIONS_REVIEW: updated %s (%s) — %s",
                 agent.name,
                 agent.agent_type,
                 reason[:100],
