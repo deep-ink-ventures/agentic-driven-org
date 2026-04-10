@@ -156,7 +156,7 @@ class TestSalesBlueprintProperties:
     def test_each_agent_has_commands(self):
         expected = {
             "researcher": ["research-industry"],
-            "strategist": ["draft-strategy", "revise-strategy"],
+            "strategist": ["draft-strategy", "finalize-outreach", "revise-strategy"],
             "pitch_architect": ["design-storyline", "revise-storyline"],
             "profile_selector": ["select-profiles", "revise-profiles"],
             "pitch_personalizer": ["personalize-pitches", "revise-pitches"],
@@ -889,3 +889,30 @@ class TestLeaderCloneHelpers:
         parent = workforce["pitch_personalizer"]
         clones = bp.create_clones(parent, 2, sprint, initial_state={"target_count": 50})
         assert all(c.internal_state == {"target_count": 50} for c in clones)
+
+
+# ── Strategist Expanded (absorbs pitch_architect) ───────────────────────────
+
+
+class TestStrategistExpanded:
+    def test_system_prompt_includes_narrative_design(self):
+        bp = get_blueprint("strategist", "sales")
+        prompt = bp.system_prompt
+        assert "narrative arc" in prompt.lower() or "aida" in prompt.lower()
+
+    def test_system_prompt_includes_target_areas(self):
+        bp = get_blueprint("strategist", "sales")
+        prompt = bp.system_prompt
+        assert "target area" in prompt.lower()
+
+    def test_has_finalize_outreach_command(self):
+        bp = get_blueprint("strategist", "sales")
+        cmd_names = [c["name"] for c in bp.get_commands()]
+        assert "finalize-outreach" in cmd_names
+
+    def test_finalize_outreach_mentions_csv(self):
+        bp = get_blueprint("strategist", "sales")
+        for cmd in bp.get_commands():
+            if cmd["name"] == "finalize-outreach":
+                assert "csv" in cmd["description"].lower() or "CSV" in cmd["description"]
+                break
