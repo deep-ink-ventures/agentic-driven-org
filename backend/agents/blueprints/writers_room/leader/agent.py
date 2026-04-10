@@ -68,6 +68,54 @@ CREATIVE_MATRIX: dict[str, list[str]] = {
     "first_draft": ["story_architect", "character_designer", "dialog_writer"],
 }
 
+# ── Story Bible schema (structured output for canon tracking) ─────────────
+
+STORY_BIBLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "characters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "role": {"type": "string"},
+                    "status": {"type": "string"},
+                    "key_decisions": {"type": "array", "items": {"type": "string"}},
+                    "relationships": {"type": "array", "items": {"type": "string"}},
+                    "voice_directives": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+        "timeline": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "when": {"type": "string"},
+                    "what": {"type": "string"},
+                    "source": {"type": "string"},
+                    "status": {"type": "string", "enum": ["established", "tbd"]},
+                },
+            },
+        },
+        "canon_facts": {"type": "array", "items": {"type": "string"}},
+        "world_rules": {"type": "array", "items": {"type": "string"}},
+        "changelog": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "transition": {"type": "string"},
+                    "added": {"type": "array", "items": {"type": "string"}},
+                    "changed": {"type": "array", "items": {"type": "string"}},
+                    "dropped": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+}
+
 
 class WritersRoomLeaderBlueprint(LeaderBlueprint):
     name = "Writers Room Showrunner"
@@ -190,6 +238,97 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             .order_by("updated_at")
             .first()
         )
+
+    def _render_story_bible(self, data: dict) -> str:
+        """Render structured bible JSON to markdown."""
+        sections = []
+
+        # Characters
+        characters = data.get("characters", [])
+        if characters:
+            lines = ["## Characters\n"]
+            for char in characters:
+                lines.append(f"### {char.get('name', 'Unknown')}")
+                if char.get("role"):
+                    lines.append(f"- **Role:** {char['role']}")
+                if char.get("status"):
+                    lines.append(f"- **Status:** {char['status']}")
+                decisions = char.get("key_decisions", [])
+                if decisions:
+                    lines.append("- **Key Decisions:**")
+                    for d in decisions:
+                        lines.append(f"  - {d}")
+                relationships = char.get("relationships", [])
+                if relationships:
+                    lines.append("- **Relationships:**")
+                    for r in relationships:
+                        lines.append(f"  - {r}")
+                directives = char.get("voice_directives", [])
+                if directives:
+                    lines.append("- **Voice Directives:**")
+                    for v in directives:
+                        lines.append(f"  - {v}")
+                lines.append("")
+            sections.append("\n".join(lines))
+
+        # Timeline
+        timeline = data.get("timeline", [])
+        if timeline:
+            lines = ["## Timeline\n"]
+            lines.append("| When | What | Source | Status |")
+            lines.append("|------|------|--------|--------|")
+            for entry in timeline:
+                status_tag = "[ESTABLISHED]" if entry.get("status") == "established" else "[TBD]"
+                lines.append(
+                    f"| {entry.get('when', '')} | {entry.get('what', '')} "
+                    f"| {entry.get('source', '')} | {status_tag} |"
+                )
+            lines.append("")
+            sections.append("\n".join(lines))
+
+        # Canon Facts
+        canon_facts = data.get("canon_facts", [])
+        if canon_facts:
+            lines = ["## Established Facts (Canon)\n"]
+            for fact in canon_facts:
+                lines.append(f"- {fact}")
+            lines.append("")
+            sections.append("\n".join(lines))
+
+        # World Rules
+        world_rules = data.get("world_rules", [])
+        if world_rules:
+            lines = ["## World Rules\n"]
+            for rule in world_rules:
+                lines.append(f"- {rule}")
+            lines.append("")
+            sections.append("\n".join(lines))
+
+        # Changelog
+        changelog = data.get("changelog", [])
+        if changelog:
+            lines = ["## Stage Changelog\n"]
+            for entry in changelog:
+                lines.append(f"### {entry.get('transition', 'Unknown')}")
+                added = entry.get("added", [])
+                if added:
+                    lines.append("- **Added:**")
+                    for a in added:
+                        lines.append(f"  - {a}")
+                changed = entry.get("changed", [])
+                if changed:
+                    lines.append("- **Changed:**")
+                    for c in changed:
+                        lines.append(f"  - {c}")
+                dropped = entry.get("dropped", [])
+                if dropped:
+                    lines.append("- **Dropped:**")
+                    for d in dropped:
+                        lines.append(f"  - {d}")
+                lines.append("")
+            sections.append("\n".join(lines))
+
+        return "# Story Bible\n\n" + "\n".join(sections) if sections else "# Story Bible\n\n(No content yet)"
 
     # ── Revision application ───────────────────────────────────────────
 
