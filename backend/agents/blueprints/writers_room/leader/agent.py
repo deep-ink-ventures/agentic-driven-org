@@ -914,7 +914,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "story_architect": {
-                    "command_name": "write",
+                    "command_name": "develop_concept",
                     "exec_summary": "Develop the story premise, structure skeleton, and dramatic engine",
                     "step_plan": (
                         "Develop the core structural foundation for the pitch:\n"
@@ -940,7 +940,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "dialog_writer": {
-                    "command_name": "write",
+                    "command_name": "write_content",
                     "exec_summary": "Craft the pitch hook — logline variants and tone sample",
                     "step_plan": (
                         "Write the pitch's selling language:\n"
@@ -967,7 +967,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "story_architect": {
-                    "command_name": "write",
+                    "command_name": "write_structure",
                     "exec_summary": "Write the expose narrative — 3-5 page compelling overview",
                     "step_plan": (
                         "Write the expose — a 3-5 page compelling narrative summary:\n"
@@ -982,7 +982,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "character_designer": {
-                    "command_name": "write",
+                    "command_name": "write_characters",
                     "exec_summary": "Expand character ensemble with detailed arcs and relationships",
                     "step_plan": (
                         "Expand the character ensemble for the expose:\n"
@@ -994,7 +994,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "dialog_writer": {
-                    "command_name": "write",
+                    "command_name": "write_content",
                     "exec_summary": "Write 2-3 proof-of-concept dialogue scenes for the expose",
                     "step_plan": (
                         "Write 2-3 short dialogue scenes (each 1-2 pages) that showcase voice:\n"
@@ -1022,7 +1022,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "story_architect": {
-                    "command_name": "write",
+                    "command_name": "write_structure",
                     "exec_summary": "Write the treatment — detailed narrative breakdown",
                     "step_plan": (
                         "Write the treatment — a detailed narrative breakdown:\n"
@@ -1037,7 +1037,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "character_designer": {
-                    "command_name": "write",
+                    "command_name": "write_characters",
                     "exec_summary": "Map detailed character arcs across the treatment structure",
                     "step_plan": (
                         "Map each major character's arc across the treatment structure:\n"
@@ -1050,7 +1050,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "dialog_writer": {
-                    "command_name": "write",
+                    "command_name": "write_content",
                     "exec_summary": "Write signature dialogue moments for key treatment beats",
                     "step_plan": (
                         "Write dialogue for 4-6 pivotal moments in the treatment:\n"
@@ -1079,7 +1079,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "story_architect": {
-                    "command_name": "write",
+                    "command_name": "write_structure",
                     "exec_summary": "Write the series concept — multi-season architecture and bible",
                     "step_plan": (
                         "Write the series concept/bible:\n"
@@ -1093,7 +1093,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "character_designer": {
-                    "command_name": "write",
+                    "command_name": "write_characters",
                     "exec_summary": "Design the series ensemble with multi-season arcs",
                     "step_plan": (
                         "Design the full series ensemble:\n"
@@ -1106,7 +1106,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "dialog_writer": {
-                    "command_name": "write",
+                    "command_name": "write_content",
                     "exec_summary": "Write series voice samples — pilot scenes and tonal range",
                     "step_plan": (
                         "Write voice samples for the series concept:\n"
@@ -1121,7 +1121,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             },
             "first_draft": {
                 "story_architect": {
-                    "command_name": "write",
+                    "command_name": "write_structure",
                     "exec_summary": "Write the first draft — full pilot/opening chapter/screenplay",
                     "step_plan": (
                         "Write the complete first draft:\n"
@@ -1136,7 +1136,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "character_designer": {
-                    "command_name": "write",
+                    "command_name": "write_characters",
                     "exec_summary": "Review and enhance character consistency across the full draft",
                     "step_plan": (
                         "Review the draft for character integrity:\n"
@@ -1149,7 +1149,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     ),
                 },
                 "dialog_writer": {
-                    "command_name": "write",
+                    "command_name": "write_content",
                     "exec_summary": "Dialogue dramatization pass — sharpen every exchange",
                     "step_plan": (
                         "Do a full dialogue dramatization pass:\n"
