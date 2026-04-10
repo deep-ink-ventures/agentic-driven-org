@@ -193,6 +193,43 @@ if CommunityLeaderBlueprint is not None:
         "config_schema": _community_leader.config_schema,
     }
 
+# ── Problem Solver ─────────────────────────────────────────────────────────
+
+try:
+    from agents.blueprints.problem_solver.leader import ProblemSolverLeaderBlueprint
+except ImportError:
+    ProblemSolverLeaderBlueprint = None
+
+_problem_solver_workforce = {}
+_problem_solver_imports = {
+    "out_of_box_thinker": (
+        "agents.blueprints.problem_solver.workforce.out_of_box_thinker",
+        "OutOfBoxThinkerBlueprint",
+    ),
+    "playground": ("agents.blueprints.problem_solver.workforce.playground", "PlaygroundBlueprint"),
+    "synthesizer": ("agents.blueprints.problem_solver.workforce.synthesizer", "SynthesizerBlueprint"),
+    "reviewer": ("agents.blueprints.problem_solver.workforce.reviewer", "ReviewerBlueprint"),
+}
+for _slug, (_mod_path, _cls_name) in _problem_solver_imports.items():
+    try:
+        _mod = importlib.import_module(_mod_path)
+        _problem_solver_workforce[_slug] = getattr(_mod, _cls_name)()
+    except (ImportError, AttributeError):
+        pass
+
+if ProblemSolverLeaderBlueprint is not None:
+    _problem_solver_leader = ProblemSolverLeaderBlueprint()
+    DEPARTMENTS["problem_solver"] = {
+        "name": "Problem Solver",
+        "description": (
+            "First-principles problem decomposition, cross-domain ideation, "
+            "parallel hypothesis testing, and validated proof-of-concept synthesis"
+        ),
+        "leader": _problem_solver_leader,
+        "workforce": _problem_solver_workforce,
+        "config_schema": _problem_solver_leader.config_schema,
+    }
+
 DEPARTMENT_TYPE_CHOICES = [(slug, dept["name"]) for slug, dept in DEPARTMENTS.items()]
 
 AGENT_TYPE_CHOICES = [("leader", "Department Leader")]
