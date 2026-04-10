@@ -873,7 +873,16 @@ class LeaderBlueprint(BaseBlueprint):
 
     def create_clones(self, parent_agent: Agent, count: int, sprint, initial_state: dict | None = None) -> list:
         """Create N ephemeral clones of parent_agent, scoped to this sprint."""
+        from django.conf import settings
+
         from agents.models import ClonedAgent
+
+        max_clones = getattr(settings, "AGENT_MAX_CLONES_PER_SPRINT", 10)
+        if count > max_clones:
+            raise ValueError(
+                f"create_clones count={count} exceeds max {max_clones} "
+                f"for parent={parent_agent.name} sprint={sprint.id}"
+            )
 
         clones = []
         for i in range(count):
