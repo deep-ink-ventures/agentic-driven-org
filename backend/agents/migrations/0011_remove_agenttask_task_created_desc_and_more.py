@@ -21,8 +21,6 @@ class Migration(migrations.Migration):
             model_name="agenttask",
             name="task_agent_created",
         ),
-        migrations.RemoveField(
-            model_name="agenttask",
-            name="briefing",
-        ),
+        # briefing field removal is a no-op — field was never added (0009 was
+        # replaced with a no-op after the Briefing model was removed).
     ]
