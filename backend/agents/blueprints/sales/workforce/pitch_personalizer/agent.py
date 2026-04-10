@@ -16,11 +16,22 @@ class PitchPersonalizerBlueprint(WorkforceBlueprint):
     name = "Pitch Personalizer"
     slug = "pitch_personalizer"
     description = (
-        "Personalization specialist — researches each prospect and adapts the storyline "
-        "with specific details, assigns outreach channel, produces ready-to-send pitch payloads"
+        "Prospect finder and personalization specialist — discovers real people via web search, "
+        "profiles each prospect, adapts the storyline with specific details, assigns outreach channel, "
+        "and produces ready-to-send pitch payloads. Runs as a clone per target area."
     )
-    tags = ["personalization", "outreach", "copywriting", "research", "web-search"]
+    tags = ["personalization", "outreach", "copywriting", "research", "web-search", "profiling", "prospecting"]
+    default_model = "claude-haiku-4-5"
+    uses_web_search = True
     skills = [
+        {
+            "name": "Person Discovery",
+            "description": (
+                "Find real people via web search for a target area: search LinkedIn, "
+                "company websites, conference speaker lists, podcast guests, blog authors. "
+                "Verify each person is real and currently in the claimed role."
+            ),
+        },
         {
             "name": "Prospect Research",
             "description": (
@@ -47,19 +58,30 @@ class PitchPersonalizerBlueprint(WorkforceBlueprint):
 
     @property
     def system_prompt(self) -> str:
-        return """You are a pitch personalizer. Given a storyline and prospect profiles, your job is to create individually tailored pitch payloads — one per person — that feel genuinely personal, not templated.
+        return """You are a pitch personalizer. You handle ONE target area end-to-end. For that target area, you:
+
+1. **Find real people via web search** — search LinkedIn, company websites, conference speaker lists, podcast guests, blog authors, and industry directories to discover concrete prospects who match this target area.
+2. **Research each person** — verify their identity, current role, and recent activity. Build a profile with name, role, company, LinkedIn, contact info, talking points, and qualification signals.
+3. **Adapt the storyline** — personalize the hook, value proposition, and CTA for each person using their own language and recent activity.
+4. **Assign outreach channel** — select the best channel per person from the available outreach agents.
 
 Your output must be a series of structured pitch payloads:
 
 ## Pitch for [Person Name] — [Company]
 
-**Target area:** [Which target area this person belongs to]
+**Identifier:** [email address or LinkedIn handle — the concrete way to reach them]
 **Outreach channel:** [email_outreach or other available agent type]
+
+### Profile
+- Role: [Current title and company]
+- Background: [1-2 sentences on career path]
+- Contact: [Email if publicly available, otherwise "research needed"]
 
 ### Research Notes
 - Recent activity: [What they've been doing — specific, dated]
 - Interests: [What they care about professionally]
 - Talking points: [What to reference in the pitch]
+- Qualification signals: [Positive signals, concerns, unknowns]
 
 ### Personalized Pitch
 **Subject:** [Specific subject line — not generic]
@@ -75,20 +97,35 @@ Your output must be a series of structured pitch payloads:
 ---
 
 RULES:
-1. MINIMUM 2 specific, verifiable details per person in the pitch body
-2. Never use generic flattery ("I'm impressed by your work at...")
-3. Never use template-obvious phrasing ("I'm reaching out because...")
-4. Subject lines must be specific to the person, not the campaign
-5. Body must be plain text — no markdown, no HTML, no bullet points
-6. Mirror the prospect's language from their own content, not our jargon
-7. The pitch must feel like it was written by a human who genuinely found this person interesting
-8. Each pitch must reference the person's RECENT activity (within last 6 months)"""
+1. All persons must be REAL and findable via web search — never fabricate profiles
+2. MINIMUM 2 specific, verifiable details per person in the pitch body
+3. Never use generic flattery ("I'm impressed by your work at...")
+4. Never use template-obvious phrasing ("I'm reaching out because...")
+5. Subject lines must be specific to the person, not the campaign
+6. Body must be plain text — no markdown, no HTML, no bullet points
+7. Mirror the prospect's language from their own content, not our jargon
+8. The pitch must feel like it was written by a human who genuinely found this person interesting
+9. Each pitch must reference the person's RECENT activity (within last 6 months)
+10. Aim for 3-7 persons per target area — quality over quantity"""
 
     personalize_pitches = personalize_pitches
     revise_pitches = revise_pitches
 
     def get_task_suffix(self, agent, task):
         return """# PERSONALIZATION METHODOLOGY
+
+## Person Discovery
+- Search LinkedIn, company websites, conference speaker lists, podcast guests, blog authors
+- Look for people who are publicly active — they are more likely to engage with outreach
+- Prefer decision-makers and influencers over gatekeepers
+- Cross-reference to verify current role and company
+- If a target area yields fewer than 3 real profiles, flag this and explain what search terms you tried
+
+## Profile Quality Standards
+- Every profile must have a verifiable name and current role
+- "Not found" is better than fabricated contact info
+- Talking points must reference specific, recent activities (not generic role assumptions)
+- Qualification signals must cite observable evidence
 
 ## Research Per Person
 - Search for their recent LinkedIn posts, blog articles, conference talks, podcast appearances

@@ -1,4 +1,4 @@
-"""Pitch Personalizer command: personalize pitches for each prospect."""
+"""Pitch Personalizer command: find profiles and personalize pitches for one target area."""
 
 from agents.blueprints.base import command
 
@@ -6,20 +6,20 @@ from agents.blueprints.base import command
 @command(
     name="personalize-pitches",
     description=(
-        "For each prospect profile, research the person, adapt the storyline for them, "
-        "and assign the best outreach channel from available agents."
+        "For one target area: find real prospects via web search, research each person, "
+        "adapt the storyline, and assign outreach channels."
     ),
-    model="claude-opus-4-6",
+    model="claude-haiku-4-5",
 )
 def personalize_pitches(self, agent) -> dict:
     return {
-        "exec_summary": "Personalize pitches for each prospect profile",
+        "exec_summary": "Find profiles and personalize pitches for target area",
         "step_plan": (
-            "1. Review the storyline from the pitch architect\n"
-            "2. Review the profiles from the profile selector\n"
-            "3. For each person: research their recent activity, interests, publications\n"
-            "4. Adapt the storyline hook, value proposition, and CTA for this specific person\n"
-            "5. Select the best outreach channel from available agents\n"
-            "6. Output one structured pitch payload per person"
+            "1. Review the target area brief and narrative arc\n"
+            "2. Search for real people matching this target area via web search\n"
+            "3. For each person: verify identity, research recent activity\n"
+            "4. Adapt the storyline hook, value prop, and CTA for each person\n"
+            "5. Assign outreach channel from available agents\n"
+            "6. Output structured pitch payloads"
         ),
     }

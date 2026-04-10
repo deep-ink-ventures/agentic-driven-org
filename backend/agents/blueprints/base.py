@@ -113,6 +113,7 @@ class BaseBlueprint(ABC):
     outputs: list[str] = []  # metadata: what persistent artifacts this agent produces
     default_model: str = "claude-opus-4-6"
     config_schema: dict[str, dict] = {}  # {"key": {"type": "str", "required": bool, "description": "..."}}
+    uses_web_search: bool = False  # whether this agent needs web search tools at runtime
     essential: bool = False  # always pre-selected when department is added
     controls: str | list[str] | None = None  # auto-selected when controlled agent is selected
 

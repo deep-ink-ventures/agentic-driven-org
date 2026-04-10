@@ -130,7 +130,7 @@ class TestSalesBlueprintProperties:
         assert bp.default_model == "claude-haiku-4-5"
 
     def test_other_agents_use_sonnet(self):
-        for slug in ["strategist", "pitch_architect", "pitch_personalizer", "sales_qa"]:
+        for slug in ["strategist", "pitch_architect", "sales_qa"]:
             bp = get_blueprint(slug, "sales")
             assert bp.default_model == "claude-opus-4-6", f"{slug} should use sonnet"
 
@@ -916,3 +916,21 @@ class TestStrategistExpanded:
             if cmd["name"] == "finalize-outreach":
                 assert "csv" in cmd["description"].lower() or "CSV" in cmd["description"]
                 break
+
+
+# ── Personalizer Expanded (absorbs profile_selector) ─────────────────────────
+
+
+class TestPersonalizerExpanded:
+    def test_system_prompt_includes_profile_finding(self):
+        bp = get_blueprint("pitch_personalizer", "sales")
+        prompt = bp.system_prompt
+        assert "find" in prompt.lower() or "search" in prompt.lower() or "discover" in prompt.lower()
+
+    def test_uses_web_search(self):
+        bp = get_blueprint("pitch_personalizer", "sales")
+        assert bp.uses_web_search is True
+
+    def test_uses_haiku_model(self):
+        bp = get_blueprint("pitch_personalizer", "sales")
+        assert bp.default_model == "claude-haiku-4-5"
