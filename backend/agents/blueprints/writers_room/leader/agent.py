@@ -1720,7 +1720,11 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     def _propose_fix_task(
         self, agent: Agent, review_task, score: float, round_num: int, polish_count: int
     ) -> dict | None:
-        """On failed review: create critique doc, reset to creative_writing."""
+        """On failed review: create critique doc, reset to creative_writing.
+
+        WEAK_IDEA verdict resets iterations to 0 (fresh ideation).
+        CHANGES_REQUESTED increments iterations (revision of same material).
+        """
         internal_state = agent.internal_state or {}
         current_stage = internal_state.get("current_stage", STAGES[0])
         stage_status = internal_state.get("stage_status", {})
@@ -1729,8 +1733,19 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         sprint = self._get_current_sprint(agent)
         self._create_critique_doc(agent, current_stage, sprint)
 
+        verdict = getattr(review_task, "review_verdict", "CHANGES_REQUESTED")
+
+        if verdict == "WEAK_IDEA":
+            # Fresh ideation — reset iterations so agents don't get revision instructions
+            current_info["iterations"] = 0
+            logger.info(
+                "Writers Room: WEAK_IDEA for stage '%s' — resetting to fresh ideation",
+                current_stage,
+            )
+        else:
+            current_info["iterations"] = current_info.get("iterations", 0) + 1
+
         current_info["status"] = "not_started"
-        current_info["iterations"] = current_info.get("iterations", 0) + 1
         stage_status[current_stage] = current_info
         internal_state["stage_status"] = stage_status
         agent.internal_state = internal_state

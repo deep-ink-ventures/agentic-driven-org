@@ -1,6 +1,6 @@
 """Tests for story bible generation, rendering, and injection."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -403,3 +403,64 @@ class TestVoiceProfileReform:
         source = inspect.getsource(bp._execute_profile_voice)
         assert "directive" in source.lower() or "DIRECTIVE" in source
         assert "When writing" in source or "mechanically" in source
+
+
+@pytest.mark.django_db
+class TestWeakIdeaVerdict:
+    def _setup(self):
+        from agents.models import Agent
+        from projects.models import Department, Project, Sprint
+
+        project = Project.objects.create(name="Test", goal="Story")
+        dept = Department.objects.create(project=project, name="WR", department_type="writers_room")
+        leader = Agent.objects.create(
+            name="Showrunner",
+            agent_type="leader",
+            department=dept,
+            is_leader=True,
+            status="active",
+            internal_state={
+                "format_type": "standalone",
+                "current_stage": "pitch",
+                "terminal_stage": "treatment",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "not_started", "iterations": 2}},
+            },
+        )
+        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING)
+        sprint.departments.add(dept)
+        return leader, dept, sprint
+
+    @patch.object(WritersRoomLeaderBlueprint, "_create_critique_doc")
+    @patch.object(WritersRoomLeaderBlueprint, "_propose_creative_tasks")
+    def test_weak_idea_resets_iterations(self, mock_propose, mock_critique):
+        mock_propose.return_value = {"exec_summary": "Creative tasks", "tasks": []}
+        leader, dept, sprint = self._setup()
+        bp = WritersRoomLeaderBlueprint()
+
+        review_task = MagicMock()
+        review_task.review_verdict = "WEAK_IDEA"
+
+        bp._propose_fix_task(leader, review_task, score=3.0, round_num=1, polish_count=0)
+
+        leader.refresh_from_db()
+        stage_info = leader.internal_state["stage_status"]["pitch"]
+        # WEAK_IDEA resets iterations to 0 (fresh ideation, not revision)
+        assert stage_info["iterations"] == 0
+
+    @patch.object(WritersRoomLeaderBlueprint, "_create_critique_doc")
+    @patch.object(WritersRoomLeaderBlueprint, "_propose_creative_tasks")
+    def test_changes_requested_increments_iterations(self, mock_propose, mock_critique):
+        mock_propose.return_value = {"exec_summary": "Creative tasks", "tasks": []}
+        leader, dept, sprint = self._setup()
+        bp = WritersRoomLeaderBlueprint()
+
+        review_task = MagicMock()
+        review_task.review_verdict = "CHANGES_REQUESTED"
+
+        bp._propose_fix_task(leader, review_task, score=7.0, round_num=1, polish_count=0)
+
+        leader.refresh_from_db()
+        stage_info = leader.internal_state["stage_status"]["pitch"]
+        # CHANGES_REQUESTED increments as before
+        assert stage_info["iterations"] == 3
