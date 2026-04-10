@@ -115,7 +115,13 @@ class SalesLeaderBlueprint(LeaderBlueprint):
             ),
         },
     ]
-    config_schema = {}
+    config_schema = {
+        "include_inactive_outreach": {
+            "type": "bool",
+            "description": "Consider inactive outreach agents during dispatch (default: false)",
+            "label": "Include Inactive Outreach Agents",
+        },
+    }
 
     def get_review_pairs(self):
         return [
@@ -467,7 +473,10 @@ You don't write pitches or do research directly — you create tasks for your wo
         from projects.models import Sprint
 
         department = agent.department
-        outreach_agents = list(department.agents.filter(outreach=True, status=AgentModel.Status.ACTIVE))
+        outreach_filter = {"outreach": True}
+        if not agent.get_config_value("include_inactive_outreach", False):
+            outreach_filter["status"] = AgentModel.Status.ACTIVE
+        outreach_agents = list(department.agents.filter(**outreach_filter))
         if not outreach_agents:
             logger.warning("SALES_NO_OUTREACH dept=%s — no outreach agents available", department.name)
             return None
@@ -552,9 +561,10 @@ You don't write pitches or do research directly — you create tasks for your wo
         # For strategy step, inject available outreach agents
         extra_context = ""
         if step == "strategy":
-            outreach_agents = list(
-                agent.department.agents.filter(outreach=True, status="active").values_list("agent_type", "name")
-            )
+            outreach_qs = agent.department.agents.filter(outreach=True)
+            if not agent.get_config_value("include_inactive_outreach", False):
+                outreach_qs = outreach_qs.filter(status="active")
+            outreach_agents = list(outreach_qs.values_list("agent_type", "name"))
             if outreach_agents:
                 agents_list = ", ".join(f"{name} ({atype})" for atype, name in outreach_agents)
                 extra_context = f"\n\n## Available Outreach Channels\nAvailable channels for assignment: {agents_list}"

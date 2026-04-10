@@ -68,6 +68,25 @@ def should_accept_review(score: float, round_num: int, polish_attempts: int) -> 
 
 logger = logging.getLogger(__name__)
 
+_format_checker = None
+
+
+def _get_format_checker():
+    """Lazy-init a jsonschema FormatChecker with email validation."""
+    global _format_checker
+    if _format_checker is None:
+        from jsonschema import FormatChecker
+
+        _format_checker = FormatChecker()
+
+        @_format_checker.checks("email", raises=ValueError)
+        def check_email(value):
+            if not isinstance(value, str) or "@" not in value or "." not in value.split("@")[-1]:
+                raise ValueError(f"'{value}' is not a valid email address")
+            return True
+
+    return _format_checker
+
 
 # ── Command decorator ────────────────────────────────────────────────────────
 
@@ -191,7 +210,11 @@ class BaseBlueprint(ABC):
 
         schema = self.get_config_json_schema()
         try:
-            validate(instance=config, schema=schema)
+            validate(
+                instance=config,
+                schema=schema,
+                format_checker=_get_format_checker(),
+            )
             return []
         except JsonSchemaError as e:
             return [e.message]
@@ -210,8 +233,13 @@ class BaseBlueprint(ABC):
                 "title": spec.get("label", key),
             }
             t = spec.get("type", "str")
-            if t == "str":
+            if t == "email":
                 prop["type"] = "string"
+                prop["format"] = "email"
+            elif t == "str":
+                prop["type"] = "string"
+            elif t == "bool":
+                prop["type"] = "boolean"
             elif t == "list":
                 prop["type"] = "array"
             elif t == "dict":

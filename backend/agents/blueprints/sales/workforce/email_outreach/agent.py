@@ -96,7 +96,7 @@ class EmailOutreachBlueprint(WorkforceBlueprint):
             "label": "SendGrid API Key",
         },
         "from_email": {
-            "type": "str",
+            "type": "email",
             "required": True,
             "description": "Sender email address (must be verified in SendGrid)",
             "label": "From Email",
@@ -114,7 +114,7 @@ class EmailOutreachBlueprint(WorkforceBlueprint):
             "label": "Calendly Link",
         },
         "bcc_email": {
-            "type": "str",
+            "type": "email",
             "required": True,
             "description": "Human closer email — BCC'd on every outreach, receives briefings",
             "label": "BCC Email (Closer)",
