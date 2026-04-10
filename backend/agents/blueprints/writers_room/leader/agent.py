@@ -742,6 +742,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         if status == "review":
             # creative_reviewer completed and was accepted
             self._create_critique_doc(agent, current_stage, sprint)
+            self._update_story_bible(agent, sprint, current_stage)
             current_info["status"] = "passed"
             stage_status[current_stage] = current_info
             internal_state["stage_status"] = stage_status
