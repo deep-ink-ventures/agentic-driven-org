@@ -404,6 +404,14 @@ def create_next_leader_task(leader_agent_id: str):
                     initial_status = AgentTask.Status.AWAITING_APPROVAL
                     blocked_by = None
 
+                # Resolve cloned_agent FK if provided by fan-out proposals
+                cloned_agent_id = task_data.get("_cloned_agent_id")
+                cloned_agent = None
+                if cloned_agent_id:
+                    from agents.models import ClonedAgent
+
+                    cloned_agent = ClonedAgent.objects.filter(id=cloned_agent_id).first()
+
                 new_task = AgentTask.objects.create(
                     agent=target_agent,
                     created_by_agent=agent,
@@ -413,6 +421,7 @@ def create_next_leader_task(leader_agent_id: str):
                     sprint_id=sprint_id,
                     exec_summary=task_data.get("exec_summary", "Priority task"),
                     step_plan=task_data.get("step_plan", ""),
+                    cloned_agent=cloned_agent,
                 )
                 # Reload with relations for broadcast
                 new_task = AgentTask.objects.select_related(
