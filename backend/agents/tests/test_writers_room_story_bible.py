@@ -384,3 +384,22 @@ class TestCreativeReviewerEnhancements:
         bp = get_blueprint("creative_reviewer", "writers_room")
         prompt = bp.system_prompt
         assert "WEAK_IDEA" in prompt
+
+
+class TestVoiceProfileReform:
+    def test_voice_system_prompt_requires_directives(self):
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("story_researcher", "writers_room")
+        prompt = bp.system_prompt
+        assert "directive" in prompt.lower() or "DIRECTIVE" in prompt
+
+    def test_voice_suffix_requires_directive_format(self):
+        import inspect
+
+        from agents.blueprints import get_blueprint
+
+        bp = get_blueprint("story_researcher", "writers_room")
+        source = inspect.getsource(bp._execute_profile_voice)
+        assert "directive" in source.lower() or "DIRECTIVE" in source
+        assert "When writing" in source or "mechanically" in source
