@@ -469,27 +469,29 @@ export function DepartmentView({
                       <p className="text-sm text-text-primary pt-2 whitespace-pre-wrap">
                         {sprint.text}
                       </p>
-                      <div className="flex items-center gap-3 text-[10px] text-text-secondary mt-2">
-                        <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
-                        <span>{sprint.created_by_email}</span>
-                        {sprint.departments.length > 1 && (
-                          <span>{sprint.departments.map((d) => d.display_name).join(" · ")}</span>
+                      <div className="flex items-center justify-between text-[10px] text-text-secondary mt-2">
+                        <div className="flex items-center gap-3">
+                          <span>{new Date(sprint.created_at).toLocaleDateString()}</span>
+                          <span>{sprint.created_by_email}</span>
+                          {sprint.departments.length > 1 && (
+                            <span>{sprint.departments.map((d) => d.display_name).join(" · ")}</span>
+                          )}
+                        </div>
+                        {sprint.status === "done" && (
+                          <button
+                            onClick={() => setResettingSprint(sprint)}
+                            disabled={acting}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[10px] font-medium text-text-secondary hover:text-accent-violet hover:border-accent-violet/40 transition-colors disabled:opacity-50"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Reset &amp; Restart
+                          </button>
                         )}
                       </div>
                       {sprint.status === "done" && sprint.completion_summary && (
                         <p className="mt-2 text-xs text-text-secondary">
                           {sprint.completion_summary}
                         </p>
-                      )}
-                      {sprint.status === "done" && (
-                        <button
-                          onClick={() => setResettingSprint(sprint)}
-                          disabled={acting}
-                          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-accent-violet hover:border-accent-violet/40 transition-colors disabled:opacity-50"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          Reset &amp; Restart
-                        </button>
                       )}
                       {/* Sprint outputs */}
                       {sprint.outputs && sprint.outputs.length > 0 && (
