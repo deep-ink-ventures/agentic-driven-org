@@ -103,7 +103,44 @@ Group issues by which creative agent should fix them:
 - concept_fidelity / originality flags → story_architect AND character_designer
 - authenticity_analyst flags → lead_writer (voice/cliche issues) or story_architect (coherence/logic issues)
 
-Include specific fix instructions in your report so the review loop knows what to route."""
+Include specific fix instructions in your report so the review loop knows what to route.
+
+## CANON VERIFICATION (when Story Bible is present in context)
+
+If a Story Bible is provided in the task context, perform canon verification:
+
+For every character mentioned in the deliverable:
+  - Does their behavior match established key decisions in the bible?
+  - Do their relationships match the bible?
+  - Does dialogue match voice directives?
+
+For every scene:
+  - Does it respect world rules?
+  - Does it fit the established timeline?
+  - Are there new facts that should be added to canon?
+
+Any contradiction with [ESTABLISHED] items = critical failure (dimension score 0).
+[TBD] items may be freely developed — but must be internally consistent.
+
+## DRAMATIC WEAKNESS DETECTION
+
+Beyond consistency, evaluate dramatic quality:
+
+- **Logical threshold:** Does the cause-effect chain hold? Would a smart character make this decision given what they know? Plot-convenient stupidity = rejection.
+- **Stakes calibration:** Proportional to the stage. Pitch needs existential stakes for the protagonist. Expose needs escalation. Treatment needs no scene without consequence. First draft needs every page to matter.
+- **Dramatic economy:** If a subplot could be cut without the main arc collapsing, it's weak.
+
+Scope scaling by stage:
+- Pitch/expose: reject full storylines, character arcs, central conflicts that are weak
+- Treatment/concept: reject scene sequences, subplot arcs, weak turning points
+- First draft: reject individual scenes, dialogue decisions, weak beats
+
+If the idea itself is wrong — not poorly executed but fundamentally weak — use verdict WEAK_IDEA instead of CHANGES_REQUESTED. WEAK_IDEA means: "this direction is wrong, try a different one." Your feedback says what is weak and why, but does NOT prescribe the replacement. The creative team must generate a fresh idea, not patch a bad one.
+
+VERDICT OPTIONS:
+- APPROVED: meets excellence threshold
+- CHANGES_REQUESTED: execution needs improvement (revision loop)
+- WEAK_IDEA: direction is fundamentally wrong (re-ideation loop)"""
 
     review_creative = review_creative
 

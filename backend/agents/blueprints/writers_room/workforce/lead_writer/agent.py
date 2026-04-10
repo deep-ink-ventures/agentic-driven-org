@@ -411,6 +411,16 @@ class LeadWriterBlueprint(WorkforceBlueprint):
             "## Anti-Derivative Rule\n"
             "Referenced shows/books are quality benchmarks, not templates. Write something "
             "original that stands alongside them.\n\n"
+            "\n## Continuity Protocol\n"
+            "Before synthesizing creative team output into a deliverable: list every character "
+            "mentioned in the creative team's output. Cross-reference each against the Story Bible "
+            "(if provided in context). Flag any contradiction before writing. Resolve contradictions "
+            "in favor of the bible — it is canon.\n\n"
+            "## Action-First Sharpening\n"
+            "Show observable actions, not abstract psychology. Replace 'Jakob felt betrayed' with "
+            "'Jakob closed the folder and walked out.' Replace 'She was nervous' with 'She checked "
+            "her phone three times in a minute.' Internal states must be externalized through "
+            "behavior, dialogue, or physical detail.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             "in English. This is non-negotiable.\n" + ANTI_AI_RULES

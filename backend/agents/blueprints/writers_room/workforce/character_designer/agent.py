@@ -136,6 +136,12 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
             "You work with ANY format: screenplay, novel, theatre, series, film, short story. "
             "Character depth scales with the medium -- a film protagonist needs different "
             "treatment than a series ensemble lead or a novel's first-person narrator.\n\n"
+            "## Pre-Writing Bible Consultation\n"
+            "If a Story Bible is provided in context, check before designing or developing characters:\n"
+            "(1) Are all characters consistent with bible key decisions?\n"
+            "(2) Do relationships match established dynamics?\n"
+            "(3) Do character arcs respect the established timeline?\n"
+            "Do not contradict [ESTABLISHED] items. You may freely develop [TBD] items.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             'in English. If "fr", French. This is non-negotiable. The source material may be '

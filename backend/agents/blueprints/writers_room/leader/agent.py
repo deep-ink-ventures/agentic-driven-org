@@ -68,6 +68,54 @@ CREATIVE_MATRIX: dict[str, list[str]] = {
     "first_draft": ["story_architect", "character_designer", "dialog_writer"],
 }
 
+# ── Story Bible schema (structured output for canon tracking) ─────────────
+
+STORY_BIBLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "characters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "role": {"type": "string"},
+                    "status": {"type": "string"},
+                    "key_decisions": {"type": "array", "items": {"type": "string"}},
+                    "relationships": {"type": "array", "items": {"type": "string"}},
+                    "voice_directives": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+        "timeline": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "when": {"type": "string"},
+                    "what": {"type": "string"},
+                    "source": {"type": "string"},
+                    "status": {"type": "string", "enum": ["established", "tbd"]},
+                },
+            },
+        },
+        "canon_facts": {"type": "array", "items": {"type": "string"}},
+        "world_rules": {"type": "array", "items": {"type": "string"}},
+        "changelog": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "transition": {"type": "string"},
+                    "added": {"type": "array", "items": {"type": "string"}},
+                    "changed": {"type": "array", "items": {"type": "string"}},
+                    "dropped": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+}
+
 
 class WritersRoomLeaderBlueprint(LeaderBlueprint):
     name = "Writers Room Showrunner"
@@ -163,11 +211,27 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         internal_state = agent.internal_state or {}
         stage_status = internal_state.get("stage_status", {})
         current_stage = internal_state.get("current_stage", STAGES[0])
-        return (
+
+        context = (
             f"# Current Stage: {current_stage}\n"
             f"# Stage Status: {json.dumps(stage_status, indent=2)}\n"
             f"# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (minimum dimension score)"
         )
+
+        # Inject story bible if one exists
+        sprint = self._get_current_sprint(agent)
+        if sprint:
+            from projects.models import Output
+
+            bible_output = Output.objects.filter(
+                sprint=sprint,
+                department=agent.department,
+                label="story_bible",
+            ).first()
+            if bible_output and bible_output.content:
+                context += f"\n\n## Story Bible (CANON — do not contradict)\n" f"{bible_output.content}"
+
+        return context
 
     # ── Helper methods ──────────────────────────────────────────────────
 
@@ -190,6 +254,185 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             .order_by("updated_at")
             .first()
         )
+
+    def _render_story_bible(self, data: dict) -> str:
+        """Render structured bible JSON to markdown."""
+        sections = []
+
+        # Characters
+        characters = data.get("characters", [])
+        if characters:
+            lines = ["## Characters\n"]
+            for char in characters:
+                lines.append(f"### {char.get('name', 'Unknown')}")
+                if char.get("role"):
+                    lines.append(f"- **Role:** {char['role']}")
+                if char.get("status"):
+                    lines.append(f"- **Status:** {char['status']}")
+                decisions = char.get("key_decisions", [])
+                if decisions:
+                    lines.append("- **Key Decisions:**")
+                    for d in decisions:
+                        lines.append(f"  - {d}")
+                relationships = char.get("relationships", [])
+                if relationships:
+                    lines.append("- **Relationships:**")
+                    for r in relationships:
+                        lines.append(f"  - {r}")
+                directives = char.get("voice_directives", [])
+                if directives:
+                    lines.append("- **Voice Directives:**")
+                    for v in directives:
+                        lines.append(f"  - {v}")
+                lines.append("")
+            sections.append("\n".join(lines))
+
+        # Timeline
+        timeline = data.get("timeline", [])
+        if timeline:
+            lines = ["## Timeline\n"]
+            lines.append("| When | What | Source | Status |")
+            lines.append("|------|------|--------|--------|")
+            for entry in timeline:
+                status_tag = "[ESTABLISHED]" if entry.get("status") == "established" else "[TBD]"
+                lines.append(
+                    f"| {entry.get('when', '')} | {entry.get('what', '')} "
+                    f"| {entry.get('source', '')} | {status_tag} |"
+                )
+            lines.append("")
+            sections.append("\n".join(lines))
+
+        # Canon Facts
+        canon_facts = data.get("canon_facts", [])
+        if canon_facts:
+            lines = ["## Established Facts (Canon)\n"]
+            for fact in canon_facts:
+                lines.append(f"- {fact}")
+            lines.append("")
+            sections.append("\n".join(lines))
+
+        # World Rules
+        world_rules = data.get("world_rules", [])
+        if world_rules:
+            lines = ["## World Rules\n"]
+            for rule in world_rules:
+                lines.append(f"- {rule}")
+            lines.append("")
+            sections.append("\n".join(lines))
+
+        # Changelog
+        changelog = data.get("changelog", [])
+        if changelog:
+            lines = ["## Stage Changelog\n"]
+            for entry in changelog:
+                lines.append(f"### {entry.get('transition', 'Unknown')}")
+                added = entry.get("added", [])
+                if added:
+                    lines.append("- **Added:**")
+                    for a in added:
+                        lines.append(f"  - {a}")
+                changed = entry.get("changed", [])
+                if changed:
+                    lines.append("- **Changed:**")
+                    for c in changed:
+                        lines.append(f"  - {c}")
+                dropped = entry.get("dropped", [])
+                if dropped:
+                    lines.append("- **Dropped:**")
+                    for d in dropped:
+                        lines.append(f"  - {d}")
+                lines.append("")
+            sections.append("\n".join(lines))
+
+        return "# Story Bible\n\n" + "\n".join(sections) if sections else "# Story Bible\n\n(No content yet)"
+
+    def _update_story_bible(self, agent, sprint, stage: str):
+        """Generate or update the story bible after a stage passes."""
+        from agents.ai.claude_client import call_claude_structured
+        from projects.models import Output
+
+        effective_stage = self._get_effective_stage(agent, stage)
+
+        deliverable_doc = (
+            Document.objects.filter(
+                department=agent.department,
+                doc_type="stage_deliverable",
+                is_archived=False,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        deliverable_text = deliverable_doc.content if deliverable_doc else ""
+
+        if not deliverable_text:
+            logger.warning("Story Bible: no deliverable found for stage '%s' — skipping", stage)
+            return
+
+        existing_bible = Output.objects.filter(
+            sprint=sprint,
+            department=agent.department,
+            label="story_bible",
+        ).first()
+        previous_bible = existing_bible.content if existing_bible else ""
+
+        voice_doc = (
+            Document.objects.filter(
+                department=agent.department,
+                doc_type="voice_profile",
+                is_archived=False,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        voice_text = voice_doc.content if voice_doc else ""
+
+        user_parts = [f"## Stage: {effective_stage}\n"]
+        if previous_bible:
+            user_parts.append(f"## Previous Story Bible\n{previous_bible}\n")
+        user_parts.append(f"## Stage Deliverable\n{deliverable_text}\n")
+        if voice_text:
+            user_parts.append(f"## Voice Profile\n{voice_text}\n")
+        user_message = "\n".join(user_parts)
+
+        system_prompt = (
+            "You are extracting and updating a story bible from creative writing deliverables.\n\n"
+            "Extract every fact, character decision, relationship, and world rule. "
+            "Be exhaustive — anything not in the bible does not exist for future stages.\n\n"
+            "Mark items as 'established' (dramatized in a deliverable) or 'tbd' "
+            "(mentioned but not yet dramatized).\n\n"
+            "EXTRACTION RULES:\n"
+            "- Extract new facts established in this deliverable\n"
+            "- Identify what changed from the previous bible\n"
+            "- Flag anything dropped (present in prior bible but contradicted or absent)\n"
+            "- Populate the changelog with added/changed/dropped\n"
+            "- Flip 'tbd' items to 'established' when dramatized in the deliverable\n"
+            "- Flag 'tbd' items that should have been resolved by this stage but weren't\n"
+            "- Incorporate voice directives from the voice profile for each character\n\n"
+            "Be specific and concrete. Names, places, decisions — not summaries."
+        )
+
+        bible_data, usage = call_claude_structured(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            output_schema=STORY_BIBLE_SCHEMA,
+            tool_name="update_story_bible",
+            tool_description="Submit the updated story bible with all extracted facts",
+            max_tokens=8192,
+        )
+
+        bible_markdown = self._render_story_bible(bible_data)
+
+        Output.objects.update_or_create(
+            sprint=sprint,
+            department=agent.department,
+            label="story_bible",
+            defaults={
+                "title": "Story Bible",
+                "output_type": "markdown",
+                "content": bible_markdown,
+            },
+        )
+        logger.info("Story Bible: updated for stage '%s' (sprint %s)", stage, sprint.id)
 
     # ── Revision application ───────────────────────────────────────────
 
@@ -515,6 +758,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         if status == "review":
             # creative_reviewer completed and was accepted
             self._create_critique_doc(agent, current_stage, sprint)
+            self._update_story_bible(agent, sprint, current_stage)
             current_info["status"] = "passed"
             stage_status[current_stage] = current_info
             internal_state["stage_status"] = stage_status
@@ -1425,6 +1669,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     def _propose_review_task(self, agent: Agent, stage: str, config: dict) -> dict:
         """Dispatch the creative_reviewer to consolidate analyst feedback."""
+        sprint = self._get_current_sprint(agent)
         locale = config.get("locale", "en")
 
         from agents.models import AgentTask
@@ -1445,6 +1690,21 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             if report:
                 feedback_text += f"\n\n## {agent_type}\n{report}"
 
+        # Inject story bible for canon verification
+        bible_context = ""
+        try:
+            from projects.models import Output
+
+            bible_output = Output.objects.filter(
+                sprint=sprint,
+                department=agent.department,
+                label="story_bible",
+            ).first()
+            if bible_output and bible_output.content:
+                bible_context = f"\n\n## Story Bible (CANON — do not contradict)\n{bible_output.content}"
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not load story bible for review context: %s", exc)
+
         # Resolve the real current_stage for _on_dispatch
         internal_state = agent.internal_state or {}
         dispatch_stage = internal_state.get("current_stage", stage)
@@ -1464,7 +1724,9 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                         f"## Analyst Feedback Reports\n{feedback_text}\n\n"
                         f"Score each dimension 1.0-10.0. Overall score = minimum of all dimensions.\n"
                         f"After your review, call the submit_verdict tool with your verdict and score.\n\n"
-                        f"For CHANGES_REQUESTED: group fix instructions by creative agent."
+                        f"For CHANGES_REQUESTED: group fix instructions by creative agent.\n"
+                        f"For WEAK_IDEA: explain what is fundamentally weak and why, but do not prescribe replacement."
+                        f"{bible_context}"
                     ),
                     "depends_on_previous": False,
                 }
@@ -1476,7 +1738,11 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     def _propose_fix_task(
         self, agent: Agent, review_task, score: float, round_num: int, polish_count: int
     ) -> dict | None:
-        """On failed review: create critique doc, reset to creative_writing."""
+        """On failed review: create critique doc, reset to creative_writing.
+
+        WEAK_IDEA verdict resets iterations to 0 (fresh ideation).
+        CHANGES_REQUESTED increments iterations (revision of same material).
+        """
         internal_state = agent.internal_state or {}
         current_stage = internal_state.get("current_stage", STAGES[0])
         stage_status = internal_state.get("stage_status", {})
@@ -1485,8 +1751,19 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         sprint = self._get_current_sprint(agent)
         self._create_critique_doc(agent, current_stage, sprint)
 
+        verdict = getattr(review_task, "review_verdict", "CHANGES_REQUESTED")
+
+        if verdict == "WEAK_IDEA":
+            # Fresh ideation — reset iterations so agents don't get revision instructions
+            current_info["iterations"] = 0
+            logger.info(
+                "Writers Room: WEAK_IDEA for stage '%s' — resetting to fresh ideation",
+                current_stage,
+            )
+        else:
+            current_info["iterations"] = current_info.get("iterations", 0) + 1
+
         current_info["status"] = "not_started"
-        current_info["iterations"] = current_info.get("iterations", 0) + 1
         stage_status[current_stage] = current_info
         internal_state["stage_status"] = stage_status
         agent.internal_state = internal_state

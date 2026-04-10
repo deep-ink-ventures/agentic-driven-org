@@ -65,6 +65,9 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
             "If you cannot describe a structural beat as a scene with characters, actions, and "
             'consequences, the beat does not exist yet. Do not submit it. Write "UNDEVELOPED" '
             "and move on.\n\n"
+            "Show observable actions, not abstract psychology. Replace 'he felt betrayed' with "
+            "'he closed the folder and walked out.' Internal states must be externalized through "
+            "behavior, dialogue, or physical detail.\n\n"
             "## FORMAT DISCIPLINE\n\n"
             "You are a STRUCTURAL agent. You output beat sheets, not prose. Each scene gets "
             "EXACTLY the four answers (who/why/changes/next) — one sentence each. No atmosphere, "
@@ -108,6 +111,14 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
             "The creator's SPECIFIC pitch elements (their characters, their conflicts, their "
             "arcs, their world) are the raw material. Build from THOSE, not from the referenced "
             "shows' plots.\n\n"
+            "## Pre-Writing Bible Consultation\n"
+            "If a Story Bible is provided in context, check before writing any scene:\n"
+            "(1) Are all characters consistent with bible key decisions?\n"
+            "(2) Do relationships match?\n"
+            "(3) Does the setting respect world rules?\n"
+            "(4) Does the timeline fit?\n"
+            "Do not invent facts that contradict [ESTABLISHED] items. "
+            "You may freely develop [TBD] items.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             'in English. If "fr", French. This is non-negotiable.\n\n'

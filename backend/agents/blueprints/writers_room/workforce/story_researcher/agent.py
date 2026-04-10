@@ -78,6 +78,9 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             "comparable titles, legal research, world-building details. Do not analyze the story's "
             "structure — that is the Story Architect's job. Do not evaluate character consistency — "
             "that is the Character Analyst's job. Stay in your lane.\n\n"
+            "Voice profiles must be DIRECTIVES, not descriptions. Write instructions that a "
+            "writer can follow mechanically. Each directive is one line. Include example phrases "
+            "in the original language.\n\n"
             "CRITICAL: Your ENTIRE output MUST be written in the language specified by the "
             'locale setting. If locale is "de", write everything in German. If "en", write '
             'in English. If "fr", French. This is non-negotiable. The source material may be '
@@ -262,21 +265,25 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
 
         voice_system = (
             self.system_prompt + "\n\n"
-            "VOICE DNA ANALYSIS:\n"
-            "You are producing a VOICE DNA profile -- not vague descriptions, but a forensic "
-            "extraction of the author's writing voice with ACTUAL EXAMPLES from the source text.\n\n"
-            "The author's voice is SACRED. Structure, plot, characters can be radically changed -- "
+            "VOICE DNA ANALYSIS — DIRECTIVE OUTPUT:\n"
+            "You are producing a VOICE DNA profile — not vague descriptions, but OPERATIONAL "
+            "DIRECTIVES that a writer can follow mechanically to reproduce this voice.\n\n"
+            "The author's voice is SACRED. Structure, plot, characters can be radically changed — "
             "but the writing style, rhythm, humor, tone must be preserved. The original author "
-            "should read output written in their voice and think: 'that's me -- the best version of me.'\n\n"
+            "should read output written in their voice and think: 'that's me — the best version of me.'\n\n"
             "RULES FOR VOICE DNA:\n"
             "1. Every pattern claim MUST be backed by 2-3 EXACT QUOTES from the source material.\n"
             "2. Not paraphrases. Not summaries. EXACT quotes, in quotation marks.\n"
             "3. Be surgical: 'average sentence length ~8 words' not 'short sentences'.\n"
             "4. The WHAT THIS VOICE IS NOT section is as important as what it IS.\n"
-            "5. The VOICE COMMANDMENTS must be specific enough that a writer can follow them "
-            "mechanically and produce text that sounds like the original author.\n"
-            "6. If humor is absent, say so explicitly -- do not invent humor patterns.\n"
-            "7. If dialogue is absent from the source, note that and skip the dialogue section."
+            "5. The VOICE COMMANDMENTS must be DIRECTIVES — instructions a writer follows "
+            "mechanically. 'When writing dialogue, never exceed 15 words per line' not "
+            "'the dialogue tends to be brief'.\n"
+            "6. If humor is absent, say so explicitly — do not invent humor patterns.\n"
+            "7. If dialogue is absent from the source, note that and skip the dialogue section.\n"
+            "8. Voice profiles are DIRECTIVES, not descriptions. Write instructions: "
+            "'Short declarative sentences. Never apologize.' not "
+            "'The speech patterns are characterized by directness.'"
         )
 
         suffix = (
