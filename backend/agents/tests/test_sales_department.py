@@ -301,8 +301,7 @@ class TestLeaderStateMachine:
             status=AgentTask.Status.DONE,
             report="Industry briefing here.",
         )
-        leader.internal_state = {"pipeline_steps": {str(sprint.id): "research"}}
-        leader.save(update_fields=["internal_state"])
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "research"})
         result = bp.generate_task_proposal(leader)
         assert result is not None
         assert result["tasks"][0]["target_agent_type"] == "strategist"
@@ -331,8 +330,7 @@ class TestLeaderStateMachine:
             command_name="research-industry",
             status=AgentTask.Status.PROCESSING,
         )
-        leader.internal_state = {"pipeline_steps": {str(sprint.id): "research"}}
-        leader.save(update_fields=["internal_state"])
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "research"})
         assert bp.generate_task_proposal(leader) is None
 
     def test_strategy_gets_outreach_channels(self, leader, sprint, workforce):
@@ -384,8 +382,7 @@ class TestFanOutPersonalization:
                 "### Priority Ranking\n1. Fintech\n"
             ),
         )
-        leader.internal_state = {"pipeline_steps": {str(sprint.id): "strategy"}}
-        leader.save(update_fields=["internal_state"])
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "strategy"})
 
         result = bp.generate_task_proposal(leader)
         assert result is not None
@@ -414,8 +411,7 @@ class TestFanOutPersonalization:
             status=AgentTask.Status.PROCESSING,
             cloned_agent=clone1,
         )
-        leader.internal_state = {"pipeline_steps": {str(sprint.id): "personalization"}}
-        leader.save(update_fields=["internal_state"])
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "personalization"})
         assert bp.generate_task_proposal(leader) is None
 
     def test_advances_to_finalize_when_all_done(self, leader, sprint, workforce):
@@ -439,8 +435,7 @@ class TestFanOutPersonalization:
             report="Clone 1 output",
             cloned_agent=clone1,
         )
-        leader.internal_state = {"pipeline_steps": {str(sprint.id): "personalization"}}
-        leader.save(update_fields=["internal_state"])
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "personalization"})
 
         result = bp.generate_task_proposal(leader)
         assert result is not None
@@ -1019,3 +1014,35 @@ class TestTargetAreaParsing:
         areas = bp._parse_target_areas(report)
         assert len(areas) == 1
         assert "Enterprise" in areas[0][0]
+
+
+# ── Sprint Department State ──────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestSprintDepartmentState:
+    def test_default_empty(self, sprint):
+        assert sprint.department_state == {}
+
+    def test_get_department_state_empty(self, sprint, department):
+        state = sprint.get_department_state(department.id)
+        assert state == {}
+
+    def test_set_and_get_department_state(self, sprint, department):
+        sprint.set_department_state(department.id, {"pipeline_step": "research"})
+        sprint.refresh_from_db()
+        state = sprint.get_department_state(department.id)
+        assert state == {"pipeline_step": "research"}
+
+    def test_multiple_departments(self, sprint, department, project):
+        from projects.models import Department
+
+        dept2 = Department.objects.create(department_type="writers_room", project=project)
+        sprint.departments.add(dept2)
+
+        sprint.set_department_state(department.id, {"pipeline_step": "research"})
+        sprint.set_department_state(dept2.id, {"current_stage": "concept"})
+        sprint.refresh_from_db()
+
+        assert sprint.get_department_state(department.id)["pipeline_step"] == "research"
+        assert sprint.get_department_state(dept2.id)["current_stage"] == "concept"

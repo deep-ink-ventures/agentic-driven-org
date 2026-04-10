@@ -39,6 +39,20 @@ class Sprint(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    department_state = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Per-department pipeline state keyed by department ID. Reset clears this.",
+    )
+
+    def get_department_state(self, department_id) -> dict:
+        """Get pipeline state for a department in this sprint."""
+        return self.department_state.get(str(department_id), {})
+
+    def set_department_state(self, department_id, state: dict):
+        """Set pipeline state for a department in this sprint."""
+        self.department_state[str(department_id)] = state
+        self.save(update_fields=["department_state", "updated_at"])
 
     class Meta:
         ordering = ["-created_at"]

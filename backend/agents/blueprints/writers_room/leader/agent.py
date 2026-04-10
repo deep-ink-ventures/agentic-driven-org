@@ -208,9 +208,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     # ── Task execution (uses base class delegation with stage context) ──
 
     def _get_delegation_context(self, agent):
-        internal_state = agent.internal_state or {}
-        stage_status = internal_state.get("stage_status", {})
-        current_stage = internal_state.get("current_stage", STAGES[0])
+        sprint = self._get_current_sprint(agent)
+        dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        stage_status = dept_state.get("stage_status", {})
+        current_stage = dept_state.get("current_stage", STAGES[0])
 
         context = (
             f"# Current Stage: {current_stage}\n"
@@ -235,10 +236,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     # ── Helper methods ──────────────────────────────────────────────────
 
-    def _get_effective_stage(self, agent, current_stage: str) -> str:
+    def _get_effective_stage(self, agent, current_stage: str, sprint=None) -> str:
         """For series at treatment position, return 'concept' for matrix lookups."""
-        internal_state = agent.internal_state or {}
-        format_type = internal_state.get("format_type", "standalone")
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
+        dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        format_type = dept_state.get("format_type", "standalone")
         if current_stage == "treatment" and format_type == "series":
             return "concept"
         return current_stage
@@ -351,7 +354,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         from agents.ai.claude_client import call_claude_structured
         from projects.models import Output
 
-        effective_stage = self._get_effective_stage(agent, stage)
+        effective_stage = self._get_effective_stage(agent, stage, sprint=sprint)
 
         deliverable_doc = (
             Document.objects.filter(
@@ -585,29 +588,29 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 result["_sprint_id"] = str(sprint.id)
             return result
 
-        internal_state = agent.internal_state or {}
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id)
 
         # Initialize: format detection on first invocation
-        current_stage = internal_state.get("current_stage")
+        current_stage = dept_state.get("current_stage")
         if not current_stage:
-            if not internal_state.get("entry_detected"):
-                detection = _run_format_detection(agent, sprint.text or "")
-                internal_state = agent.internal_state or {}  # re-read after save
+            if not dept_state.get("entry_detected"):
+                detection = _run_format_detection(agent, sprint)
+                dept_state = sprint.get_department_state(dept_id)  # re-read after save
                 entry_stage = detection.get("entry_stage", "pitch")
             else:
                 entry_stage = STAGES[0]
 
             current_stage = entry_stage
-            internal_state["current_stage"] = current_stage
-            internal_state["stage_status"] = {}
-            internal_state["current_iteration"] = 0
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+            dept_state["current_stage"] = current_stage
+            dept_state["stage_status"] = {}
+            dept_state["current_iteration"] = 0
+            sprint.set_department_state(dept_id, dept_state)
 
-        stage_status = internal_state.get("stage_status", {})
+        stage_status = dept_state.get("stage_status", {})
         current_info = stage_status.get(current_stage, {})
-        terminal_stage = internal_state.get("terminal_stage", "treatment")
-        format_type = internal_state.get("format_type", "standalone")  # noqa: F841
+        terminal_stage = dept_state.get("terminal_stage", "treatment")
+        format_type = dept_state.get("format_type", "standalone")  # noqa: F841
 
         # Check if current stage passed — advance
         if current_info.get("status") == "passed":
@@ -620,11 +623,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 logger.info("Writers Room: target stage '%s' reached — done", terminal_stage)
                 return None
             current_stage = next_stg
-            internal_state["current_stage"] = current_stage
-            internal_state["current_iteration"] = 0
+            dept_state["current_stage"] = current_stage
+            dept_state["current_iteration"] = 0
             current_info = stage_status.get(current_stage, {})
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+            sprint.set_department_state(dept_id, dept_state)
 
         # Check for active tasks in the department
         active_tasks = list(
@@ -674,14 +676,14 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         if review_result:
             return _tag_sprint(review_result)
 
-        effective_stage = self._get_effective_stage(agent, current_stage)
+        effective_stage = self._get_effective_stage(agent, current_stage, sprint=sprint)
         config = _get_merged_config(agent)
 
         # ── State machine ───────────────────────────────────────────────
 
         if status == "not_started":
             # Step 1: Assign creative agents to write
-            return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config))
+            return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config, sprint=sprint))
 
         if status == "creative_writing":
             # Creative agents done → dispatch authenticity gate
@@ -690,9 +692,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 current_stage,
             )
             stage_status[current_stage]["status"] = "creative_gate"
-            internal_state["stage_status"] = stage_status
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+            dept_state["stage_status"] = stage_status
+            sprint.set_department_state(dept_id, dept_state)
             return _tag_sprint(self._propose_creative_gate_tasks(agent, effective_stage, config))
 
         if status == "creative_gate":
@@ -702,14 +703,13 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 current_stage,
             )
             stage_status[current_stage]["status"] = "creative_gate_done"
-            internal_state["stage_status"] = stage_status
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
-            return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config))
+            dept_state["stage_status"] = stage_status
+            sprint.set_department_state(dept_id, dept_state)
+            return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config, sprint=sprint))
 
         if status == "creative_gate_done":
             # Lead writer dispatch retry
-            return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config))
+            return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config, sprint=sprint))
 
         if status == "lead_writing":
             # Lead writer done → create docs, dispatch deliverable gate
@@ -719,9 +719,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             )
             self._create_deliverable_and_research_docs(agent, current_stage, sprint)
             stage_status[current_stage]["status"] = "deliverable_gate"
-            internal_state["stage_status"] = stage_status
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+            dept_state["stage_status"] = stage_status
+            sprint.set_department_state(dept_id, dept_state)
             return _tag_sprint(self._propose_deliverable_gate_task(agent, current_stage, config))
 
         if status == "deliverable_gate":
@@ -731,14 +730,13 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 current_stage,
             )
             stage_status[current_stage]["status"] = "deliverable_gate_done"
-            internal_state["stage_status"] = stage_status
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
-            return _tag_sprint(self._propose_feedback_tasks(agent, effective_stage, config))
+            dept_state["stage_status"] = stage_status
+            sprint.set_department_state(dept_id, dept_state)
+            return _tag_sprint(self._propose_feedback_tasks(agent, effective_stage, config, sprint=sprint))
 
         if status == "deliverable_gate_done":
             # Feedback dispatch retry
-            return _tag_sprint(self._propose_feedback_tasks(agent, effective_stage, config))
+            return _tag_sprint(self._propose_feedback_tasks(agent, effective_stage, config, sprint=sprint))
 
         if status == "feedback":
             # Feedback done → dispatch creative_reviewer
@@ -747,13 +745,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 current_stage,
             )
             stage_status[current_stage]["status"] = "feedback_done"
-            internal_state["stage_status"] = stage_status
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
-            return _tag_sprint(self._propose_review_task(agent, effective_stage, config))
+            dept_state["stage_status"] = stage_status
+            sprint.set_department_state(dept_id, dept_state)
+            return _tag_sprint(self._propose_review_task(agent, effective_stage, config, sprint=sprint))
 
         if status == "feedback_done":
-            return _tag_sprint(self._propose_review_task(agent, effective_stage, config))
+            return _tag_sprint(self._propose_review_task(agent, effective_stage, config, sprint=sprint))
 
         if status == "review":
             # creative_reviewer completed and was accepted
@@ -761,63 +758,55 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             self._update_story_bible(agent, sprint, current_stage)
             current_info["status"] = "passed"
             stage_status[current_stage] = current_info
-            internal_state["stage_status"] = stage_status
+            dept_state["stage_status"] = stage_status
 
             next_stg = _next_stage(current_stage)
             effective_terminal = terminal_stage
             if effective_terminal == "concept":
                 effective_terminal = "treatment"
             if next_stg and STAGES.index(current_stage) < STAGES.index(effective_terminal):
-                internal_state["current_stage"] = next_stg
-                internal_state["current_iteration"] = 0
+                dept_state["current_stage"] = next_stg
+                dept_state["current_iteration"] = 0
                 logger.info(
                     "Writers Room: stage '%s' PASSED — advancing to '%s'",
                     current_stage,
                     next_stg,
                 )
-                agent.internal_state = internal_state
-                agent.save(update_fields=["internal_state"])
-                next_effective = self._get_effective_stage(agent, next_stg)
-                return _tag_sprint(self._propose_creative_tasks(agent, next_effective, config))
+                sprint.set_department_state(dept_id, dept_state)
+                next_effective = self._get_effective_stage(agent, next_stg, sprint=sprint)
+                return _tag_sprint(self._propose_creative_tasks(agent, next_effective, config, sprint=sprint))
 
             logger.info("Writers Room: target stage '%s' PASSED — sprint complete", current_stage)
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+            sprint.set_department_state(dept_id, dept_state)
 
             # Auto-complete the sprint
-            running_sprint = Sprint.objects.filter(
-                departments=agent.department,
-                status=Sprint.Status.RUNNING,
-            ).first()
-            if running_sprint:
-                from django.utils import timezone as tz
+            from django.utils import timezone as tz
 
-                running_sprint.status = Sprint.Status.DONE
-                running_sprint.completion_summary = (
-                    f"Target stage '{terminal_stage}' reached and passed review. "
-                    f"Writers room completed all planned stages."
-                )
-                running_sprint.completed_at = tz.now()
-                running_sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+            sprint.status = Sprint.Status.DONE
+            sprint.completion_summary = (
+                f"Target stage '{terminal_stage}' reached and passed review. "
+                f"Writers room completed all planned stages."
+            )
+            sprint.completed_at = tz.now()
+            sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
 
-                from projects.views.sprint_view import _broadcast_sprint
+            from projects.views.sprint_view import _broadcast_sprint
 
-                _broadcast_sprint(running_sprint, "sprint.updated")
-                logger.info("Writers Room: auto-completed sprint '%s'", running_sprint.text[:60])
+            _broadcast_sprint(sprint, "sprint.updated")
+            logger.info("Writers Room: auto-completed sprint '%s'", sprint.text[:60])
 
             return None
 
         # Fallback: if status is unknown, start fresh
         logger.warning("Writers Room: unknown status '%s' for '%s', resetting", status, current_stage)
         stage_status[current_stage] = {"status": "not_started", "iterations": 0}
-        internal_state["stage_status"] = stage_status
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-        return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config))
+        dept_state["stage_status"] = stage_status
+        sprint.set_department_state(dept_id, dept_state)
+        return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config, sprint=sprint))
 
     # ── Creative task proposal ──────────────────────────────────────────
 
-    def _propose_creative_tasks(self, agent: Agent, stage: str, config: dict) -> dict:
+    def _propose_creative_tasks(self, agent: Agent, stage: str, config: dict, sprint=None) -> dict:
         """Create writing tasks for the current stage's creative agents."""
         # ── Voice profiling gate ────────────────────────────────────────
         # Before any creative writing begins, ensure a Voice DNA profile exists.
@@ -839,8 +828,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             if has_source_material:
                 locale = config.get("locale", "en")
                 # Resolve the real current_stage for _on_dispatch
-                internal_state = agent.internal_state or {}
-                dispatch_stage = internal_state.get("current_stage", stage)
+                if sprint is None:
+                    sprint = self._get_current_sprint(agent)
+                dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+                dispatch_stage = dept_state.get("current_stage", stage)
                 return {
                     "exec_summary": f"Stage '{stage}': voice profiling must run before creative writing begins",
                     "tasks": [
@@ -871,20 +862,23 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         if not creative_agents:
             logger.warning("Writers Room: no active creative agents for stage '%s' — skipping", stage)
-            internal_state = agent.internal_state or {}
+            if sprint is None:
+                sprint = self._get_current_sprint(agent)
+            dept_id = str(agent.department_id)
+            dept_state = sprint.get_department_state(dept_id) if sprint else {}
             # Use current_stage (always a STAGES member), not effective stage which may be "concept"
-            real_stage = internal_state.get("current_stage", stage)
-            stage_status = internal_state.get("stage_status", {})
+            real_stage = dept_state.get("current_stage", stage)
+            stage_status = dept_state.get("stage_status", {})
             stage_status[real_stage] = {"status": "passed", "iterations": 0}
-            internal_state["stage_status"] = stage_status
+            dept_state["stage_status"] = stage_status
             next_stg = _next_stage(real_stage)
             if next_stg:
-                internal_state["current_stage"] = next_stg
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+                dept_state["current_stage"] = next_stg
+            if sprint:
+                sprint.set_department_state(dept_id, dept_state)
             if next_stg:
-                next_effective = self._get_effective_stage(agent, next_stg)
-                return self._propose_creative_tasks(agent, next_effective, config)
+                next_effective = self._get_effective_stage(agent, next_stg, sprint=sprint)
+                return self._propose_creative_tasks(agent, next_effective, config, sprint=sprint)
             return None
 
         locale = config.get("locale", "en")
@@ -1174,12 +1168,14 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         tasks = []
         previous_depends = False
         # Resolve the real current_stage for _on_dispatch
-        internal_state = agent.internal_state or {}
-        dispatch_stage = internal_state.get("current_stage", stage)
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
+        _dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        dispatch_stage = _dept_state.get("current_stage", stage)
 
         # Revision preamble for iteration > 0
         revision_preamble = ""
-        current_iterations = internal_state.get("stage_status", {}).get(dispatch_stage, {}).get("iterations", 0)
+        current_iterations = _dept_state.get("stage_status", {}).get(dispatch_stage, {}).get("iterations", 0)
         if current_iterations > 0:
             revision_preamble = (
                 "## REVISION ROUND\n"
@@ -1286,10 +1282,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     # ── Lead Writer task proposal ──────────────────────────────────────
 
-    def _propose_lead_writer_task(self, agent: Agent, stage: str, config: dict) -> dict:
+    def _propose_lead_writer_task(self, agent: Agent, stage: str, config: dict, sprint=None) -> dict:
         """Dispatch the lead_writer to synthesize creative fragments."""
-        internal_state = agent.internal_state or {}
-        format_type = internal_state.get("format_type", "standalone")
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
+        dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        format_type = dept_state.get("format_type", "standalone")
         locale = config.get("locale", "en")
 
         if stage == "pitch":
@@ -1305,7 +1303,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         stage_display = "concept" if (stage == "treatment" and format_type == "series") else stage
 
-        iteration = internal_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
+        iteration = dept_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
 
         if iteration > 0:
             # Determine available operations based on stage
@@ -1390,7 +1388,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     def _create_stage_documents(self, agent, stage, version, doc_types, contents, sprint=None):
         """Create stage documents, archiving prior versions if they exist."""
         # Use effective stage for display (series "treatment" → "Concept")
-        effective = self._get_effective_stage(agent, stage)
+        effective = self._get_effective_stage(agent, stage, sprint=sprint)
         stage_display = effective.replace("_", " ").title()
         label_map = {
             "stage_deliverable": "Deliverable",
@@ -1432,8 +1430,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         """Create Deliverable and Research & Notes documents."""
         from agents.models import AgentTask
 
-        internal_state = agent.internal_state or {}
-        iteration = internal_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
+        dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        iteration = dept_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
         version = iteration + 1
 
         lead_writer_task = (
@@ -1447,7 +1447,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         )
         raw_deliverable = lead_writer_task.report if lead_writer_task else ""
 
-        effective_stage = self._get_effective_stage(agent, stage)
+        effective_stage = self._get_effective_stage(agent, stage, sprint=sprint)
         creative_types = CREATIVE_MATRIX.get(effective_stage, [])
         creative_tasks = list(
             AgentTask.objects.filter(
@@ -1509,7 +1509,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         """
         from projects.models import Output
 
-        effective_stage = self._get_effective_stage(agent, stage)
+        effective_stage = self._get_effective_stage(agent, stage, sprint=sprint)
         stage_display = effective_stage.replace("_", " ").title()
         type_display = output_type.title()
         label = f"{effective_stage}:{output_type}"
@@ -1529,10 +1529,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         """Create Critique document from feedback and reviewer reports."""
         from agents.models import AgentTask
 
-        internal_state = agent.internal_state or {}
-        version = internal_state.get("stage_status", {}).get(stage, {}).get("iterations", 0) + 1
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
+        dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        version = dept_state.get("stage_status", {}).get(stage, {}).get("iterations", 0) + 1
 
-        effective_stage = self._get_effective_stage(agent, stage)
+        effective_stage = self._get_effective_stage(agent, stage, sprint=sprint)
         feedback_types = [at for at, _ in FEEDBACK_MATRIX.get(effective_stage, [])]
         feedback_types.append("creative_reviewer")
 
@@ -1565,7 +1567,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     # ── Feedback task proposal ──────────────────────────────────────────
 
-    def _propose_feedback_tasks(self, agent: Agent, stage: str, config: dict) -> dict:
+    def _propose_feedback_tasks(self, agent: Agent, stage: str, config: dict, sprint=None) -> dict:
         """Create feedback/analysis tasks per the depth matrix.
 
         Skips feedback agents that are inactive, or whose controlled creative
@@ -1634,30 +1636,35 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 "Writers Room: no active feedback agents for stage '%s' — passing without review",
                 effective_stage,
             )
-            internal_state = agent.internal_state or {}
-            stage_status = internal_state.get("stage_status", {})
-            current_stage = internal_state.get("current_stage", effective_stage)
+            if sprint is None:
+                sprint = self._get_current_sprint(agent)
+            dept_id = str(agent.department_id)
+            dept_state = sprint.get_department_state(dept_id) if sprint else {}
+            stage_status = dept_state.get("stage_status", {})
+            current_stage = dept_state.get("current_stage", effective_stage)
             current_info = stage_status.get(current_stage, {"iterations": 0})
             current_info["status"] = "passed"
             stage_status[current_stage] = current_info
-            internal_state["stage_status"] = stage_status
+            dept_state["stage_status"] = stage_status
             next_stg = _next_stage(current_stage)
-            terminal_stage = internal_state.get("terminal_stage", "treatment")
+            terminal_stage = dept_state.get("terminal_stage", "treatment")
             effective_terminal = terminal_stage
             if effective_terminal == "concept":
                 effective_terminal = "treatment"
             if next_stg and STAGES.index(current_stage) < STAGES.index(effective_terminal):
-                internal_state["current_stage"] = next_stg
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+                dept_state["current_stage"] = next_stg
+            if sprint:
+                sprint.set_department_state(dept_id, dept_state)
             if next_stg and STAGES.index(current_stage) < STAGES.index(effective_terminal):
-                next_effective = self._get_effective_stage(agent, next_stg)
-                return self._propose_creative_tasks(agent, next_effective, config)
+                next_effective = self._get_effective_stage(agent, next_stg, sprint=sprint)
+                return self._propose_creative_tasks(agent, next_effective, config, sprint=sprint)
             return None
 
         # Resolve the real current_stage for _on_dispatch
-        internal_state = agent.internal_state or {}
-        dispatch_stage = internal_state.get("current_stage", effective_stage)
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
+        _dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        dispatch_stage = _dept_state.get("current_stage", effective_stage)
 
         return {
             "exec_summary": f"Stage '{effective_stage}': assign feedback agents to analyze",
@@ -1667,9 +1674,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     # ── Review task proposal (dispatch creative_reviewer) ────────────
 
-    def _propose_review_task(self, agent: Agent, stage: str, config: dict) -> dict:
+    def _propose_review_task(self, agent: Agent, stage: str, config: dict, sprint=None) -> dict:
         """Dispatch the creative_reviewer to consolidate analyst feedback."""
-        sprint = self._get_current_sprint(agent)
+        if sprint is None:
+            sprint = self._get_current_sprint(agent)
         locale = config.get("locale", "en")
 
         from agents.models import AgentTask
@@ -1706,8 +1714,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             logger.debug("Could not load story bible for review context: %s", exc)
 
         # Resolve the real current_stage for _on_dispatch
-        internal_state = agent.internal_state or {}
-        dispatch_stage = internal_state.get("current_stage", stage)
+        dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
+        dispatch_stage = dept_state.get("current_stage", stage)
 
         return {
             "_on_dispatch": {"set_status": "review", "stage": dispatch_stage},
@@ -1743,12 +1751,13 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         WEAK_IDEA verdict resets iterations to 0 (fresh ideation).
         CHANGES_REQUESTED increments iterations (revision of same material).
         """
-        internal_state = agent.internal_state or {}
-        current_stage = internal_state.get("current_stage", STAGES[0])
-        stage_status = internal_state.get("stage_status", {})
+        sprint = self._get_current_sprint(agent)
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id) if sprint else {}
+        current_stage = dept_state.get("current_stage", STAGES[0])
+        stage_status = dept_state.get("stage_status", {})
         current_info = stage_status.get(current_stage, {})
 
-        sprint = self._get_current_sprint(agent)
         self._create_critique_doc(agent, current_stage, sprint)
 
         verdict = getattr(review_task, "review_verdict", "CHANGES_REQUESTED")
@@ -1765,13 +1774,13 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         current_info["status"] = "not_started"
         stage_status[current_stage] = current_info
-        internal_state["stage_status"] = stage_status
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
+        dept_state["stage_status"] = stage_status
+        if sprint:
+            sprint.set_department_state(dept_id, dept_state)
 
         config = _get_merged_config(agent)
-        effective_stage = self._get_effective_stage(agent, current_stage)
-        return self._propose_creative_tasks(agent, effective_stage, config)
+        effective_stage = self._get_effective_stage(agent, current_stage, sprint=sprint)
+        return self._propose_creative_tasks(agent, effective_stage, config, sprint=sprint)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -1864,13 +1873,14 @@ FORMAT_DETECTION_TOOL = {
 }
 
 
-def _run_format_detection(agent, sprint_text: str) -> dict:
+def _run_format_detection(agent, sprint) -> dict:
     """
     Classify the sprint to determine format type, terminal stage, and entry point.
     Returns dict with format_type, terminal_stage, entry_stage.
     """
     from agents.ai.claude_client import call_claude_with_tools
 
+    sprint_text = sprint.text or ""
     project = agent.department.project
     goal = project.goal or "No goal specified"
 
@@ -1922,14 +1932,14 @@ def _run_format_detection(agent, sprint_text: str) -> dict:
     if result["entry_stage"] not in STAGES:
         result["entry_stage"] = "pitch"
 
-    # Store in internal_state
-    internal_state = agent.internal_state or {}
-    internal_state["format_type"] = result["format_type"]
-    internal_state["terminal_stage"] = result["terminal_stage"]
-    internal_state["detection_reasoning"] = result["reasoning"]
-    internal_state["entry_detected"] = True
-    agent.internal_state = internal_state
-    agent.save(update_fields=["internal_state"])
+    # Store in sprint department_state
+    dept_id = str(agent.department_id)
+    dept_state = sprint.get_department_state(dept_id)
+    dept_state["format_type"] = result["format_type"]
+    dept_state["terminal_stage"] = result["terminal_stage"]
+    dept_state["detection_reasoning"] = result["reasoning"]
+    dept_state["entry_detected"] = True
+    sprint.set_department_state(dept_id, dept_state)
 
     # Backfill locale on department if not set (catches pre-existing departments)
     detected_locale = data.get("locale")

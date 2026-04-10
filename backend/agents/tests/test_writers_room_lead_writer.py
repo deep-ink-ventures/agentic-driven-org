@@ -128,6 +128,19 @@ def leader_blueprint():
     return WritersRoomLeaderBlueprint()
 
 
+def _set_dept_state(leader, state):
+    """Helper: set sprint department_state for a leader's department."""
+    from projects.models import Sprint
+
+    sprint = Sprint.objects.filter(
+        departments=leader.department,
+        status=Sprint.Status.RUNNING,
+    ).first()
+    if sprint:
+        sprint.set_department_state(str(leader.department_id), state)
+    return sprint
+
+
 @pytest.fixture
 def mock_leader_agent(db):
     """Create a minimal leader agent with department and project."""
@@ -198,14 +211,16 @@ class TestStateMachine:
 
     @pytest.mark.django_db
     def test_creative_writing_done_dispatches_creative_gate(self, leader_blueprint, mock_leader_agent):
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
+            },
+        )
         proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
         assert proposal is not None
         agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
@@ -214,14 +229,16 @@ class TestStateMachine:
 
     @pytest.mark.django_db
     def test_creative_gate_done_dispatches_lead_writer(self, leader_blueprint, mock_leader_agent):
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
+            },
+        )
         proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
         assert proposal is not None
         agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
@@ -229,14 +246,16 @@ class TestStateMachine:
 
     @pytest.mark.django_db
     def test_lead_writing_done_dispatches_deliverable_gate(self, leader_blueprint, mock_leader_agent):
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
+            },
+        )
         with patch.object(leader_blueprint, "_create_deliverable_and_research_docs"):
             proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
         assert proposal is not None
@@ -246,14 +265,16 @@ class TestStateMachine:
 
     @pytest.mark.django_db
     def test_deliverable_gate_done_dispatches_feedback(self, leader_blueprint, mock_leader_agent):
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "deliverable_gate_done", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "deliverable_gate_done", "iterations": 0}},
+            },
+        )
         proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
         assert proposal is not None
         agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
@@ -312,21 +333,18 @@ class TestDocumentCreation:
 
     @pytest.mark.django_db
     def test_effective_stage_series_treatment(self, leader_blueprint, mock_leader_agent):
-        mock_leader_agent.internal_state = {"format_type": "series"}
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(mock_leader_agent, {"format_type": "series"})
         assert leader_blueprint._get_effective_stage(mock_leader_agent, "treatment") == "concept"
 
     @pytest.mark.django_db
     def test_effective_stage_standalone_treatment(self, leader_blueprint, mock_leader_agent):
-        mock_leader_agent.internal_state = {"format_type": "standalone"}
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(mock_leader_agent, {"format_type": "standalone"})
         assert leader_blueprint._get_effective_stage(mock_leader_agent, "treatment") == "treatment"
 
     @pytest.mark.django_db
     def test_series_documents_titled_concept_not_treatment(self, leader_blueprint, mock_leader_agent):
         """For series, documents at the treatment stage position should be titled 'Concept', not 'Treatment'."""
-        mock_leader_agent.internal_state = {"format_type": "series", "stage_status": {"treatment": {"iterations": 0}}}
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(mock_leader_agent, {"format_type": "series", "stage_status": {"treatment": {"iterations": 0}}})
         leader_blueprint._create_stage_documents(
             agent=mock_leader_agent,
             stage="treatment",
@@ -342,11 +360,13 @@ class TestDocumentCreation:
     @pytest.mark.django_db
     def test_standalone_documents_titled_treatment(self, leader_blueprint, mock_leader_agent):
         """For standalone, documents at the treatment stage should be titled 'Treatment'."""
-        mock_leader_agent.internal_state = {
-            "format_type": "standalone",
-            "stage_status": {"treatment": {"iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state(
+            mock_leader_agent,
+            {
+                "format_type": "standalone",
+                "stage_status": {"treatment": {"iterations": 0}},
+            },
+        )
         leader_blueprint._create_stage_documents(
             agent=mock_leader_agent,
             stage="treatment",
@@ -615,6 +635,23 @@ class TestRevisionAwareDocCreation:
         assert applied is False
 
 
+def _make_mock_sprint(dept_state=None):
+    """Create a mock sprint with get/set_department_state."""
+    state = {"mock-dept-id": dept_state or {}}
+    sprint = MagicMock()
+    sprint.text = "Test sprint"
+
+    def get_dept_state(dept_id):
+        return state.get(dept_id, {})
+
+    def set_dept_state(dept_id, new_state):
+        state[dept_id] = new_state
+
+    sprint.get_department_state = MagicMock(side_effect=get_dept_state)
+    sprint.set_department_state = MagicMock(side_effect=set_dept_state)
+    return sprint
+
+
 class TestRevisionInstructions:
     @pytest.fixture
     def leader_blueprint(self):
@@ -624,23 +661,29 @@ class TestRevisionInstructions:
 
     def test_lead_writer_iteration_0_no_revision_instructions(self, leader_blueprint):
         mock_agent = MagicMock()
-        mock_agent.internal_state = {
-            "format_type": "standalone",
-            "current_stage": "pitch",
-            "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
-        }
-        result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"})
+        mock_agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint(
+            {
+                "format_type": "standalone",
+                "current_stage": "pitch",
+                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
+            }
+        )
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION MODE" not in step_plan
 
     def test_lead_writer_iteration_1_has_revision_instructions(self, leader_blueprint):
         mock_agent = MagicMock()
-        mock_agent.internal_state = {
-            "format_type": "standalone",
-            "current_stage": "pitch",
-            "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 1}},
-        }
-        result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"})
+        mock_agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint(
+            {
+                "format_type": "standalone",
+                "current_stage": "pitch",
+                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 1}},
+            }
+        )
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION MODE" in step_plan
         assert "replace" in step_plan.lower()
@@ -648,45 +691,53 @@ class TestRevisionInstructions:
 
     def test_lead_writer_expose_has_replace_section(self, leader_blueprint):
         mock_agent = MagicMock()
-        mock_agent.internal_state = {
-            "format_type": "standalone",
-            "current_stage": "expose",
-            "stage_status": {"expose": {"status": "creative_gate_done", "iterations": 1}},
-        }
-        result = leader_blueprint._propose_lead_writer_task(mock_agent, "expose", {"locale": "en"})
+        mock_agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint(
+            {
+                "format_type": "standalone",
+                "current_stage": "expose",
+                "stage_status": {"expose": {"status": "creative_gate_done", "iterations": 1}},
+            }
+        )
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "expose", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "replace_section" in step_plan
 
     def test_lead_writer_first_draft_has_replace_between(self, leader_blueprint):
         mock_agent = MagicMock()
-        mock_agent.internal_state = {
-            "format_type": "standalone",
-            "current_stage": "first_draft",
-            "stage_status": {"first_draft": {"status": "creative_gate_done", "iterations": 1}},
-        }
-        result = leader_blueprint._propose_lead_writer_task(mock_agent, "first_draft", {"locale": "en"})
+        mock_agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint(
+            {
+                "format_type": "standalone",
+                "current_stage": "first_draft",
+                "stage_status": {"first_draft": {"status": "creative_gate_done", "iterations": 1}},
+            }
+        )
+        result = leader_blueprint._propose_lead_writer_task(mock_agent, "first_draft", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "replace_between" in step_plan
 
     def test_creative_agents_iteration_0_no_revision_preamble(self, leader_blueprint):
         mock_agent = MagicMock()
         mock_agent.department.agents.filter.return_value.values_list.return_value = ["story_researcher"]
-        mock_agent.internal_state = {"stage_status": {"pitch": {"iterations": 0}}, "current_stage": "pitch"}
+        mock_agent.department_id = "mock-dept-id"
         mock_agent.get_config_value.return_value = None
+        sprint = _make_mock_sprint({"stage_status": {"pitch": {"iterations": 0}}, "current_stage": "pitch"})
         with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
             mock_doc.objects.filter.return_value.exists.return_value = True
-            result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"})
+            result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION ROUND" not in step_plan
 
     def test_creative_agents_iteration_1_has_revision_preamble(self, leader_blueprint):
         mock_agent = MagicMock()
         mock_agent.department.agents.filter.return_value.values_list.return_value = ["story_researcher"]
-        mock_agent.internal_state = {"stage_status": {"pitch": {"iterations": 1}}, "current_stage": "pitch"}
+        mock_agent.department_id = "mock-dept-id"
         mock_agent.get_config_value.return_value = None
+        sprint = _make_mock_sprint({"stage_status": {"pitch": {"iterations": 1}}, "current_stage": "pitch"})
         with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
             mock_doc.objects.filter.return_value.exists.return_value = True
-            result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"})
+            result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION ROUND" in step_plan
         assert "Critique" in step_plan
@@ -716,10 +767,13 @@ class TestSprintOutput:
             agent_type="leader",
             is_leader=True,
             status="active",
-            internal_state={"format_type": "standalone"},
+            internal_state={},
         )
-        sprint = Sprint.objects.create(project=project, text="Write a pitch", created_by=user)
+        sprint = Sprint.objects.create(
+            project=project, text="Write a pitch", created_by=user, status=Sprint.Status.RUNNING
+        )
         sprint.departments.add(dept)
+        sprint.set_department_state(str(dept.id), {"format_type": "standalone"})
         return leader, sprint
 
     @pytest.mark.django_db
@@ -745,8 +799,7 @@ class TestSprintOutput:
     @pytest.mark.django_db
     def test_series_output_titled_concept(self, leader_blueprint, sprint_setup):
         leader, sprint = sprint_setup
-        leader.internal_state = {"format_type": "series"}
-        leader.save(update_fields=["internal_state"])
+        sprint.set_department_state(str(leader.department_id), {"format_type": "series"})
         leader_blueprint._update_sprint_output(leader, sprint, "treatment", "Series concept")
         output = Output.objects.get(sprint=sprint, department=leader.department)
         assert output.title == "Concept Deliverable"
@@ -756,20 +809,21 @@ class TestSprintOutput:
 class TestLeadWriterRevisionPrompt:
     def test_revision_step_plan_requires_json_only(self):
         """Revision step_plan must instruct the model to output only JSON."""
-        from unittest.mock import MagicMock
-
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
         agent = MagicMock()
-        agent.internal_state = {
-            "current_stage": "expose",
-            "format_type": "standalone",
-            "stage_status": {"expose": {"iterations": 1}},
-        }
+        agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint(
+            {
+                "current_stage": "expose",
+                "format_type": "standalone",
+                "stage_status": {"expose": {"iterations": 1}},
+            }
+        )
         config = {"locale": "en"}
 
-        result = bp._propose_lead_writer_task(agent, "expose", config)
+        result = bp._propose_lead_writer_task(agent, "expose", config, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
 
         assert "Output ONLY the JSON" in step_plan
@@ -777,20 +831,21 @@ class TestLeadWriterRevisionPrompt:
 
     def test_revision_step_plan_includes_research_hint(self):
         """Revision step_plan must hint at incorporating praised research material."""
-        from unittest.mock import MagicMock
-
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
         agent = MagicMock()
-        agent.internal_state = {
-            "current_stage": "expose",
-            "format_type": "standalone",
-            "stage_status": {"expose": {"iterations": 1}},
-        }
+        agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint(
+            {
+                "current_stage": "expose",
+                "format_type": "standalone",
+                "stage_status": {"expose": {"iterations": 1}},
+            }
+        )
         config = {"locale": "en"}
 
-        result = bp._propose_lead_writer_task(agent, "expose", config)
+        result = bp._propose_lead_writer_task(agent, "expose", config, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
 
         assert "stage research document" in step_plan
@@ -800,14 +855,12 @@ class TestLeadWriterRevisionPrompt:
 class TestUpdateSprintOutput:
     def test_update_sprint_output_uses_label_with_type(self):
         """_update_sprint_output must include output_type in the label."""
-        from unittest.mock import MagicMock, patch
-
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
         agent = MagicMock()
-        agent.internal_state = {"format_type": "standalone"}
-        sprint = MagicMock()
+        agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint({"format_type": "standalone"})
 
         with patch("projects.models.Output.objects.update_or_create") as mock_uoc:
             bp._update_sprint_output(agent, sprint, "expose", "content", "deliverable")
@@ -819,14 +872,12 @@ class TestUpdateSprintOutput:
             )
 
     def test_update_sprint_output_critique_label(self):
-        from unittest.mock import MagicMock, patch
-
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
         agent = MagicMock()
-        agent.internal_state = {"format_type": "standalone"}
-        sprint = MagicMock()
+        agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint({"format_type": "standalone"})
 
         with patch("projects.models.Output.objects.update_or_create") as mock_uoc:
             bp._update_sprint_output(agent, sprint, "expose", "content", "critique")
@@ -835,14 +886,12 @@ class TestUpdateSprintOutput:
 
     def test_update_sprint_output_default_is_deliverable(self):
         """output_type defaults to 'deliverable' for backwards compatibility."""
-        from unittest.mock import MagicMock, patch
-
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
         agent = MagicMock()
-        agent.internal_state = {"format_type": "standalone"}
-        sprint = MagicMock()
+        agent.department_id = "mock-dept-id"
+        sprint = _make_mock_sprint({"format_type": "standalone"})
 
         with patch("projects.models.Output.objects.update_or_create") as mock_uoc:
             bp._update_sprint_output(agent, sprint, "expose", "content")
