@@ -1019,3 +1019,35 @@ class TestTargetAreaParsing:
         areas = bp._parse_target_areas(report)
         assert len(areas) == 1
         assert "Enterprise" in areas[0][0]
+
+
+# ── Sprint Department State ──────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestSprintDepartmentState:
+    def test_default_empty(self, sprint):
+        assert sprint.department_state == {}
+
+    def test_get_department_state_empty(self, sprint, department):
+        state = sprint.get_department_state(department.id)
+        assert state == {}
+
+    def test_set_and_get_department_state(self, sprint, department):
+        sprint.set_department_state(department.id, {"pipeline_step": "research"})
+        sprint.refresh_from_db()
+        state = sprint.get_department_state(department.id)
+        assert state == {"pipeline_step": "research"}
+
+    def test_multiple_departments(self, sprint, department, project):
+        from projects.models import Department
+
+        dept2 = Department.objects.create(department_type="writers_room", project=project)
+        sprint.departments.add(dept2)
+
+        sprint.set_department_state(department.id, {"pipeline_step": "research"})
+        sprint.set_department_state(dept2.id, {"current_stage": "concept"})
+        sprint.refresh_from_db()
+
+        assert sprint.get_department_state(department.id)["pipeline_step"] == "research"
+        assert sprint.get_department_state(dept2.id)["current_stage"] == "concept"
