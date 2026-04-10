@@ -259,28 +259,15 @@ def get_workforce_metadata(department_type: str) -> list[dict]:
 
 
 def get_department_config_schema(department_type: str) -> dict:
-    """Get the config JSON Schema for a department type."""
+    """Get the config JSON Schema for a department type.
+
+    Uses the leader blueprint's get_config_json_schema() to avoid duplicating
+    type conversion logic (email, bool, etc.).
+    """
     dept = DEPARTMENTS.get(department_type)
     if not dept:
         return {"type": "object", "properties": {}, "additionalProperties": False}
-    schema_def = dept.get("config_schema", {})
-    if not schema_def:
-        return {"type": "object", "properties": {}, "additionalProperties": False}
-    properties = {}
-    required = []
-    for key, spec in schema_def.items():
-        prop = {"description": spec.get("description", ""), "title": spec.get("label", key)}
-        t = spec.get("type", "str")
-        if t == "str":
-            prop["type"] = "string"
-        elif t == "list":
-            prop["type"] = "array"
-        elif t == "dict":
-            prop["type"] = "object"
-        properties[key] = prop
-        if spec.get("required"):
-            required.append(key)
-    result = {"type": "object", "properties": properties, "additionalProperties": False}
-    if required:
-        result["required"] = required
-    return result
+    leader = dept.get("leader")
+    if leader and leader.config_schema:
+        return leader.get_config_json_schema()
+    return {"type": "object", "properties": {}, "additionalProperties": False}
