@@ -228,7 +228,9 @@ class TestStateMachine:
 
     @pytest.mark.django_db
     def test_lead_writing_done_dispatches_deliverable_gate(self, leader_blueprint, mock_leader_agent):
-        _set_dept_state(
+        from agents.models import AgentTask
+
+        sprint = _set_dept_state(
             mock_leader_agent,
             {
                 "current_stage": "pitch",
@@ -237,6 +239,16 @@ class TestStateMachine:
                 "entry_detected": True,
                 "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
             },
+        )
+        # Create a completed lead_writer task so the guard passes
+        lead_writer = mock_leader_agent.department.agents.get(agent_type="lead_writer")
+        AgentTask.objects.create(
+            agent=lead_writer,
+            sprint=sprint,
+            command_name="write_pitch",
+            status=AgentTask.Status.DONE,
+            exec_summary="Write the pitch",
+            report="# Test Pitch\nA compelling story.",
         )
         with patch.object(leader_blueprint, "_create_deliverable_and_research_docs"):
             proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
@@ -263,11 +275,10 @@ class TestStateMachine:
         assert any(a in agent_types for a in ["market_analyst", "structure_analyst", "character_analyst"])
 
     @pytest.mark.django_db
-    def test_review_pairs_only_lead_writer(self, leader_blueprint):
+    def test_no_review_pairs(self, leader_blueprint):
+        """Writers room uses custom QA flows, not base class review pairs."""
         pairs = leader_blueprint.get_review_pairs()
-        assert len(pairs) == 1
-        assert pairs[0]["creator"] == "lead_writer"
-        assert pairs[0]["reviewer"] == "creative_reviewer"
+        assert len(pairs) == 0
 
 
 class TestDocumentCreation:

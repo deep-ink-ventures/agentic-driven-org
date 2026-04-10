@@ -366,9 +366,10 @@ class TestAuthenticityGateStates:
     @pytest.mark.django_db
     def test_lead_writing_done_dispatches_deliverable_gate(self, mock_leader_agent):
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
+        from agents.models import AgentTask
 
         bp = WritersRoomLeaderBlueprint()
-        _set_dept_state_action(
+        sprint = _set_dept_state_action(
             mock_leader_agent,
             {
                 "current_stage": "pitch",
@@ -377,6 +378,16 @@ class TestAuthenticityGateStates:
                 "entry_detected": True,
                 "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
             },
+        )
+        # Create a completed lead_writer task so the guard passes
+        lead_writer = mock_leader_agent.department.agents.get(agent_type="lead_writer")
+        AgentTask.objects.create(
+            agent=lead_writer,
+            sprint=sprint,
+            command_name="write_pitch",
+            status=AgentTask.Status.DONE,
+            exec_summary="Write the pitch",
+            report="# Test Pitch\nA compelling story.",
         )
         with patch.object(bp, "_create_deliverable_and_research_docs"):
             proposal = bp.generate_task_proposal(mock_leader_agent)
