@@ -301,3 +301,61 @@ class TestUpdateStoryBible:
             else call_args.kwargs.get("user_message", "")
         )
         assert "Short sentences" in user_message
+
+
+@pytest.mark.django_db
+class TestBibleContextInjection:
+    def _make_setup(self):
+        from agents.models import Agent
+        from projects.models import Department, Output, Project, Sprint
+
+        project = Project.objects.create(name="Test", goal="Story")
+        dept = Department.objects.create(project=project, name="WR", department_type="writers_room")
+        leader = Agent.objects.create(
+            name="Showrunner",
+            agent_type="leader",
+            department=dept,
+            is_leader=True,
+            status="active",
+            internal_state={
+                "format_type": "standalone",
+                "current_stage": "expose",
+                "entry_detected": True,
+            },
+        )
+        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING)
+        sprint.departments.add(dept)
+        Output.objects.create(
+            sprint=sprint,
+            department=dept,
+            label="story_bible",
+            title="Story Bible",
+            output_type="markdown",
+            content="# Story Bible\n\n## Characters\n\n### Jakob\n- **Role:** CEO",
+        )
+        return leader, dept, sprint
+
+    def test_delegation_context_includes_bible(self):
+        leader, dept, sprint = self._make_setup()
+        bp = WritersRoomLeaderBlueprint()
+        context = bp._get_delegation_context(leader)
+        assert "Story Bible (CANON" in context
+        assert "Jakob" in context
+
+    def test_delegation_context_without_bible(self):
+        from agents.models import Agent
+        from projects.models import Department, Project
+
+        project = Project.objects.create(name="Test2", goal="Story2")
+        dept = Department.objects.create(project=project, name="WR2", department_type="writers_room")
+        leader = Agent.objects.create(
+            name="Showrunner2",
+            agent_type="leader",
+            department=dept,
+            is_leader=True,
+            status="active",
+            internal_state={"current_stage": "pitch"},
+        )
+        bp = WritersRoomLeaderBlueprint()
+        context = bp._get_delegation_context(leader)
+        assert "Story Bible" not in context

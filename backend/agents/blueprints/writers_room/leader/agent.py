@@ -211,11 +211,27 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         internal_state = agent.internal_state or {}
         stage_status = internal_state.get("stage_status", {})
         current_stage = internal_state.get("current_stage", STAGES[0])
-        return (
+
+        context = (
             f"# Current Stage: {current_stage}\n"
             f"# Stage Status: {json.dumps(stage_status, indent=2)}\n"
             f"# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (minimum dimension score)"
         )
+
+        # Inject story bible if one exists
+        sprint = self._get_current_sprint(agent)
+        if sprint:
+            from projects.models import Output
+
+            bible_output = Output.objects.filter(
+                sprint=sprint,
+                department=agent.department,
+                label="story_bible",
+            ).first()
+            if bible_output and bible_output.content:
+                context += f"\n\n## Story Bible (CANON — do not contradict)\n" f"{bible_output.content}"
+
+        return context
 
     # ── Helper methods ──────────────────────────────────────────────────
 
