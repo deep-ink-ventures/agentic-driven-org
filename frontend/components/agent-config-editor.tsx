@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { AgentSummary, BlueprintInfo } from "@/lib/types";
 import { Loader2, Check, Save, ToggleLeft, ToggleRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ConfigFields, type ConfigSchema } from "@/components/config-fields";
 
 export function AgentConfigEditor({
   agent,
@@ -37,10 +37,7 @@ export function AgentConfigEditor({
     setEnabledCommands(updated);
   }
 
-  const schema = blueprint.config_schema as {
-    required?: string[];
-    properties?: Record<string, { type: string; format?: string; description: string; title?: string }>;
-  };
+  const schema = blueprint.config_schema as ConfigSchema;
 
   const requiredKeys = new Set(schema?.required ?? []);
   const configComplete = [...requiredKeys].every((k) => {
@@ -137,71 +134,23 @@ export function AgentConfigEditor({
       </div>
 
       {/* Config fields */}
-      {schema?.properties &&
-        Object.keys(schema.properties).length > 0 && (
-          <div>
-            <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
-              Configuration
-            </h3>
-            <div className="space-y-3">
-              {Object.entries(schema.properties).map(([key, spec]) => (
-                <div key={key}>
-                  {spec.type === "boolean" ? (
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-bg-surface">
-                      <div>
-                        <p className="text-sm font-medium text-text-primary">{spec.title || key}</p>
-                        <p className="text-[10px] text-text-secondary mt-0.5">{spec.description}</p>
-                      </div>
-                      <button
-                        onClick={() => setConfig({ ...config, [key]: !config[key] })}
-                        disabled={saving}
-                        className={`transition-colors ${saving ? "animate-pulse opacity-50" : ""} ${config[key] ? "text-accent-violet" : "text-text-secondary hover:text-accent-violet"}`}
-                      >
-                        {config[key] ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <label className="text-xs text-text-primary font-medium block mb-1">
-                        {spec.title || key}
-                        {requiredKeys.has(key) && <span className="text-flag-critical ml-0.5">*</span>}
-                      </label>
-                      <p className="text-[10px] text-text-secondary mb-1">
-                        {spec.description}
-                      </p>
-                      <Input
-                        type={spec.format === "email" ? "email" : "text"}
-                        value={
-                          config[key] == null
-                            ? ""
-                            : typeof config[key] === "string"
-                              ? (config[key] as string)
-                              : JSON.stringify(config[key])
-                        }
-                        placeholder={
-                          agent.effective_config[key] != null && !(key in config)
-                            ? String(agent.effective_config[key])
-                            : (spec.title || key)
-                        }
-                        onChange={(e) =>
-                          setConfig({ ...config, [key]: e.target.value })
-                        }
-                        className="bg-bg-input border-border text-text-primary text-xs font-mono"
-                      />
-                    </>
-                  )}
-                  {agent.config_source[key] && agent.config_source[key] !== "agent" && !(key in config) && (
-                    <p className="text-[10px] text-accent-violet mt-0.5">
-                      Inherited from {agent.config_source[key]}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      {schema?.properties && Object.keys(schema.properties).length > 0 && (
+        <div>
+          <h3 className="text-xs uppercase text-text-secondary font-medium mb-3">
+            Configuration
+          </h3>
+          <ConfigFields
+            schema={schema}
+            values={config}
+            onChange={(key, value) => setConfig({ ...config, [key]: value })}
+            inheritedFrom={agent.config_source}
+            effectiveValues={agent.effective_config}
+            disabled={saving}
+          />
+        </div>
+      )}
 
-      {/* Auto Approve Actions */}
+      {/* Save */}
       <Button
         onClick={save}
         disabled={saving || saved}

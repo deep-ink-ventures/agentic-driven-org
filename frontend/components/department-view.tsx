@@ -8,6 +8,7 @@ import { TaskQueue } from "@/components/task-queue";
 import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, ChevronDown, ChevronRight, FileText, Link2, File, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfigFields, type ConfigSchema } from "@/components/config-fields";
 
 export function DepartmentView({
   dept,
@@ -55,7 +56,7 @@ export function DepartmentView({
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>([]);
   const [provisioning, setProvisioning] = useState<Set<string>>(new Set());
   const [togglingAgents, setTogglingAgents] = useState<Set<string>>(new Set());
-  const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
+  const [configDraft, setConfigDraft] = useState<Record<string, unknown>>({});
   const [configSaving, setConfigSaving] = useState(false);
   const [deptSprints, setDeptSprints] = useState<import("@/lib/types").Sprint[]>([]);
   const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set());
@@ -119,11 +120,7 @@ export function DepartmentView({
   // Sync config draft when department changes or settings tab opens
   useEffect(() => {
     const config = (dept.config || {}) as Record<string, unknown>;
-    const draft: Record<string, string> = {};
-    for (const [key, value] of Object.entries(config)) {
-      draft[key] = typeof value === "string" ? value : JSON.stringify(value);
-    }
-    setConfigDraft(draft);
+    setConfigDraft({ ...config });
   }, [dept.id, dept.config]);
 
   useEffect(() => {
@@ -547,12 +544,8 @@ export function DepartmentView({
       {tab === "config" && (
         <div className="max-w-lg">
           {(() => {
-            const schema = dept.config_schema as {
-              properties?: Record<string, { title?: string; description?: string; type?: string }>;
-              required?: string[];
-            } | undefined;
+            const schema = dept.config_schema as ConfigSchema | undefined;
             const properties = schema?.properties || {};
-            const requiredFields = new Set(schema?.required || []);
 
             if (Object.keys(properties).length === 0) {
               return (
@@ -567,8 +560,14 @@ export function DepartmentView({
               try {
                 const payload: Record<string, unknown> = {};
                 for (const key of Object.keys(properties)) {
-                  const val = configDraft[key]?.trim();
-                  payload[key] = val || null;
+                  const val = configDraft[key];
+                  if (typeof val === "boolean") {
+                    payload[key] = val;
+                  } else if (typeof val === "string") {
+                    payload[key] = val.trim() || null;
+                  } else {
+                    payload[key] = val ?? null;
+                  }
                 }
                 await api.updateDepartmentConfig(dept.id, payload);
                 onRefresh();
@@ -579,28 +578,14 @@ export function DepartmentView({
 
             return (
               <div className="space-y-4">
-                {Object.entries(properties).map(([key, spec]) => (
-                  <div key={key}>
-                    <label className="block text-sm font-medium text-text-primary mb-1">
-                      {spec.title || key}
-                      {requiredFields.has(key) && (
-                        <span className="text-flag-critical ml-1">*</span>
-                      )}
-                    </label>
-                    {spec.description && (
-                      <p className="text-xs text-text-secondary mb-1.5">{spec.description}</p>
-                    )}
-                    <input
-                      type="text"
-                      value={configDraft[key] || ""}
-                      onChange={(e) =>
-                        setConfigDraft((prev) => ({ ...prev, [key]: e.target.value }))
-                      }
-                      className="w-full rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-violet"
-                      placeholder={spec.description || key}
-                    />
-                  </div>
-                ))}
+                <ConfigFields
+                  schema={schema!}
+                  values={configDraft}
+                  onChange={(key, value) =>
+                    setConfigDraft((prev) => ({ ...prev, [key]: value }))
+                  }
+                  disabled={configSaving}
+                />
                 <Button
                   onClick={saveConfig}
                   disabled={configSaving}
