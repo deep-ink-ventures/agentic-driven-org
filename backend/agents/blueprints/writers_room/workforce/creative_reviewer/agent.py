@@ -31,6 +31,7 @@ class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
         "dramatic_action",
         "concept_fidelity",
         "originality",
+        "format_compliance",
         "market_fit",
         "structure",
         "character",
@@ -75,16 +76,23 @@ REVIEW DIMENSIONS (score each 1.0-10.0, use decimals):
 
 1. **Concept Fidelity** — Does the output honor the creator's original pitch? Read the <project_goal> and check: are the creator's SPECIFIC characters, conflicts, arcs, and relationships preserved? If the creator said "three brothers" and the output has "a patriarch and his children," score 1-3. If characters, family structures, or conflicts were imported from reference shows instead of built from the pitch, score 1-3. Every major element in the output must trace back to something the creator specified.
 2. **Originality** — Is this genuinely original? Apply the Setting Swap Test: if you change the setting back to a referenced show's setting, is the story the same? If yes, score 1-3. Apply the Character Swap Test: could you rename the characters to a referenced show's cast and the story still works? If yes, score 1-3.
-3. **Market Fit** — Commercial viability, positioning, audience appeal
-4. **Structure** — Story architecture, beats, pacing, act breaks
-5. **Character** — Consistency, arcs, motivation, relationships, voice
-6. **Dialogue** — Voice, subtext, scene construction, exposition balance
-7. **Craft** — Format conventions, technical quality, polish
-8. **Feasibility** — Budget, cast-ability, production practicality
-9. **Authenticity** — Does the text read as genuinely human? AI linguistic tells, voice flattening, cliche density, coherence/hallucination.
+3. **Format Compliance** — Does the deliverable follow the industry-standard structure for its stage? Check the FORMAT REFERENCE below for the canonical structure. Score based on:
+   - Are all required sections present and in the correct order?
+   - Is the logline formatted as a blockquote/epigraph at the top?
+   - Does formatting match the stage (flowing prose for pitch, markdown headers for exposé/concept, named beat headers for treatment)?
+   - Is the document within the expected page range for its stage?
+   - Does anything appear that does NOT belong (subplots in a pitch, dialogue in a treatment, platform targets anywhere)?
+   A structurally sound document that's missing the logline or has sections in the wrong order scores 5-7. A document that ignores the canonical structure entirely scores 1-3.
+4. **Market Fit** — Commercial viability, positioning, audience appeal
+5. **Structure** — Story architecture, beats, pacing, act breaks
+6. **Character** — Consistency, arcs, motivation, relationships, voice
+7. **Dialogue** — Voice, subtext, scene construction, exposition balance
+8. **Craft** — Prose quality, technical polish, tonal enactment
+9. **Feasibility** — Budget, cast-ability, production practicality
+10. **Authenticity** — Does the text read as genuinely human? AI linguistic tells, voice flattening, cliche density, coherence/hallucination.
 
 Only score dimensions that were analyzed by feedback agents this round.
-Always score concept_fidelity and originality — they apply at every stage.
+Always score concept_fidelity, originality, and format_compliance — they apply at every stage.
 
 SCORING:
 - Overall score = MINIMUM of all dimension scores
@@ -101,6 +109,7 @@ Group issues by which creative agent should fix them:
 - format_analyst flags → story_architect (structural) or dialog_writer (craft)
 - production_analyst flags → most relevant creative agent
 - concept_fidelity / originality flags → story_architect AND character_designer
+- format_compliance flags → lead_writer (structural/formatting issues)
 - authenticity_analyst flags → lead_writer (voice/cliche issues) or story_architect (coherence/logic issues)
 
 Include specific fix instructions in your report so the review loop knows what to route.
@@ -145,15 +154,48 @@ VERDICT OPTIONS:
     review_creative = review_creative
 
     def get_task_suffix(self, agent, task):
-        return """# REVIEW METHODOLOGY
+        # Determine the current stage to inject the correct format spec
+        format_ref = self._get_format_reference(agent)
+
+        return f"""# REVIEW METHODOLOGY
 
 Read all analyst feedback reports from the department's recent completed tasks.
 Consolidate findings, score each dimension, and submit your verdict.
+
+{format_ref}
 
 ## Verdict
 The overall score is the MINIMUM of all dimension scores.
 After your review, call the submit_verdict tool with your verdict and score.
 For CHANGES_REQUESTED, include specific fix instructions grouped by creative agent."""
+
+    def _get_format_reference(self, agent):
+        """Inject the format spec for the current stage as a reference for format_compliance scoring."""
+        from agents.blueprints.writers_room.workforce.lead_writer.agent import FORMAT_SPECS
+
+        # Determine current stage from sprint department_state
+        try:
+            from projects.models import Sprint
+
+            sprint = (
+                Sprint.objects.filter(
+                    departments=agent.department,
+                    status=Sprint.Status.RUNNING,
+                )
+                .order_by("updated_at")
+                .first()
+            )
+            if sprint:
+                dept_state = sprint.get_department_state(str(agent.department_id))
+                stage = dept_state.get("current_stage", "pitch")
+                format_type = dept_state.get("format_type", "standalone")
+                # Map stage to command name
+                cmd = "write_concept" if stage == "treatment" and format_type == "series" else f"write_{stage}"
+                spec = FORMAT_SPECS.get(cmd, FORMAT_SPECS["write_pitch"])
+                return f"# FORMAT REFERENCE (for format_compliance scoring)\n\n{spec}"
+        except Exception:
+            logger.debug("Could not determine format spec for creative reviewer", exc_info=True)
+        return ""
 
     def get_max_tokens(self, agent, task):
         return 12000
