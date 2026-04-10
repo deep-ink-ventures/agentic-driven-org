@@ -563,16 +563,21 @@ class LeaderBlueprint(BaseBlueprint):
             )
             return None
 
-        # Track review round and active chain key
-        internal_state = agent.internal_state or {}
-        review_rounds = internal_state.get("review_rounds", {})
+        # Track review round and active chain key on sprint.department_state
+        sprint = creator_task.sprint
+        if not sprint:
+            logger.warning("REVIEW_NO_SPRINT task=%s — cannot track review state", creator_task.id)
+            return None
+
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id)
+        review_rounds = dept_state.get("review_rounds", {})
         task_key = str(creator_task.id)
         round_num = review_rounds.get(task_key, 0) + 1
         review_rounds[task_key] = round_num
-        internal_state["review_rounds"] = review_rounds
-        internal_state["active_review_key"] = task_key  # so _evaluate_review_and_loop can find it
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
+        dept_state["review_rounds"] = review_rounds
+        dept_state["active_review_key"] = task_key  # so _evaluate_review_and_loop can find it
+        sprint.set_department_state(dept_id, dept_state)
 
         if round_num > MAX_REVIEW_ROUNDS:
             logger.warning(
@@ -623,20 +628,22 @@ class LeaderBlueprint(BaseBlueprint):
             ],
         }
 
-    def _apply_quality_gate(self, agent: Agent, score: float, stage_key: str) -> tuple[bool, int, int]:
+    def _apply_quality_gate(self, agent: Agent, sprint, score: float, stage_key: str) -> tuple[bool, int, int]:
         """Apply universal quality scoring logic.
 
         Tracks polish attempts and evaluates acceptance.
         Returns (accepted, polish_count, round_num).
 
         Args:
-            agent: The leader agent (state is stored on it).
+            agent: The leader agent.
+            sprint: The Sprint instance (state is stored on sprint.department_state).
             score: The review score (0.0-10.0).
-            stage_key: Key to track this review chain in internal_state.
+            stage_key: Key to track this review chain in department_state.
         """
-        internal_state = agent.internal_state or {}
-        review_rounds = internal_state.get("review_rounds", {})
-        polish_attempts_map = internal_state.get("polish_attempts", {})
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id) if sprint else {}
+        review_rounds = dept_state.get("review_rounds", {})
+        polish_attempts_map = dept_state.get("polish_attempts", {})
 
         round_num = review_rounds.get(stage_key, 1)
 
@@ -672,9 +679,9 @@ class LeaderBlueprint(BaseBlueprint):
             # Clear tracking for this key
             review_rounds.pop(stage_key, None)
             polish_attempts_map.pop(stage_key, None)
-            internal_state["review_rounds"] = review_rounds
-            internal_state["polish_attempts"] = polish_attempts_map
-            internal_state.pop("active_review_key", None)
+            dept_state["review_rounds"] = review_rounds
+            dept_state["polish_attempts"] = polish_attempts_map
+            dept_state.pop("active_review_key", None)
         else:
             gap = EXCELLENCE_THRESHOLD - score
             logger.info(
@@ -686,10 +693,10 @@ class LeaderBlueprint(BaseBlueprint):
                 stage_key,
             )
             # Persist polish tracking
-            internal_state["polish_attempts"] = polish_attempts_map
+            dept_state["polish_attempts"] = polish_attempts_map
 
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
+        if sprint:
+            sprint.set_department_state(dept_id, dept_state)
         return accepted, polish_count, round_num
 
     def _evaluate_review_and_loop(self, agent: Agent, review_task: AgentTask, workforce_types: set) -> dict | None:
@@ -713,17 +720,19 @@ class LeaderBlueprint(BaseBlueprint):
             )
 
         # Find the task key: use stored active_review_key (set when review chain starts)
-        internal_state = agent.internal_state or {}
-        task_key = internal_state.get("active_review_key")
+        sprint = review_task.sprint
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id) if sprint else {}
+        task_key = dept_state.get("active_review_key")
         if not task_key:
-            review_rounds = internal_state.get("review_rounds", {})
+            review_rounds = dept_state.get("review_rounds", {})
             for key in review_rounds:
                 task_key = key
                 break
         if not task_key:
             task_key = str(review_task.id)
 
-        accepted, polish_count, round_num = self._apply_quality_gate(agent, score, task_key)
+        accepted, polish_count, round_num = self._apply_quality_gate(agent, sprint, score, task_key)
 
         if accepted:
             return None  # Approved — fall through to standard proposal
