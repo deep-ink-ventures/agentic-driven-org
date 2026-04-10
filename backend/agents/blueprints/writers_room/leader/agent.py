@@ -686,28 +686,17 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config, sprint=sprint))
 
         if status == "creative_writing":
-            # Creative agents done → dispatch authenticity gate
+            # Creative agents done → dispatch lead writer to synthesize
             logger.info(
-                "Writers Room: stage '%s' creative writing complete — dispatching authenticity gate",
+                "Writers Room: stage '%s' creative writing complete — dispatching lead writer",
                 current_stage,
             )
-            stage_status[current_stage]["status"] = "creative_gate"
-            dept_state["stage_status"] = stage_status
-            sprint.set_department_state(dept_id, dept_state)
-            return _tag_sprint(self._propose_creative_gate_tasks(agent, effective_stage, config))
-
-        if status == "creative_gate":
-            # Authenticity gate for creative agents done → dispatch lead writer
-            logger.info(
-                "Writers Room: stage '%s' creative gate passed — dispatching lead writer",
-                current_stage,
-            )
-            stage_status[current_stage]["status"] = "creative_gate_done"
+            stage_status[current_stage]["status"] = "lead_writing_pending"
             dept_state["stage_status"] = stage_status
             sprint.set_department_state(dept_id, dept_state)
             return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config, sprint=sprint))
 
-        if status == "creative_gate_done":
+        if status == "lead_writing_pending":
             # Lead writer dispatch retry
             return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config, sprint=sprint))
 
@@ -1237,29 +1226,6 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         }
 
     # ── Authenticity gate proposals ──────────────────────────────────────
-
-    def _propose_creative_gate_tasks(self, agent, effective_stage, config):
-        """Dispatch authenticity_analyst to review each creative agent's output."""
-        creative_agents = CREATIVE_MATRIX.get(effective_stage, [])
-        tasks = []
-        for agent_type in creative_agents:
-            tasks.append(
-                {
-                    "target_agent_type": "authenticity_analyst",
-                    "exec_summary": f"Authenticity gate: review {agent_type} output",
-                    "step_plan": (
-                        f"Review the {agent_type}'s output for this stage. "
-                        "Apply the full action-first methodology: scene retelling test, "
-                        "causal chain verification, line-by-line logic test. "
-                        "If the output contains no concrete dramatic action, score 0/10."
-                    ),
-                    "command_name": "analyze",
-                }
-            )
-        return {
-            "exec_summary": f"Authenticity gate for creative agents ({effective_stage})",
-            "tasks": tasks,
-        }
 
     def _propose_deliverable_gate_task(self, agent, current_stage, config):
         """Dispatch authenticity_analyst to review the lead writer's deliverable."""

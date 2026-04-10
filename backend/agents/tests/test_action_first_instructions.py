@@ -342,7 +342,8 @@ def _set_dept_state_action(leader, state):
 
 class TestAuthenticityGateStates:
     @pytest.mark.django_db
-    def test_creative_writing_done_dispatches_creative_gate(self, mock_leader_agent):
+    def test_creative_writing_done_dispatches_lead_writer(self, mock_leader_agent):
+        """Creative writing done → lead writer synthesizes (no creative gate)."""
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
@@ -354,28 +355,6 @@ class TestAuthenticityGateStates:
                 "terminal_stage": "concept",
                 "entry_detected": True,
                 "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
-            },
-        )
-        proposal = bp.generate_task_proposal(mock_leader_agent)
-
-        assert proposal is not None
-        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
-        assert "authenticity_analyst" in agent_types
-        assert "lead_writer" not in agent_types
-
-    @pytest.mark.django_db
-    def test_creative_gate_done_dispatches_lead_writer(self, mock_leader_agent):
-        from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
-
-        bp = WritersRoomLeaderBlueprint()
-        _set_dept_state_action(
-            mock_leader_agent,
-            {
-                "current_stage": "pitch",
-                "format_type": "series",
-                "terminal_stage": "concept",
-                "entry_detected": True,
-                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
             },
         )
         proposal = bp.generate_task_proposal(mock_leader_agent)

@@ -128,6 +128,12 @@ export const api = {
   getProjectDetail: (slug: string) =>
     request<import("./types").ProjectDetail>(`/api/projects/${slug}/detail/`),
 
+  updateProjectGoal: (slug: string, goal: string) =>
+    request<import("./types").ProjectDetail>(`/api/projects/${slug}/detail/`, {
+      method: "PATCH",
+      body: JSON.stringify({ goal }),
+    }),
+
   getProjectTasks: async (
     projectId: string,
     params?: {

@@ -429,3 +429,159 @@ Rules:
             "INSTRUCTIONS_REVIEW: no instruction updates needed for department %s",
             department.name,
         )
+
+
+@shared_task
+def review_agent_instructions_after_goal_change(project_id: str):
+    """Review agent instructions across all departments after the project goal changes.
+
+    Similar to sprint-triggered review, but the change context is the goal itself
+    rather than sprint outcomes.
+    """
+    from projects.models import Department, Project
+
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        logger.warning("Project %s not found — skipping instructions review", project_id)
+        return
+
+    all_departments = list(Department.objects.filter(project=project).values_list("id", "department_type"))
+    if not all_departments:
+        return
+
+    change_context = f"The project goal has been updated.\n\n" f"## Current Project Goal\n{project.goal or '(empty)'}"
+
+    for dept_id, _dept_type in all_departments:
+        _review_department_agents_for_change(dept_id, project, change_context)
+
+
+def _review_department_agents_for_change(department_id, project, change_context: str):
+    """Review and update agent instructions for a single department after a project change."""
+    from agents.models import Agent, AgentTask
+    from projects.models import Department, Document
+
+    department = Department.objects.get(id=department_id)
+
+    agents = list(
+        Agent.objects.filter(
+            department=department,
+            status=Agent.Status.ACTIVE,
+        ).values_list("id", "name", "agent_type", "instructions")
+    )
+    if not agents:
+        return
+
+    docs = list(
+        Document.objects.filter(department=department, is_archived=False).values_list("title", "doc_type", "content")[
+            :10
+        ]
+    )
+    docs_text = ""
+    for title, doc_type, content in docs:
+        docs_text += f"\n\n--- [{doc_type}] {title} ---\n{content[:1000]}"
+
+    agents_text = ""
+    for _agent_id, name, agent_type, instructions in agents:
+        agents_text += f"\n\n### {name} ({agent_type})\n**Current instructions:**\n{instructions or '(none)'}"
+
+    response, _usage = call_claude(
+        system_prompt=(
+            "You review agent instructions after a project goal change to check if they are still accurate. "
+            "Respond with JSON only. No markdown fences."
+        ),
+        user_message=f"""## Project: {project.name}
+
+## Change context:
+{change_context}
+
+## Department: {department.name} ({department.department_type})
+
+## Current department documents:
+{docs_text}
+
+## Agents and their current instructions:
+{agents_text}
+
+For each agent, decide:
+- Are their instructions still accurate given the updated project goal?
+- Do they reference anything that changed?
+- Should instructions be updated to reflect the new goal?
+
+Respond with JSON:
+{{
+    "agents": [
+        {{
+            "agent_type": "agent_type",
+            "affected": true/false,
+            "reason": "why affected or not",
+            "updated_instructions": "the full new instructions text (only if affected)"
+        }}
+    ]
+}}
+
+Rules:
+- Only flag agents whose instructions genuinely need updating
+- Preserve the style and tone of existing instructions
+- Add new context from the goal, don't rewrite from scratch
+- If an agent has no instructions and doesn't need any, mark as not affected""",
+        max_tokens=8192,
+    )
+
+    result = parse_json_response(response)
+    if not result:
+        logger.warning(
+            "INSTRUCTIONS_REVIEW: failed to parse agent assessment for department %s",
+            department.name,
+        )
+        return
+
+    agent_map = {at: (aid, name) for aid, name, at, _ in agents}
+    leader = Agent.objects.filter(department=department, is_leader=True, status="active").first()
+
+    updated_count = 0
+    for agent_data in result.get("agents", []):
+        if not agent_data.get("affected"):
+            continue
+
+        agent_type = agent_data.get("agent_type")
+        if agent_type not in agent_map:
+            continue
+
+        agent_id, agent_name = agent_map[agent_type]
+        new_instructions = agent_data.get("updated_instructions", "")
+        if not new_instructions:
+            continue
+
+        AgentTask.objects.create(
+            agent_id=leader.id if leader else agent_id,
+            created_by_agent=leader,
+            status=AgentTask.Status.AWAITING_APPROVAL,
+            exec_summary=f"Update instructions for {agent_name} after project goal change",
+            step_plan=(
+                f"## Reason\n{agent_data.get('reason', 'Project goal changed.')}\n\n"
+                f"## Proposed Updated Instructions\n{new_instructions}\n\n"
+                f"Approve to apply these updated instructions to {agent_name} ({agent_type})."
+            ),
+        )
+        updated_count += 1
+
+        logger.info(
+            "INSTRUCTIONS_REVIEW: proposed update for %s (%s) in %s — %s",
+            agent_name,
+            agent_type,
+            department.name,
+            agent_data.get("reason", ""),
+        )
+
+    if updated_count:
+        logger.info(
+            "INSTRUCTIONS_REVIEW: proposed %d instruction updates for department %s after goal change",
+            updated_count,
+            department.name,
+        )
+    else:
+        logger.info(
+            "INSTRUCTIONS_REVIEW: no instruction updates needed for department %s after goal change",
+            department.name,
+        )

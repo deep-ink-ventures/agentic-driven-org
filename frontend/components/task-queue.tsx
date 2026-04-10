@@ -192,7 +192,7 @@ function TaskCard({
                 {showReport ? "Hide report" : "Show report"}
               </button>
               {showReport && (
-                <div className="text-xs text-text-primary bg-bg-input rounded-lg p-3 border border-border prose prose-invert prose-xs max-w-none prose-headings:text-text-primary prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-pre:bg-bg-surface prose-pre:border prose-pre:border-border">
+                <div className="report-markdown text-sm text-text-primary bg-bg-input rounded-lg p-4 border border-border max-w-none">
                   <ReactMarkdown>{task.report}</ReactMarkdown>
                 </div>
               )}
@@ -300,6 +300,7 @@ interface LaneConfig {
   title: string;
   statuses: string;
   collapsible?: boolean;
+  defaultLimit?: number;
   pulse?: boolean;
 }
 
@@ -426,7 +427,14 @@ function TaskLane({
     }
   }
 
+  const [showAll, setShowAll] = useState(false);
   const hasMore = tasks.length < totalCount;
+  const visibleTasks = config.defaultLimit && !showAll
+    ? tasks.slice(0, config.defaultLimit)
+    : tasks;
+  const hiddenByLimit = config.defaultLimit && !showAll && tasks.length > config.defaultLimit
+    ? tasks.length - config.defaultLimit
+    : 0;
 
   return (
     <div className="flex flex-col">
@@ -482,7 +490,7 @@ function TaskLane({
             </div>
           ) : (
             <div className="space-y-2">
-              {tasks.map((task) => (
+              {visibleTasks.map((task) => (
                 <TaskCard
                   key={task.id}
                   task={task}
@@ -490,7 +498,28 @@ function TaskLane({
                   onUpdate={handleTaskUpdate}
                 />
               ))}
-              {hasMore && (
+              {hiddenByLimit > 0 && (
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="w-full text-xs text-text-secondary hover:text-text-primary py-2 transition-colors flex items-center justify-center gap-1"
+                >
+                  Show more ({totalCount - config.defaultLimit!} remaining)
+                </button>
+              )}
+              {showAll && hasMore && (
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="w-full text-xs text-text-secondary hover:text-text-primary py-2 transition-colors flex items-center justify-center gap-1"
+                >
+                  {loadingMore ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    `Load more (${totalCount - tasks.length} remaining)`
+                  )}
+                </button>
+              )}
+              {!config.defaultLimit && hasMore && (
                 <button
                   onClick={loadMore}
                   disabled={loadingMore}
@@ -563,9 +592,9 @@ export function TaskQueue({
         />
       </div>
 
-      {/* Collapsed completed stack */}
+      {/* Completed — open by default, shows 5 initially */}
       <TaskLane
-        config={{ title: "Completed", statuses: "done", collapsible: true }}
+        config={{ title: "Completed", statuses: "done", defaultLimit: 5 }}
         projectId={projectId}
         department={department}
         agent={agent}

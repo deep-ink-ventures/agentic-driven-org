@@ -210,7 +210,7 @@ class TestStateMachine:
         assert "story_researcher" in agent_types
 
     @pytest.mark.django_db
-    def test_creative_writing_done_dispatches_creative_gate(self, leader_blueprint, mock_leader_agent):
+    def test_creative_writing_done_dispatches_lead_writer(self, leader_blueprint, mock_leader_agent):
         _set_dept_state(
             mock_leader_agent,
             {
@@ -219,24 +219,6 @@ class TestStateMachine:
                 "terminal_stage": "concept",
                 "entry_detected": True,
                 "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
-            },
-        )
-        proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
-        assert proposal is not None
-        agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
-        assert "authenticity_analyst" in agent_types
-        assert "lead_writer" not in agent_types
-
-    @pytest.mark.django_db
-    def test_creative_gate_done_dispatches_lead_writer(self, leader_blueprint, mock_leader_agent):
-        _set_dept_state(
-            mock_leader_agent,
-            {
-                "current_stage": "pitch",
-                "format_type": "series",
-                "terminal_stage": "concept",
-                "entry_detected": True,
-                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
             },
         )
         proposal = leader_blueprint.generate_task_proposal(mock_leader_agent)
@@ -666,7 +648,7 @@ class TestRevisionInstructions:
             {
                 "format_type": "standalone",
                 "current_stage": "pitch",
-                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
+                "stage_status": {"pitch": {"status": "lead_writing_pending", "iterations": 0}},
             }
         )
         result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
@@ -680,7 +662,7 @@ class TestRevisionInstructions:
             {
                 "format_type": "standalone",
                 "current_stage": "pitch",
-                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 1}},
+                "stage_status": {"pitch": {"status": "lead_writing_pending", "iterations": 1}},
             }
         )
         result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
@@ -696,7 +678,7 @@ class TestRevisionInstructions:
             {
                 "format_type": "standalone",
                 "current_stage": "expose",
-                "stage_status": {"expose": {"status": "creative_gate_done", "iterations": 1}},
+                "stage_status": {"expose": {"status": "lead_writing_pending", "iterations": 1}},
             }
         )
         result = leader_blueprint._propose_lead_writer_task(mock_agent, "expose", {"locale": "en"}, sprint=sprint)
@@ -710,7 +692,7 @@ class TestRevisionInstructions:
             {
                 "format_type": "standalone",
                 "current_stage": "first_draft",
-                "stage_status": {"first_draft": {"status": "creative_gate_done", "iterations": 1}},
+                "stage_status": {"first_draft": {"status": "lead_writing_pending", "iterations": 1}},
             }
         )
         result = leader_blueprint._propose_lead_writer_task(mock_agent, "first_draft", {"locale": "en"}, sprint=sprint)

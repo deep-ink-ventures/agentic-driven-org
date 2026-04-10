@@ -255,6 +255,10 @@ export default function ProjectDetailPage() {
     const [pairingToken, setPairingToken] = useState<string | null>(null);
     const [tokenLoading, setTokenLoading] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [editingGoal, setEditingGoal] = useState(false);
+    const [goalDraft, setGoalDraft] = useState(project!.goal || "");
+    const [savingGoal, setSavingGoal] = useState(false);
+    const [goalSaved, setGoalSaved] = useState(false);
 
     const setSettingsTab = useCallback((t: SettingsTab) => {
       setSettingsTabState(t);
@@ -309,9 +313,71 @@ export default function ProjectDetailPage() {
           <div className="space-y-6">
             <div className="rounded-lg border border-border bg-bg-surface p-6">
               <h3 className="text-lg font-semibold text-text-heading">{project!.name}</h3>
-              {project!.goal && (
-                <div className="mt-3 text-sm text-text-primary leading-relaxed prose prose-invert prose-sm max-w-none">
-                  <ReactMarkdown>{project!.goal}</ReactMarkdown>
+              {editingGoal ? (
+                <div className="mt-3 space-y-3">
+                  <textarea
+                    value={goalDraft}
+                    onChange={(e) => setGoalDraft(e.target.value)}
+                    rows={Math.max(10, goalDraft.split("\n").length + 3)}
+                    className="w-full rounded-lg border border-border bg-bg-input px-4 py-3 text-sm text-text-primary font-mono outline-none focus-visible:border-accent-violet focus-visible:ring-1 focus-visible:ring-accent-violet/50 resize-y leading-relaxed"
+                    placeholder="Describe your project goal..."
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        setSavingGoal(true);
+                        try {
+                          const updated = await api.updateProjectGoal(projectSlug, goalDraft);
+                          setProject(updated);
+                          setEditingGoal(false);
+                          setGoalSaved(true);
+                          setTimeout(() => setGoalSaved(false), 3000);
+                        } finally {
+                          setSavingGoal(false);
+                        }
+                      }}
+                      disabled={savingGoal || goalDraft === (project!.goal || "")}
+                      className="inline-flex items-center gap-2 rounded-md bg-accent-violet px-4 py-2 text-sm font-medium text-white hover:bg-accent-violet/90 disabled:opacity-50 transition-colors"
+                    >
+                      {savingGoal ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      Save &amp; Brief Agents
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingGoal(false);
+                        setGoalDraft(project!.goal || "");
+                      }}
+                      className="rounded-md border border-border px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => {
+                    setGoalDraft(project!.goal || "");
+                    setEditingGoal(true);
+                  }}
+                  className="mt-3 text-sm text-text-primary leading-relaxed report-markdown max-w-none cursor-pointer rounded-lg p-3 -m-3 hover:bg-bg-surface-hover transition-colors"
+                  title="Click to edit"
+                >
+                  {project!.goal ? (
+                    <ReactMarkdown>{project!.goal}</ReactMarkdown>
+                  ) : (
+                    <p className="text-text-secondary italic">No project goal set. Click to add one.</p>
+                  )}
+                  {goalSaved && (
+                    <p className="mt-2 text-xs text-flag-strength flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Saved — agents will be briefed on the updated goal
+                    </p>
+                  )}
                 </div>
               )}
             </div>

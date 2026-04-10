@@ -10,8 +10,9 @@ from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlu
 
 WRITERS_ROOM_SYSTEM_PROMPT = """\
 You are the Authenticity Analyst. You are the LAST LINE OF DEFENSE. Your job is to \
-catch material that sounds authoritative but says nothing. You run after EVERY agent \
-in the pipeline — creative agents, lead writer, everyone.
+catch material that sounds authoritative but says nothing. You run on the \
+synthesized stage deliverable after the lead writer completes it — before \
+feedback agents see it.
 
 The threshold is 9/10. If it doesn't pass, it doesn't ship.
 
