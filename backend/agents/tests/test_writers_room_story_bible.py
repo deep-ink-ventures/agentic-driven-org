@@ -10,6 +10,14 @@ from agents.blueprints.writers_room.leader.agent import (
 )
 
 
+def _get_or_create_test_user(email="bible-test@example.com"):
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    user, _ = User.objects.get_or_create(email=email, defaults={"password": "pass1234"})
+    return user
+
+
 class TestStoryBibleSchema:
     def test_schema_has_required_sections(self):
         props = STORY_BIBLE_SCHEMA["properties"]
@@ -139,7 +147,7 @@ class TestUpdateStoryBible:
             department=department,
             is_leader=True,
             status="active",
-            internal_state={"format_type": "standalone", "current_stage": "pitch"},
+            internal_state={},
         )
 
     def _make_sprint(self, project, department):
@@ -149,17 +157,22 @@ class TestUpdateStoryBible:
             project=project,
             text="Write a pitch",
             status=Sprint.Status.RUNNING,
+            created_by=project.owner,
         )
         sprint.departments.add(department)
+        sprint.set_department_state(str(department.id), {"format_type": "standalone", "current_stage": "pitch"})
         return sprint
 
     def _make_project_and_dept(self):
+        from django.contrib.auth import get_user_model
+
         from projects.models import Department, Project
 
-        project = Project.objects.create(name="Test Project", goal="A story about brothers")
+        User = get_user_model()
+        user, _ = User.objects.get_or_create(email="bible-test@example.com", defaults={"password": "pass1234"})
+        project = Project.objects.create(name="Test Project", goal="A story about brothers", owner=user)
         dept = Department.objects.create(
             project=project,
-            name="Writers Room",
             department_type="writers_room",
         )
         return project, dept
@@ -309,22 +322,27 @@ class TestBibleContextInjection:
         from agents.models import Agent
         from projects.models import Department, Output, Project, Sprint
 
-        project = Project.objects.create(name="Test", goal="Story")
-        dept = Department.objects.create(project=project, name="WR", department_type="writers_room")
+        user = _get_or_create_test_user()
+        project = Project.objects.create(name="Test", goal="Story", owner=user)
+        dept = Department.objects.create(project=project, department_type="writers_room")
         leader = Agent.objects.create(
             name="Showrunner",
             agent_type="leader",
             department=dept,
             is_leader=True,
             status="active",
-            internal_state={
+            internal_state={},
+        )
+        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING, created_by=user)
+        sprint.departments.add(dept)
+        sprint.set_department_state(
+            str(dept.id),
+            {
                 "format_type": "standalone",
                 "current_stage": "expose",
                 "entry_detected": True,
             },
         )
-        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING)
-        sprint.departments.add(dept)
         Output.objects.create(
             sprint=sprint,
             department=dept,
@@ -344,18 +362,23 @@ class TestBibleContextInjection:
 
     def test_delegation_context_without_bible(self):
         from agents.models import Agent
-        from projects.models import Department, Project
+        from projects.models import Department, Project, Sprint
 
-        project = Project.objects.create(name="Test2", goal="Story2")
-        dept = Department.objects.create(project=project, name="WR2", department_type="writers_room")
+        user = _get_or_create_test_user("bible-test2@example.com")
+        project = Project.objects.create(name="Test2", goal="Story2", owner=user)
+        dept = Department.objects.create(project=project, department_type="writers_room")
         leader = Agent.objects.create(
             name="Showrunner2",
             agent_type="leader",
             department=dept,
             is_leader=True,
             status="active",
-            internal_state={"current_stage": "pitch"},
+            internal_state={},
         )
+        # Create a sprint so _get_current_sprint returns something
+        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING, created_by=user)
+        sprint.departments.add(dept)
+        sprint.set_department_state(str(dept.id), {"current_stage": "pitch"})
         bp = WritersRoomLeaderBlueprint()
         context = bp._get_delegation_context(leader)
         assert "Story Bible" not in context
@@ -451,15 +474,22 @@ class TestWeakIdeaVerdict:
         from agents.models import Agent
         from projects.models import Department, Project, Sprint
 
-        project = Project.objects.create(name="Test", goal="Story")
-        dept = Department.objects.create(project=project, name="WR", department_type="writers_room")
+        user = _get_or_create_test_user()
+        project = Project.objects.create(name="Test", goal="Story", owner=user)
+        dept = Department.objects.create(project=project, department_type="writers_room")
         leader = Agent.objects.create(
             name="Showrunner",
             agent_type="leader",
             department=dept,
             is_leader=True,
             status="active",
-            internal_state={
+            internal_state={},
+        )
+        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING, created_by=user)
+        sprint.departments.add(dept)
+        sprint.set_department_state(
+            str(dept.id),
+            {
                 "format_type": "standalone",
                 "current_stage": "pitch",
                 "terminal_stage": "treatment",
@@ -467,8 +497,6 @@ class TestWeakIdeaVerdict:
                 "stage_status": {"pitch": {"status": "not_started", "iterations": 2}},
             },
         )
-        sprint = Sprint.objects.create(project=project, text="Write", status=Sprint.Status.RUNNING)
-        sprint.departments.add(dept)
         return leader, dept, sprint
 
     @patch.object(WritersRoomLeaderBlueprint, "_create_critique_doc")
@@ -483,8 +511,8 @@ class TestWeakIdeaVerdict:
 
         bp._propose_fix_task(leader, review_task, score=3.0, round_num=1, polish_count=0)
 
-        leader.refresh_from_db()
-        stage_info = leader.internal_state["stage_status"]["pitch"]
+        sprint.refresh_from_db()
+        stage_info = sprint.get_department_state(str(dept.id))["stage_status"]["pitch"]
         # WEAK_IDEA resets iterations to 0 (fresh ideation, not revision)
         assert stage_info["iterations"] == 0
 
@@ -500,8 +528,8 @@ class TestWeakIdeaVerdict:
 
         bp._propose_fix_task(leader, review_task, score=7.0, round_num=1, polish_count=0)
 
-        leader.refresh_from_db()
-        stage_info = leader.internal_state["stage_status"]["pitch"]
+        sprint.refresh_from_db()
+        stage_info = sprint.get_department_state(str(dept.id))["stage_status"]["pitch"]
         # CHANGES_REQUESTED increments as before
         assert stage_info["iterations"] == 3
 
@@ -512,10 +540,10 @@ class TestBibleInReviewContext:
         from agents.models import Agent
         from projects.models import Department, Output, Project, Sprint
 
-        project = Project.objects.create(name="Test", goal="Story")
+        user = _get_or_create_test_user("bible-review@example.com")
+        project = Project.objects.create(name="Test", goal="Story", owner=user)
         dept = Department.objects.create(
             project=project,
-            name="WR",
             department_type="writers_room",
         )
         leader = Agent.objects.create(
@@ -524,18 +552,23 @@ class TestBibleInReviewContext:
             department=dept,
             is_leader=True,
             status="active",
-            internal_state={
-                "format_type": "standalone",
-                "current_stage": "expose",
-                "entry_detected": True,
-            },
+            internal_state={},
         )
         sprint = Sprint.objects.create(
             project=project,
             text="Write",
             status=Sprint.Status.RUNNING,
+            created_by=user,
         )
         sprint.departments.add(dept)
+        sprint.set_department_state(
+            str(dept.id),
+            {
+                "format_type": "standalone",
+                "current_stage": "expose",
+                "entry_detected": True,
+            },
+        )
         Output.objects.create(
             sprint=sprint,
             department=dept,

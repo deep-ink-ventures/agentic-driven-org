@@ -6,6 +6,23 @@ from agents.blueprints import get_blueprint
 from projects.models import Document
 
 
+def _mock_sprint(dept_state=None):
+    """Create a mock sprint with department_state helpers."""
+    state = {"test-dept-id": dept_state or {}}
+    sprint = MagicMock()
+    sprint.text = "Write a series concept"
+
+    def get_dept_state(dept_id):
+        return state.get(dept_id, {})
+
+    def set_dept_state(dept_id, new_state):
+        state[dept_id] = new_state
+
+    sprint.get_department_state = MagicMock(side_effect=get_dept_state)
+    sprint.set_department_state = MagicMock(side_effect=set_dept_state)
+    return sprint
+
+
 class TestDocumentDocTypes:
     def test_concept_doc_type_exists(self):
         assert "concept" in [choice[0] for choice in Document.DocType.choices]
@@ -88,29 +105,32 @@ class TestFormatDetectionLegacy:
         mock_agent = MagicMock()
         mock_agent.department.project.goal = "Write me a series concept"
         mock_agent.department.project.sources.all.return_value = []
-        mock_agent.internal_state = {}
+        mock_agent.department_id = "test-dept-id"
+        mock_sprint = _mock_sprint()
+        mock_sprint.text = "Write a series concept"
 
-        with (
-            patch("agents.blueprints.writers_room.leader.agent.call_claude") as mock_claude,
-            patch("agents.blueprints.writers_room.leader.agent.parse_json_response") as mock_parse,
-        ):
+        with patch("agents.ai.claude_client.call_claude_with_tools") as mock_claude:
             mock_claude.return_value = (
-                '{"format_type": "series"}',
-                {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
+                "response text",
+                {
+                    "format_type": "series",
+                    "terminal_stage": "concept",
+                    "entry_stage": "pitch",
+                    "reasoning": "User wants a series concept",
+                },
+                {"input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
             )
-            mock_parse.return_value = {
-                "format_type": "series",
-                "terminal_stage": "concept",
-                "entry_stage": "pitch",
-                "reasoning": "User wants a series concept",
-            }
-            result = _run_format_detection(mock_agent, "Write a series concept")
+            result = _run_format_detection(mock_agent, mock_sprint)
 
         assert result["format_type"] == "series"
         assert result["terminal_stage"] == "concept"
-        state = mock_agent.internal_state
-        assert state["entry_detected"] is True
-        assert state["format_type"] == "series"
+        # Verify state stored in sprint department_state
+        mock_sprint.set_department_state.assert_called()
+        call_args = mock_sprint.set_department_state.call_args
+        assert call_args[0][0] == "test-dept-id"
+        stored_state = call_args[0][1]
+        assert stored_state["entry_detected"] is True
+        assert stored_state["format_type"] == "series"
 
     def test_run_format_detection_standalone(self):
         from agents.blueprints.writers_room.leader.agent import _run_format_detection
@@ -118,23 +138,22 @@ class TestFormatDetectionLegacy:
         mock_agent = MagicMock()
         mock_agent.department.project.goal = "Polish my screenplay"
         mock_agent.department.project.sources.all.return_value = []
-        mock_agent.internal_state = {}
+        mock_agent.department_id = "test-dept-id"
+        mock_sprint = _mock_sprint()
+        mock_sprint.text = "Write a screenplay"
 
-        with (
-            patch("agents.blueprints.writers_room.leader.agent.call_claude") as mock_claude,
-            patch("agents.blueprints.writers_room.leader.agent.parse_json_response") as mock_parse,
-        ):
+        with patch("agents.ai.claude_client.call_claude_with_tools") as mock_claude:
             mock_claude.return_value = (
-                '{"format_type": "standalone"}',
-                {"model": "claude-opus-4-6", "input_tokens": 200, "output_tokens": 50, "cost_usd": 0.02},
+                "response text",
+                {
+                    "format_type": "standalone",
+                    "terminal_stage": "first_draft",
+                    "entry_stage": "first_draft",
+                    "reasoning": "Full screenplay uploaded",
+                },
+                {"input_tokens": 200, "output_tokens": 50, "cost_usd": 0.02},
             )
-            mock_parse.return_value = {
-                "format_type": "standalone",
-                "terminal_stage": "first_draft",
-                "entry_stage": "first_draft",
-                "reasoning": "Full screenplay uploaded",
-            }
-            result = _run_format_detection(mock_agent, "Write a screenplay")
+            result = _run_format_detection(mock_agent, mock_sprint)
 
         assert result["format_type"] == "standalone"
         assert result["terminal_stage"] == "first_draft"
@@ -152,12 +171,13 @@ class TestPitchCreativeTaskFraming:
             "character_designer",
             "dialog_writer",
         ]
-        mock_agent.internal_state = {"stage_status": {}}
+        mock_agent.department_id = "test-dept-id"
         mock_agent.get_config_value.return_value = None
+        sprint = _mock_sprint({"stage_status": {}})
 
         with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
             mock_doc.objects.filter.return_value.exists.return_value = True
-            result = bp._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"})
+            result = bp._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
 
         tasks = result["tasks"]
         agent_types = [t["target_agent_type"] for t in tasks]
@@ -175,12 +195,13 @@ class TestPitchCreativeTaskFraming:
             "character_designer",
             "dialog_writer",
         ]
-        mock_agent.internal_state = {"stage_status": {}}
+        mock_agent.department_id = "test-dept-id"
         mock_agent.get_config_value.return_value = None
+        sprint = _mock_sprint({"stage_status": {}})
 
         with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
             mock_doc.objects.filter.return_value.exists.return_value = True
-            result = bp._propose_creative_tasks(mock_agent, "concept", {"locale": "en"})
+            result = bp._propose_creative_tasks(mock_agent, "concept", {"locale": "en"}, sprint=sprint)
 
         tasks = result["tasks"]
         agent_types = [t["target_agent_type"] for t in tasks]
@@ -199,12 +220,13 @@ class TestPitchCreativeTaskFraming:
             "character_designer",
             "dialog_writer",
         ]
-        mock_agent.internal_state = {"stage_status": {}}
+        mock_agent.department_id = "test-dept-id"
         mock_agent.get_config_value.return_value = None
+        sprint = _mock_sprint({"stage_status": {}})
 
         with patch("agents.blueprints.writers_room.leader.agent.Document") as mock_doc:
             mock_doc.objects.filter.return_value.exists.return_value = True
-            result = bp._propose_creative_tasks(mock_agent, "expose", {"locale": "en"})
+            result = bp._propose_creative_tasks(mock_agent, "expose", {"locale": "en"}, sprint=sprint)
 
         tasks = result["tasks"]
         agent_types = [t["target_agent_type"] for t in tasks]

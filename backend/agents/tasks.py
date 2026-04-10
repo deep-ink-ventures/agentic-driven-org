@@ -229,26 +229,44 @@ def _unblock_dependents(completed_task):
             logger.info("Unblocked task %s → awaiting approval", dep.id)
 
 
-def _apply_on_dispatch(agent, on_dispatch):
+def _apply_on_dispatch(agent, on_dispatch, sprint_id=None):
     """Apply state transition after tasks are successfully created.
 
     Prevents state desync: if task creation fails (celery down, old worker, etc.),
     the leader state remains unchanged and can be retried cleanly.
     """
+    from projects.models import Sprint
+
     set_status = on_dispatch.get("set_status")
     stage = on_dispatch.get("stage")
     if not set_status or not stage:
         return
 
-    agent.refresh_from_db()
-    internal_state = agent.internal_state or {}
-    stage_status = internal_state.get("stage_status", {})
-    current_info = stage_status.get(stage, {"iterations": 0})
-    current_info["status"] = set_status
-    stage_status[stage] = current_info
-    internal_state["stage_status"] = stage_status
-    agent.internal_state = internal_state
-    agent.save(update_fields=["internal_state"])
+    # Use sprint department_state if sprint is available
+    sprint = None
+    if sprint_id:
+        sprint = Sprint.objects.filter(id=sprint_id).first()
+
+    if sprint:
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id)
+        stage_status = dept_state.get("stage_status", {})
+        current_info = stage_status.get(stage, {"iterations": 0})
+        current_info["status"] = set_status
+        stage_status[stage] = current_info
+        dept_state["stage_status"] = stage_status
+        sprint.set_department_state(dept_id, dept_state)
+    else:
+        # Fallback for departments not yet migrated
+        agent.refresh_from_db()
+        internal_state = agent.internal_state or {}
+        stage_status = internal_state.get("stage_status", {})
+        current_info = stage_status.get(stage, {"iterations": 0})
+        current_info["status"] = set_status
+        stage_status[stage] = current_info
+        internal_state["stage_status"] = stage_status
+        agent.internal_state = internal_state
+        agent.save(update_fields=["internal_state"])
     logger.info("Leader %s: stage '%s' → %s (on_dispatch)", agent.name, stage, set_status)
 
 
@@ -438,7 +456,7 @@ def create_next_leader_task(leader_agent_id: str):
                 created += 1
             # Apply state transition AFTER tasks are created (prevents desync if task creation fails)
             if created > 0 and on_dispatch:
-                _apply_on_dispatch(agent, on_dispatch)
+                _apply_on_dispatch(agent, on_dispatch, sprint_id=sprint_id)
 
             logger.info("Leader %s proposed %d task(s): %s", agent.name, created, proposal.get("exec_summary", "")[:80])
             return

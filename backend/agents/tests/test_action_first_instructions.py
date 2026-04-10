@@ -327,20 +327,35 @@ def mock_leader_agent(db):
     return leader
 
 
+def _set_dept_state_action(leader, state):
+    """Helper: set sprint department_state for a leader's department."""
+    from projects.models import Sprint
+
+    sprint = Sprint.objects.filter(
+        departments=leader.department,
+        status=Sprint.Status.RUNNING,
+    ).first()
+    if sprint:
+        sprint.set_department_state(str(leader.department_id), state)
+    return sprint
+
+
 class TestAuthenticityGateStates:
     @pytest.mark.django_db
     def test_creative_writing_done_dispatches_creative_gate(self, mock_leader_agent):
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state_action(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "creative_writing", "iterations": 0}},
+            },
+        )
         proposal = bp.generate_task_proposal(mock_leader_agent)
 
         assert proposal is not None
@@ -353,14 +368,16 @@ class TestAuthenticityGateStates:
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state_action(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "creative_gate_done", "iterations": 0}},
+            },
+        )
         proposal = bp.generate_task_proposal(mock_leader_agent)
 
         assert proposal is not None
@@ -372,14 +389,16 @@ class TestAuthenticityGateStates:
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state_action(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "lead_writing", "iterations": 0}},
+            },
+        )
         with patch.object(bp, "_create_deliverable_and_research_docs"):
             proposal = bp.generate_task_proposal(mock_leader_agent)
 
@@ -393,14 +412,16 @@ class TestAuthenticityGateStates:
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
-        mock_leader_agent.internal_state = {
-            "current_stage": "pitch",
-            "format_type": "series",
-            "terminal_stage": "concept",
-            "entry_detected": True,
-            "stage_status": {"pitch": {"status": "deliverable_gate_done", "iterations": 0}},
-        }
-        mock_leader_agent.save(update_fields=["internal_state"])
+        _set_dept_state_action(
+            mock_leader_agent,
+            {
+                "current_stage": "pitch",
+                "format_type": "series",
+                "terminal_stage": "concept",
+                "entry_detected": True,
+                "stage_status": {"pitch": {"status": "deliverable_gate_done", "iterations": 0}},
+            },
+        )
         proposal = bp.generate_task_proposal(mock_leader_agent)
 
         assert proposal is not None
