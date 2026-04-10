@@ -330,6 +330,94 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         return "# Story Bible\n\n" + "\n".join(sections) if sections else "# Story Bible\n\n(No content yet)"
 
+    def _update_story_bible(self, agent, sprint, stage: str):
+        """Generate or update the story bible after a stage passes."""
+        from agents.ai.claude_client import call_claude_structured
+        from projects.models import Output
+
+        effective_stage = self._get_effective_stage(agent, stage)
+
+        deliverable_doc = (
+            Document.objects.filter(
+                department=agent.department,
+                doc_type="stage_deliverable",
+                is_archived=False,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        deliverable_text = deliverable_doc.content if deliverable_doc else ""
+
+        if not deliverable_text:
+            logger.warning("Story Bible: no deliverable found for stage '%s' — skipping", stage)
+            return
+
+        existing_bible = Output.objects.filter(
+            sprint=sprint,
+            department=agent.department,
+            label="story_bible",
+        ).first()
+        previous_bible = existing_bible.content if existing_bible else ""
+
+        voice_doc = (
+            Document.objects.filter(
+                department=agent.department,
+                doc_type="voice_profile",
+                is_archived=False,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        voice_text = voice_doc.content if voice_doc else ""
+
+        user_parts = [f"## Stage: {effective_stage}\n"]
+        if previous_bible:
+            user_parts.append(f"## Previous Story Bible\n{previous_bible}\n")
+        user_parts.append(f"## Stage Deliverable\n{deliverable_text}\n")
+        if voice_text:
+            user_parts.append(f"## Voice Profile\n{voice_text}\n")
+        user_message = "\n".join(user_parts)
+
+        system_prompt = (
+            "You are extracting and updating a story bible from creative writing deliverables.\n\n"
+            "Extract every fact, character decision, relationship, and world rule. "
+            "Be exhaustive — anything not in the bible does not exist for future stages.\n\n"
+            "Mark items as 'established' (dramatized in a deliverable) or 'tbd' "
+            "(mentioned but not yet dramatized).\n\n"
+            "EXTRACTION RULES:\n"
+            "- Extract new facts established in this deliverable\n"
+            "- Identify what changed from the previous bible\n"
+            "- Flag anything dropped (present in prior bible but contradicted or absent)\n"
+            "- Populate the changelog with added/changed/dropped\n"
+            "- Flip 'tbd' items to 'established' when dramatized in the deliverable\n"
+            "- Flag 'tbd' items that should have been resolved by this stage but weren't\n"
+            "- Incorporate voice directives from the voice profile for each character\n\n"
+            "Be specific and concrete. Names, places, decisions — not summaries."
+        )
+
+        bible_data, usage = call_claude_structured(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            output_schema=STORY_BIBLE_SCHEMA,
+            tool_name="update_story_bible",
+            tool_description="Submit the updated story bible with all extracted facts",
+            max_tokens=8192,
+        )
+
+        bible_markdown = self._render_story_bible(bible_data)
+
+        Output.objects.update_or_create(
+            sprint=sprint,
+            department=agent.department,
+            label="story_bible",
+            defaults={
+                "title": "Story Bible",
+                "output_type": "markdown",
+                "content": bible_markdown,
+            },
+        )
+        logger.info("Story Bible: updated for stage '%s' (sprint %s)", stage, sprint.id)
+
     # ── Revision application ───────────────────────────────────────────
 
     def _apply_revisions(self, document_content: str, revisions: list[dict]) -> tuple[str, list[dict]]:

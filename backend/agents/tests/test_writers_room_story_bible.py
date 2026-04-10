@@ -1,5 +1,9 @@
 """Tests for story bible generation, rendering, and injection."""
 
+from unittest.mock import patch
+
+import pytest
+
 from agents.blueprints.writers_room.leader.agent import (
     STORY_BIBLE_SCHEMA,
     WritersRoomLeaderBlueprint,
@@ -122,3 +126,178 @@ class TestRenderStoryBible:
         result = self.bp._render_story_bible(data)
         assert "## Characters" not in result
         assert "## Timeline" not in result
+
+
+@pytest.mark.django_db
+class TestUpdateStoryBible:
+    def _make_agent(self, department):
+        from agents.models import Agent
+
+        return Agent.objects.create(
+            name="Showrunner",
+            agent_type="leader",
+            department=department,
+            is_leader=True,
+            status="active",
+            internal_state={"format_type": "standalone", "current_stage": "pitch"},
+        )
+
+    def _make_sprint(self, project, department):
+        from projects.models import Sprint
+
+        sprint = Sprint.objects.create(
+            project=project,
+            text="Write a pitch",
+            status=Sprint.Status.RUNNING,
+        )
+        sprint.departments.add(department)
+        return sprint
+
+    def _make_project_and_dept(self):
+        from projects.models import Department, Project
+
+        project = Project.objects.create(name="Test Project", goal="A story about brothers")
+        dept = Department.objects.create(
+            project=project,
+            name="Writers Room",
+            department_type="writers_room",
+        )
+        return project, dept
+
+    @patch("agents.ai.claude_client.call_claude_structured")
+    def test_creates_story_bible_output(self, mock_structured):
+        mock_structured.return_value = (
+            {
+                "characters": [
+                    {
+                        "name": "Jakob",
+                        "role": "CEO",
+                        "status": "active [ESTABLISHED]",
+                        "key_decisions": [],
+                        "relationships": [],
+                        "voice_directives": [],
+                    }
+                ],
+                "timeline": [],
+                "canon_facts": ["Company: Hartmann Capital"],
+                "world_rules": [],
+                "changelog": [],
+            },
+            {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
+        )
+
+        project, dept = self._make_project_and_dept()
+        agent = self._make_agent(dept)
+        sprint = self._make_sprint(project, dept)
+
+        from projects.models import Document
+
+        Document.objects.create(
+            department=dept,
+            doc_type="stage_deliverable",
+            title="Pitch v1 — Deliverable",
+            content="Jakob signs the deal.",
+            sprint=sprint,
+        )
+
+        bp = WritersRoomLeaderBlueprint()
+        bp._update_story_bible(agent, sprint, "pitch")
+
+        from projects.models import Output
+
+        bible = Output.objects.get(sprint=sprint, department=dept, label="story_bible")
+        assert "Jakob" in bible.content
+        assert "Story Bible" in bible.title
+
+    @patch("agents.ai.claude_client.call_claude_structured")
+    def test_updates_existing_bible(self, mock_structured):
+        mock_structured.return_value = (
+            {
+                "characters": [
+                    {
+                        "name": "Jakob",
+                        "role": "CEO",
+                        "status": "active [ESTABLISHED]",
+                        "key_decisions": ["Signed deal [ESTABLISHED]"],
+                        "relationships": [],
+                        "voice_directives": [],
+                    }
+                ],
+                "timeline": [],
+                "canon_facts": [],
+                "world_rules": [],
+                "changelog": [{"transition": "Pitch → Expose", "added": ["New subplot"], "changed": [], "dropped": []}],
+            },
+            {"model": "claude-opus-4-6", "input_tokens": 200, "output_tokens": 100, "cost_usd": 0.02},
+        )
+
+        project, dept = self._make_project_and_dept()
+        agent = self._make_agent(dept)
+        sprint = self._make_sprint(project, dept)
+
+        from projects.models import Output
+
+        Output.objects.create(
+            sprint=sprint,
+            department=dept,
+            label="story_bible",
+            title="Story Bible",
+            output_type="markdown",
+            content="# Story Bible\n\nOld content",
+        )
+
+        from projects.models import Document
+
+        Document.objects.create(
+            department=dept,
+            doc_type="stage_deliverable",
+            title="Expose v1 — Deliverable",
+            content="Jakob expands.",
+            sprint=sprint,
+        )
+
+        bp = WritersRoomLeaderBlueprint()
+        bp._update_story_bible(agent, sprint, "expose")
+
+        bible = Output.objects.get(sprint=sprint, department=dept, label="story_bible")
+        assert "Signed deal" in bible.content
+        assert "Pitch → Expose" in bible.content
+        assert Output.objects.filter(sprint=sprint, department=dept, label="story_bible").count() == 1
+
+    @patch("agents.ai.claude_client.call_claude_structured")
+    def test_includes_voice_profile_in_prompt(self, mock_structured):
+        mock_structured.return_value = (
+            {"characters": [], "timeline": [], "canon_facts": [], "world_rules": [], "changelog": []},
+            {"model": "claude-opus-4-6", "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
+        )
+
+        project, dept = self._make_project_and_dept()
+        agent = self._make_agent(dept)
+        sprint = self._make_sprint(project, dept)
+
+        from projects.models import Document
+
+        Document.objects.create(
+            department=dept,
+            doc_type="stage_deliverable",
+            title="Pitch v1 — Deliverable",
+            content="Story content.",
+            sprint=sprint,
+        )
+        Document.objects.create(
+            department=dept,
+            doc_type="voice_profile",
+            title="Voice Profile",
+            content="Short sentences. No apologies.",
+        )
+
+        bp = WritersRoomLeaderBlueprint()
+        bp._update_story_bible(agent, sprint, "pitch")
+
+        call_args = mock_structured.call_args
+        user_message = (
+            call_args[1].get("user_message")
+            if len(call_args) > 1 and isinstance(call_args[1], dict)
+            else call_args.kwargs.get("user_message", "")
+        )
+        assert "Short sentences" in user_message
