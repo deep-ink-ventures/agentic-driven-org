@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { AgentSummary, DepartmentDetail, AvailableAgent } from "@/lib/types";
 import { AgentCard } from "@/components/agent-card";
 import { TaskQueue } from "@/components/task-queue";
-import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, ChevronDown, ChevronRight, FileText, Link2, File, Download } from "lucide-react";
+import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, RotateCcw, ChevronDown, ChevronRight, FileText, Link2, File, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConfigFields, type ConfigSchema } from "@/components/config-fields";
@@ -62,6 +62,7 @@ export function DepartmentView({
   const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set());
   const [sprintActing, setSprintActing] = useState<string | null>(null);
   const [stoppingSprint, setStoppingSprint] = useState<import("@/lib/types").Sprint | null>(null);
+  const [resettingSprint, setResettingSprint] = useState<import("@/lib/types").Sprint | null>(null);
 
   async function toggleAgent(agent: AgentSummary) {
     const newStatus = agent.status === "active" ? "inactive" : "active";
@@ -159,6 +160,19 @@ export function DepartmentView({
     setStoppingSprint(null);
     try {
       await api.updateSprint(projectId, stoppingSprint.id, { status: "done" });
+      refreshSprints();
+      onRefresh();
+    } finally {
+      setSprintActing(null);
+    }
+  }
+
+  async function confirmResetSprint() {
+    if (!resettingSprint) return;
+    setSprintActing(resettingSprint.id);
+    setResettingSprint(null);
+    try {
+      await api.resetSprint(projectId, resettingSprint.id);
       refreshSprints();
       onRefresh();
     } finally {
@@ -417,7 +431,7 @@ export function DepartmentView({
                       {sprint.status}
                     </span>
                     {/* Action buttons */}
-                    {sprint.status !== "done" && (
+                    {sprint.status !== "done" ? (
                       <div className="flex items-center gap-1 shrink-0">
                         {sprint.status === "running" ? (
                           <button
@@ -447,6 +461,15 @@ export function DepartmentView({
                           <Square className="h-3 w-3" />
                         </button>
                       </div>
+                    ) : (
+                      <button
+                        onClick={() => setResettingSprint(sprint)}
+                        disabled={acting}
+                        className="p-1 rounded hover:bg-accent-violet/20 text-text-secondary hover:text-accent-violet transition-colors disabled:opacity-50 shrink-0"
+                        title="Reset &amp; restart"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
                     )}
                   </div>
                   {/* Collapsible details */}
@@ -611,6 +634,16 @@ export function DepartmentView({
       variant="danger"
       onConfirm={confirmStopSprint}
       onCancel={() => setStoppingSprint(null)}
+    />
+    <ConfirmDialog
+      open={!!resettingSprint}
+      title="Reset &amp; restart sprint"
+      description="This will delete all tasks, documents, and outputs from this sprint and restart it from scratch. This cannot be undone."
+      confirmLabel="Reset &amp; restart"
+      cancelLabel="Cancel"
+      variant="danger"
+      onConfirm={confirmResetSprint}
+      onCancel={() => setResettingSprint(null)}
     />
     </>
   );
