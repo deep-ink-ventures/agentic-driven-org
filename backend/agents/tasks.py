@@ -426,7 +426,7 @@ def create_next_leader_task(leader_agent_id: str):
             created = 0
             for task_data in tasks_data:
                 target_type = task_data.get("target_agent_type")
-                target_agent = workforce_agents.get(target_type)
+                target_agent = agent if target_type == "leader" else workforce_agents.get(target_type)
                 if not target_agent:
                     logger.warning("Leader %s: no active agent of type %s", agent.name, target_type)
                     continue
