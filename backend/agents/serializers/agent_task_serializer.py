@@ -6,6 +6,7 @@ from agents.models import AgentTask
 class AgentTaskSerializer(serializers.ModelSerializer):
     agent_name = serializers.CharField(source="agent.name", read_only=True)
     agent_type = serializers.CharField(source="agent.agent_type", read_only=True)
+    department = serializers.UUIDField(source="agent.department_id", read_only=True)
     created_by_agent_name = serializers.SerializerMethodField()
     blocked_by_summary = serializers.SerializerMethodField()
 
@@ -14,6 +15,7 @@ class AgentTaskSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "agent",
+            "department",
             "agent_name",
             "agent_type",
             "created_by_agent",
