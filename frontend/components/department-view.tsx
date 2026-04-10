@@ -461,16 +461,7 @@ export function DepartmentView({
                           <Square className="h-3 w-3" />
                         </button>
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => setResettingSprint(sprint)}
-                        disabled={acting}
-                        className="p-1 rounded hover:bg-accent-violet/20 text-text-secondary hover:text-accent-violet transition-colors disabled:opacity-50 shrink-0"
-                        title="Reset &amp; restart"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                    ) : null}
                   </div>
                   {/* Collapsible details */}
                   {expanded && (
@@ -489,6 +480,16 @@ export function DepartmentView({
                         <p className="mt-2 text-xs text-text-secondary">
                           {sprint.completion_summary}
                         </p>
+                      )}
+                      {sprint.status === "done" && (
+                        <button
+                          onClick={() => setResettingSprint(sprint)}
+                          disabled={acting}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-accent-violet hover:border-accent-violet/40 transition-colors disabled:opacity-50"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Reset &amp; Restart
+                        </button>
                       )}
                       {/* Sprint outputs */}
                       {sprint.outputs && sprint.outputs.length > 0 && (
