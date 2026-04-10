@@ -349,6 +349,21 @@ def create_next_leader_task(leader_agent_id: str):
         logger.warning("Agent %s is not a leader blueprint", agent.name)
         return
 
+    # Hardcap: max 5 concurrent active tasks per department (safety net against runaway loops)
+    MAX_CONCURRENT_PER_DEPT = 5
+    active_count = AgentTask.objects.filter(
+        agent__department=agent.department,
+        status__in=[AgentTask.Status.QUEUED, AgentTask.Status.PROCESSING],
+    ).count()
+    if active_count >= MAX_CONCURRENT_PER_DEPT:
+        logger.warning(
+            "DEPT_CONCURRENCY_CAP dept=%s active=%d cap=%d — skipping proposal",
+            agent.department.name,
+            active_count,
+            MAX_CONCURRENT_PER_DEPT,
+        )
+        return
+
     try:
         proposal = blueprint.generate_task_proposal(agent)
 

@@ -330,8 +330,10 @@ You don't write pitches or do research directly — you create tasks for your wo
         )
 
         if not clone_tasks.exists():
-            # Clones created but no tasks yet — shouldn't happen normally, but dispatch
-            return self._create_clones_and_dispatch(agent, sprint)
+            # Clones exist but tasks not yet created (race condition — another worker
+            # returned the proposal but tasks.py hasn't committed the AgentTasks yet).
+            # Wait for the tasks to appear rather than creating duplicate clones.
+            return None
 
         pending = clone_tasks.exclude(status=AgentTask.Status.DONE)
         if pending.exists():
