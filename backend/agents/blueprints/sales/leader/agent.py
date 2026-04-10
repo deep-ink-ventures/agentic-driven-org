@@ -115,13 +115,7 @@ class SalesLeaderBlueprint(LeaderBlueprint):
             ),
         },
     ]
-    config_schema = {
-        "include_inactive_outreach": {
-            "type": "bool",
-            "description": "Consider inactive outreach agents during dispatch (default: false)",
-            "label": "Include Inactive Outreach Agents",
-        },
-    }
+    config_schema = {}
 
     def get_review_pairs(self):
         return [
@@ -473,23 +467,56 @@ You don't write pitches or do research directly — you create tasks for your wo
         from projects.models import Sprint
 
         department = agent.department
-        outreach_filter = {"outreach": True}
-        if not agent.get_config_value("include_inactive_outreach", False):
-            outreach_filter["status"] = AgentModel.Status.ACTIVE
-        outreach_agents = list(department.agents.filter(**outreach_filter))
-        if not outreach_agents:
+        # All outreach agents (active + inactive) — inactive ones are skipped
+        # at dispatch but their CSV rows remain in the output for manual use.
+        all_outreach = list(department.agents.filter(outreach=True))
+        active_outreach = [a for a in all_outreach if a.status == AgentModel.Status.ACTIVE]
+        inactive_outreach = [a for a in all_outreach if a.status != AgentModel.Status.ACTIVE]
+
+        if not all_outreach:
             logger.warning("SALES_NO_OUTREACH dept=%s — no outreach agents available", department.name)
+            return None
+
+        if inactive_outreach:
+            skipped = ", ".join(f"{a.name} ({a.agent_type})" for a in inactive_outreach)
+            logger.info(
+                "SALES_OUTREACH_SKIPPED dept=%s inactive=%s — CSV rows preserved for manual dispatch",
+                department.name,
+                skipped,
+            )
+
+        # Only track tasks for active outreach agents
+        if not active_outreach:
+            # No active agents — write output and complete (all channels are manual)
+            self._write_sprint_output(agent, sprint)
+            self.destroy_sprint_clones(sprint)
+            sprint.status = Sprint.Status.DONE
+            sprint.completion_summary = (
+                "Sales pipeline complete — all outreach channels inactive, CSV ready for manual dispatch."
+            )
+            sprint.completed_at = timezone.now()
+            sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+
+            from projects.views.sprint_view import _broadcast_sprint
+
+            _broadcast_sprint(sprint, "sprint.updated")
+            logger.info("SALES_SPRINT_DONE dept=%s (manual dispatch) sprint=%s", department.name, sprint.text[:60])
+
+            pipeline_steps.pop(sprint_id, None)
+            internal_state["pipeline_steps"] = pipeline_steps
+            agent.internal_state = internal_state
+            agent.save(update_fields=["internal_state"])
             return None
 
         outreach_tasks = AgentTask.objects.filter(
             sprint=sprint,
-            agent__in=outreach_agents,
+            agent__in=active_outreach,
             command_name="send-outreach",
         )
         pending = outreach_tasks.exclude(status=AgentTask.Status.DONE)
 
         if outreach_tasks.exists() and not pending.exists():
-            # All dispatched — write output and mark sprint done
+            # All active agents dispatched — write output and mark sprint done
             self._write_sprint_output(agent, sprint)
             self.destroy_sprint_clones(sprint)
             sprint.status = Sprint.Status.DONE
@@ -510,7 +537,7 @@ You don't write pitches or do research directly — you create tasks for your wo
             return None
 
         if not outreach_tasks.exists():
-            return self._propose_dispatch_tasks(agent, sprint, outreach_agents)
+            return self._propose_dispatch_tasks(agent, sprint, active_outreach)
 
         # Some still running — wait
         return None
@@ -561,10 +588,7 @@ You don't write pitches or do research directly — you create tasks for your wo
         # For strategy step, inject available outreach agents
         extra_context = ""
         if step == "strategy":
-            outreach_qs = agent.department.agents.filter(outreach=True)
-            if not agent.get_config_value("include_inactive_outreach", False):
-                outreach_qs = outreach_qs.filter(status="active")
-            outreach_agents = list(outreach_qs.values_list("agent_type", "name"))
+            outreach_agents = list(agent.department.agents.filter(outreach=True).values_list("agent_type", "name"))
             if outreach_agents:
                 agents_list = ", ".join(f"{name} ({atype})" for atype, name in outreach_agents)
                 extra_context = f"\n\n## Available Outreach Channels\nAvailable channels for assignment: {agents_list}"
