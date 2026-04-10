@@ -19,12 +19,13 @@ logger = logging.getLogger(__name__)
 
 # ── Pipeline definition ────────────────────────────────────────────────────
 
+DEFAULT_PROFILES_PER_AREA = 50
+
 PIPELINE_STEPS = [
     "research",
     "strategy",
-    "pitch_design",
-    "profile_selection",
-    "personalization",
+    "personalization",  # fan-out step — N clones, one per target area
+    "finalize",  # strategist consolidation → exec summary + CSV
     "qa_review",
     "dispatch",
 ]
@@ -32,19 +33,17 @@ PIPELINE_STEPS = [
 STEP_TO_AGENT = {
     "research": "researcher",
     "strategy": "strategist",
-    "pitch_design": "pitch_architect",
-    "profile_selection": "profile_selector",
-    "personalization": "pitch_personalizer",
+    "personalization": "pitch_personalizer",  # clones
+    "finalize": "strategist",
     "qa_review": "sales_qa",
-    "dispatch": None,  # dispatches to all outreach agents
+    "dispatch": None,  # outreach agents
 }
 
 STEP_TO_COMMAND = {
     "research": "research-industry",
     "strategy": "draft-strategy",
-    "pitch_design": "design-storyline",
-    "profile_selection": "select-profiles",
     "personalization": "personalize-pitches",
+    "finalize": "finalize-outreach",
     "qa_review": "review-pipeline",
     "dispatch": "send-outreach",
 }
@@ -53,45 +52,43 @@ STEP_TO_COMMAND = {
 DIMENSION_TO_AGENT = {
     "research_accuracy": "researcher",
     "strategy_quality": "strategist",
-    "storyline_effectiveness": "pitch_architect",
-    "profile_accuracy": "profile_selector",
-    "pitch_personalization": "pitch_personalizer",
+    "storyline_effectiveness": "strategist",
+    "profile_accuracy": "strategist",
+    "pitch_personalization": "strategist",
 }
 
 # Revision commands per agent (used when QA routes fixes)
 AGENT_FIX_COMMANDS = {
     "researcher": "research-industry",
     "strategist": "revise-strategy",
-    "pitch_architect": "revise-storyline",
-    "profile_selector": "revise-profiles",
-    "pitch_personalizer": "revise-pitches",
 }
 
 CHAIN_ORDER = [
     "researcher",
     "strategist",
-    "pitch_architect",
-    "profile_selector",
-    "pitch_personalizer",
 ]
 
 # Context injection: which prior steps feed into each step
 STEP_CONTEXT_SOURCES = {
     "research": [],
     "strategy": ["research"],
-    "pitch_design": ["research", "strategy"],
-    "profile_selection": ["strategy"],
-    "personalization": ["pitch_design", "profile_selection"],
-    "qa_review": ["research", "strategy", "pitch_design", "profile_selection", "personalization"],
-    "dispatch": ["personalization"],
+    "personalization": ["research", "strategy"],
+    "finalize": ["personalization"],
+    "qa_review": ["research", "strategy", "finalize"],
+    "dispatch": ["finalize"],
 }
+
+TARGET_AREA_PATTERN = re.compile(
+    r"###\s*Target\s*Area\s*\d+[:\s]*(.*?)(?=###\s*Target\s*Area\s*\d+|###\s*Priority\s*Ranking|###\s*Risks|$)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 class SalesLeaderBlueprint(LeaderBlueprint):
     name = "Head of Sales"
     slug = "leader"
     description = (
-        "Sales department leader — orchestrates a 7-agent pipeline from industry research "
+        "Sales department leader — orchestrates a fan-out pipeline from industry research "
         "through personalized outreach with QA feedback loop"
     )
     tags = ["leadership", "strategy", "sales", "pipeline", "orchestration"]
@@ -99,8 +96,8 @@ class SalesLeaderBlueprint(LeaderBlueprint):
         {
             "name": "Pipeline Orchestration",
             "description": (
-                "Manage the sequential sales pipeline: research → strategy → pitch design → "
-                "profile selection → personalization → QA → outreach dispatch"
+                "Manage the sales pipeline: research → strategy → personalization (fan-out) → "
+                "finalize → QA → outreach dispatch"
             ),
         },
         {
@@ -114,7 +111,7 @@ class SalesLeaderBlueprint(LeaderBlueprint):
             "name": "Outreach Discovery",
             "description": (
                 "Discover available outreach channels by querying agents with outreach=True. "
-                "Pass channel list to personalizer for assignment."
+                "Pass channel list to strategist for assignment."
             ),
         },
     ]
@@ -123,8 +120,8 @@ class SalesLeaderBlueprint(LeaderBlueprint):
     def get_review_pairs(self):
         return [
             {
-                "creator": "pitch_personalizer",
-                "creator_fix_command": "revise-pitches",
+                "creator": "strategist",
+                "creator_fix_command": "revise-strategy",
                 "reviewer": "sales_qa",
                 "reviewer_command": "review-pipeline",
                 "dimensions": [
@@ -141,17 +138,16 @@ class SalesLeaderBlueprint(LeaderBlueprint):
     def system_prompt(self) -> str:
         return """You are the Head of Sales. You orchestrate a pipeline of specialized agents to produce personalized outreach campaigns.
 
-YOUR PIPELINE (sequential — each step feeds the next):
+YOUR PIPELINE:
 1. researcher: Industry research, competitive intel, market trends (web search, cheap model)
-2. strategist: Draft thesis with 3-5 target areas based on research
-3. pitch_architect: Design the outreach storyline and narrative arc
-4. profile_selector: Compile concrete persons to outreach to per target area (web search)
-5. pitch_personalizer: Personalize the storyline for each person, assign outreach channel
-6. sales_qa: Multi-dimensional quality review of the entire pipeline
-7. Outreach dispatch: Send approved pitches via available outreach agents
+2. strategist: Draft thesis with 3-5 target areas, narrative arc, outreach storyline
+3. pitch_personalizer (fan-out): N clones, one per target area — each finds profiles and personalizes pitches
+4. strategist (finalize): Consolidate clone outputs into exec summary + CSV
+5. sales_qa: Multi-dimensional quality review of the entire pipeline
+6. Outreach dispatch: Send approved pitches via available outreach agents
 
 REVIEW CHAIN (AUTOMATIC — do not manually manage reviews):
-When the pitch_personalizer completes, the system automatically routes to sales_qa.
+When the strategist's finalize step completes, the system automatically routes to sales_qa.
 - Score >= 9.5/10 → approved, dispatch to outreach
 - Score >= 9.0 after 3 polish attempts → accept (diminishing returns)
 - Score < threshold → system routes fix to the earliest failing agent in the chain
@@ -159,9 +155,61 @@ Do NOT manually create review tasks — the system handles the loop.
 
 OUTREACH DISCOVERY:
 Query your department for agents with outreach=True to discover available channels.
-Pass the list to the pitch_personalizer so it can assign channels per person.
+Pass the list to the strategist so it can assign channels in the strategy.
 
 You don't write pitches or do research directly — you create tasks for your workforce."""
+
+    def _check_review_trigger(self, agent: Agent) -> dict | None:
+        """Override: only trigger review after finalize-outreach, not after draft-strategy.
+
+        The base class triggers review whenever a 'creator' agent type completes a task.
+        Since the creator is now 'strategist' (which also handles draft-strategy), we must
+        restrict the trigger to finalize-outreach only.
+        """
+        from agents.models import AgentTask as TaskModel
+
+        creator_types = self._get_creator_types()
+        reviewer_types = self._get_reviewer_types()
+        if not creator_types and not reviewer_types:
+            return None
+
+        workforce_types = set(
+            agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
+        )
+
+        last_completed = (
+            TaskModel.objects.filter(
+                agent__department=agent.department,
+                status=TaskModel.Status.DONE,
+            )
+            .order_by("-completed_at")
+            .select_related("agent", "created_by_agent")
+            .first()
+        )
+        if not last_completed:
+            return None
+
+        last_type = last_completed.agent.agent_type
+
+        # Creator just finished — but only trigger if it's the finalize command
+        if last_type in creator_types and last_completed.command_name == "finalize-outreach":
+            logger.info(
+                "REVIEW_TRIGGER dept=%s creator=%s task=%s",
+                agent.department.name,
+                last_type,
+                last_completed.exec_summary[:60] if last_completed.exec_summary else "",
+            )
+            review_proposal = self._propose_review_chain(agent, last_completed, workforce_types)
+            if review_proposal:
+                return review_proposal
+
+        # Reviewer just finished — evaluate and maybe loop back
+        if last_type in reviewer_types and last_completed.report:
+            loop_proposal = self._evaluate_review_and_loop(agent, last_completed, workforce_types)
+            if loop_proposal:
+                return loop_proposal
+
+        return None
 
     def generate_task_proposal(self, agent: Agent) -> dict | None:
         """Pipeline state machine — proposes next step in the sales chain."""
@@ -171,7 +219,6 @@ You don't write pitches or do research directly — you create tasks for your wo
             return review_result
 
         # 2. Find the active sprint
-        from agents.models import AgentTask
         from projects.models import Sprint
 
         department = agent.department
@@ -201,61 +248,215 @@ You don't write pitches or do research directly — you create tasks for your wo
             agent.internal_state = internal_state
             agent.save(update_fields=["internal_state"])
 
-        # 4. Check if current step is done
-        step_agent_type = STEP_TO_AGENT.get(current_step)
-        step_command = STEP_TO_COMMAND.get(current_step)
-
+        # 4. Route to appropriate handler
         if current_step == "dispatch":
             return self._handle_dispatch_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
 
-        # For non-dispatch steps, check if the step's task is done
-        if step_agent_type:
-            step_done = AgentTask.objects.filter(
+        if current_step == "personalization":
+            return self._handle_personalization_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+
+        # Linear steps: research, strategy, finalize, qa_review
+        return self._handle_linear_step(agent, sprint, sprint_id, internal_state, pipeline_steps, current_step)
+
+    def _handle_linear_step(
+        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict, current_step: str
+    ) -> dict | None:
+        """Handle a linear (non-fan-out) pipeline step."""
+        from agents.models import AgentTask
+
+        department = agent.department
+        step_agent_type = STEP_TO_AGENT.get(current_step)
+        step_command = STEP_TO_COMMAND.get(current_step)
+
+        if not step_agent_type:
+            return None
+
+        step_done = AgentTask.objects.filter(
+            sprint=sprint,
+            agent__agent_type=step_agent_type,
+            agent__department=department,
+            command_name=step_command,
+            status=AgentTask.Status.DONE,
+        ).exists()
+
+        if not step_done:
+            # Check if task is already in progress or queued
+            step_active = AgentTask.objects.filter(
                 sprint=sprint,
                 agent__agent_type=step_agent_type,
                 agent__department=department,
                 command_name=step_command,
-                status=AgentTask.Status.DONE,
+                status__in=[
+                    AgentTask.Status.PROCESSING,
+                    AgentTask.Status.QUEUED,
+                    AgentTask.Status.AWAITING_APPROVAL,
+                    AgentTask.Status.PLANNED,
+                ],
             ).exists()
 
-            if not step_done:
-                # Check if task is already in progress or queued
-                step_active = AgentTask.objects.filter(
-                    sprint=sprint,
-                    agent__agent_type=step_agent_type,
-                    agent__department=department,
-                    command_name=step_command,
-                    status__in=[
-                        AgentTask.Status.PROCESSING,
-                        AgentTask.Status.QUEUED,
-                        AgentTask.Status.AWAITING_APPROVAL,
-                        AgentTask.Status.PLANNED,
-                    ],
-                ).exists()
+            if step_active:
+                return None  # Wait for it
 
-                if step_active:
-                    return None  # Wait for it
+            # Propose this step's task
+            return self._propose_step_task(agent, sprint, current_step)
 
-                # Propose this step's task
-                return self._propose_step_task(agent, sprint, current_step)
+        # Step is done — persist document if applicable, then advance
+        self._persist_step_document(agent, sprint, current_step)
+        return self._advance_to_next_step(agent, sprint, sprint_id, internal_state, pipeline_steps, current_step)
 
-            # Step is done — persist document if applicable, then advance
-            self._persist_step_document(agent, sprint, current_step)
+    def _handle_personalization_step(
+        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict
+    ) -> dict | None:
+        """Handle the personalization fan-out/join step."""
+        from agents.models import AgentTask, ClonedAgent
 
-            step_idx = PIPELINE_STEPS.index(current_step)
-            if step_idx + 1 < len(PIPELINE_STEPS):
-                next_step = PIPELINE_STEPS[step_idx + 1]
-                pipeline_steps[sprint_id] = next_step
-                internal_state["pipeline_steps"] = pipeline_steps
-                agent.internal_state = internal_state
-                agent.save(update_fields=["internal_state"])
+        department = agent.department
 
-                if next_step == "dispatch":
-                    return self._handle_dispatch_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+        # Check if clones exist yet
+        clone_count = ClonedAgent.objects.filter(
+            sprint=sprint,
+            parent__agent_type="pitch_personalizer",
+            parent__department=department,
+        ).count()
 
-                return self._propose_step_task(agent, sprint, next_step)
+        if clone_count == 0:
+            # Need to create clones — parse target areas from strategy output
+            return self._create_clones_and_dispatch(agent, sprint, sprint_id, internal_state, pipeline_steps)
 
-        return None
+        # Clones exist — check if all clone tasks are done
+        clone_tasks = AgentTask.objects.filter(
+            sprint=sprint,
+            cloned_agent__sprint=sprint,
+            command_name="personalize-pitches",
+        )
+
+        if not clone_tasks.exists():
+            # Clones created but no tasks yet — shouldn't happen normally, but dispatch
+            return self._create_clones_and_dispatch(agent, sprint, sprint_id, internal_state, pipeline_steps)
+
+        pending = clone_tasks.exclude(status=AgentTask.Status.DONE)
+        if pending.exists():
+            return None  # Wait for all clones to finish
+
+        # All clones done — advance to finalize
+        return self._advance_to_next_step(agent, sprint, sprint_id, internal_state, pipeline_steps, "personalization")
+
+    def _create_clones_and_dispatch(
+        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict
+    ) -> dict | None:
+        """Parse target areas from strategy output, create clones, and dispatch tasks."""
+        from agents.models import AgentTask
+
+        department = agent.department
+
+        # Get strategy output
+        strategy_task = (
+            AgentTask.objects.filter(
+                sprint=sprint,
+                agent__agent_type="strategist",
+                agent__department=department,
+                command_name="draft-strategy",
+                status=AgentTask.Status.DONE,
+            )
+            .order_by("-completed_at")
+            .first()
+        )
+
+        if not strategy_task or not strategy_task.report:
+            logger.warning("SALES_NO_STRATEGY dept=%s — cannot fan out without strategy", department.name)
+            return None
+
+        target_areas = self._parse_target_areas(strategy_task.report)
+        if not target_areas:
+            logger.warning("SALES_NO_TARGET_AREAS dept=%s — no target areas found in strategy", department.name)
+            return None
+
+        # Get research output for context
+        research_task = (
+            AgentTask.objects.filter(
+                sprint=sprint,
+                agent__agent_type="researcher",
+                agent__department=department,
+                status=AgentTask.Status.DONE,
+            )
+            .order_by("-completed_at")
+            .first()
+        )
+        research_context = research_task.report if research_task and research_task.report else ""
+
+        # Find parent agent
+        parent = department.agents.filter(agent_type="pitch_personalizer", status="active").first()
+        if not parent:
+            logger.warning("SALES_NO_PERSONALIZER dept=%s", department.name)
+            return None
+
+        # Create clones
+        clones = self.create_clones(
+            parent,
+            len(target_areas),
+            sprint,
+            initial_state={"target_count": DEFAULT_PROFILES_PER_AREA},
+        )
+
+        # Build tasks
+        tasks = []
+        for i, (area_name, area_content) in enumerate(target_areas):
+            clone = clones[i]
+            step_plan = (
+                f"## Sprint Instruction\n{sprint.text}\n\n"
+                f"## Research Output\n{research_context}\n\n"
+                f"## Strategy Output\n{strategy_task.report}\n\n"
+                f"## Your Target Area\n### {area_name}\n{area_content}\n\n"
+                f"Find {DEFAULT_PROFILES_PER_AREA} profiles for this target area and personalize pitches for each."
+            )
+            tasks.append(
+                {
+                    "target_agent_type": "pitch_personalizer",
+                    "command_name": "personalize-pitches",
+                    "exec_summary": f"Personalize pitches — {area_name.strip()}",
+                    "step_plan": step_plan,
+                    "depends_on_previous": False,
+                    "_clone_id": str(clone.id),
+                }
+            )
+
+        return {
+            "exec_summary": f"Fan-out personalization — {len(target_areas)} target areas",
+            "_sprint_id": str(sprint.id),
+            "tasks": tasks,
+        }
+
+    def _parse_target_areas(self, strategy_text: str) -> list[tuple[str, str]]:
+        """Extract target areas from strategy output. Returns list of (name, content) tuples."""
+        matches = list(TARGET_AREA_PATTERN.finditer(strategy_text))
+        areas = []
+        for match in matches:
+            full = match.group(0).strip()
+            name = match.group(1).strip() if match.group(1) else f"Area {len(areas) + 1}"
+            areas.append((name, full))
+        return areas
+
+    def _advance_to_next_step(
+        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict, current_step: str
+    ) -> dict | None:
+        """Advance from current_step to the next pipeline step."""
+        step_idx = PIPELINE_STEPS.index(current_step)
+        if step_idx + 1 >= len(PIPELINE_STEPS):
+            return None
+
+        next_step = PIPELINE_STEPS[step_idx + 1]
+        pipeline_steps[sprint_id] = next_step
+        internal_state["pipeline_steps"] = pipeline_steps
+        agent.internal_state = internal_state
+        agent.save(update_fields=["internal_state"])
+
+        if next_step == "dispatch":
+            return self._handle_dispatch_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+
+        if next_step == "personalization":
+            return self._handle_personalization_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+
+        return self._propose_step_task(agent, sprint, next_step)
 
     def _handle_dispatch_step(
         self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict
@@ -281,6 +482,7 @@ You don't write pitches or do research directly — you create tasks for your wo
         if outreach_tasks.exists() and not pending.exists():
             # All dispatched — write output and mark sprint done
             self._write_sprint_output(agent, sprint)
+            self.destroy_sprint_clones(sprint)
             sprint.status = Sprint.Status.DONE
             sprint.completion_summary = "Sales pipeline complete — outreach dispatched."
             sprint.completed_at = timezone.now()
@@ -315,32 +517,47 @@ You don't write pitches or do research directly — you create tasks for your wo
         context_parts = []
         source_steps = STEP_CONTEXT_SOURCES.get(step, [])
         for src_step in source_steps:
-            src_agent_type = STEP_TO_AGENT[src_step]
-            src_task = (
-                AgentTask.objects.filter(
+            if src_step == "personalization":
+                # Gather all clone task outputs
+                clone_tasks = AgentTask.objects.filter(
                     sprint=sprint,
-                    agent__agent_type=src_agent_type,
-                    agent__department=agent.department,
+                    cloned_agent__sprint=sprint,
+                    command_name="personalize-pitches",
                     status=AgentTask.Status.DONE,
+                ).select_related("cloned_agent")
+                for ct in clone_tasks:
+                    label = f"Personalizer Clone {ct.cloned_agent.clone_index}" if ct.cloned_agent else "Personalizer"
+                    if ct.report:
+                        context_parts.append(f"## {label} Output\n{ct.report}")
+            else:
+                src_agent_type = STEP_TO_AGENT[src_step]
+                src_command = STEP_TO_COMMAND[src_step]
+                src_task = (
+                    AgentTask.objects.filter(
+                        sprint=sprint,
+                        agent__agent_type=src_agent_type,
+                        agent__department=agent.department,
+                        command_name=src_command,
+                        status=AgentTask.Status.DONE,
+                    )
+                    .order_by("-completed_at")
+                    .first()
                 )
-                .order_by("-completed_at")
-                .first()
-            )
-            if src_task and src_task.report:
-                step_label = src_step.replace("_", " ").title()
-                context_parts.append(f"## {step_label} Output\n{src_task.report}")
+                if src_task and src_task.report:
+                    step_label = src_step.replace("_", " ").title()
+                    context_parts.append(f"## {step_label} Output\n{src_task.report}")
 
         context_text = "\n\n".join(context_parts) if context_parts else "No prior step output yet."
 
-        # For personalization step, inject outreach agents list
+        # For strategy step, inject available outreach agents
         extra_context = ""
-        if step == "personalization":
+        if step == "strategy":
             outreach_agents = list(
                 agent.department.agents.filter(outreach=True, status="active").values_list("agent_type", "name")
             )
             if outreach_agents:
                 agents_list = ", ".join(f"{name} ({atype})" for atype, name in outreach_agents)
-                extra_context = f"\n\n## Available Outreach Channels\n" f"Assign each pitch to one of: {agents_list}"
+                extra_context = f"\n\n## Available Outreach Channels\nAvailable channels for assignment: {agents_list}"
 
         step_plan = (
             f"## Sprint Instruction\n{sprint.text}\n\n"
@@ -391,18 +608,20 @@ You don't write pitches or do research directly — you create tasks for your wo
         """Propose outreach tasks — one per outreach agent with assigned pitches."""
         from agents.models import AgentTask
 
-        personalizer_task = (
+        # Get finalize output (from strategist finalize-outreach command)
+        finalize_task = (
             AgentTask.objects.filter(
                 sprint=sprint,
-                agent__agent_type="pitch_personalizer",
+                agent__agent_type="strategist",
                 agent__department=agent.department,
+                command_name="finalize-outreach",
                 status=AgentTask.Status.DONE,
             )
             .order_by("-completed_at")
             .first()
         )
 
-        pitch_output = personalizer_task.report if personalizer_task else "No pitch payloads available."
+        pitch_output = finalize_task.report if finalize_task else "No pitch payloads available."
 
         tasks = []
         for outreach_agent in outreach_agents:
@@ -435,9 +654,9 @@ You don't write pitches or do research directly — you create tasks for your wo
         earliest_failing = self._find_earliest_failing_agent(report, score)
 
         if earliest_failing is None:
-            earliest_failing = "pitch_personalizer"
+            earliest_failing = "strategist"
 
-        fix_command = AGENT_FIX_COMMANDS.get(earliest_failing, "revise-pitches")
+        fix_command = AGENT_FIX_COMMANDS.get(earliest_failing, "revise-strategy")
         polish_msg = f" (polish {polish_count}/3)" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
 
         return {
@@ -544,6 +763,29 @@ You don't write pitches or do research directly — you create tasks for your wo
         if Output.objects.filter(sprint=sprint, department=agent.department).exists():
             return
 
+        # Write exec summary from finalize step
+        finalize_task = (
+            AgentTask.objects.filter(
+                sprint=sprint,
+                agent__department=agent.department,
+                agent__agent_type="strategist",
+                command_name="finalize-outreach",
+                status=AgentTask.Status.DONE,
+            )
+            .order_by("-completed_at")
+            .first()
+        )
+        if finalize_task and finalize_task.report:
+            Output.objects.create(
+                sprint=sprint,
+                department=agent.department,
+                title=f"Executive Summary — {sprint.text[:80]}",
+                label="exec-summary",
+                output_type=Output.OutputType.MARKDOWN,
+                content=finalize_task.report,
+            )
+
+        # Write outreach delivery reports
         outreach_tasks = AgentTask.objects.filter(
             sprint=sprint,
             agent__department=agent.department,

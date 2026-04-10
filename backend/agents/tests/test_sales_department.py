@@ -221,34 +221,37 @@ class TestSalesAuthenticityAnalyst:
 
 
 class TestLeaderConstants:
-    @pytest.mark.skip(reason="Pipeline constants change in Task 6")
+    def test_pipeline_steps(self):
+        assert PIPELINE_STEPS == ["research", "strategy", "personalization", "finalize", "qa_review", "dispatch"]
+
     def test_all_steps_have_agent_mapping(self):
         for step in PIPELINE_STEPS:
             assert step in STEP_TO_AGENT
 
-    @pytest.mark.skip(reason="Pipeline constants change in Task 6")
     def test_all_steps_have_command_mapping(self):
         for step in PIPELINE_STEPS:
             assert step in STEP_TO_COMMAND
 
-    @pytest.mark.skip(reason="Pipeline constants change in Task 6")
     def test_all_steps_have_context_sources(self):
         for step in PIPELINE_STEPS:
             assert step in STEP_CONTEXT_SOURCES
 
-    @pytest.mark.skip(reason="Pipeline constants change in Task 6")
     def test_all_dimensions_map_to_chain_agents(self):
         for dim, agent_type in DIMENSION_TO_AGENT.items():
             assert agent_type in CHAIN_ORDER, f"{dim} maps to {agent_type} not in CHAIN_ORDER"
             assert agent_type in AGENT_FIX_COMMANDS, f"{agent_type} not in AGENT_FIX_COMMANDS"
 
-    @pytest.mark.skip(reason="Pipeline constants change in Task 6")
-    def test_chain_order_matches_pipeline(self):
-        """Chain order should follow pipeline order."""
-        pipeline_agents = [STEP_TO_AGENT[s] for s in PIPELINE_STEPS if STEP_TO_AGENT[s] is not None]
-        # CHAIN_ORDER is a subset of pipeline agents (excludes sales_qa and dispatch)
-        for _i, agent in enumerate(CHAIN_ORDER):
-            assert agent in pipeline_agents
+    def test_chain_order_is_researcher_then_strategist(self):
+        assert CHAIN_ORDER == ["researcher", "strategist"]
+
+    def test_personalization_step_maps_to_personalizer(self):
+        assert STEP_TO_AGENT["personalization"] == "pitch_personalizer"
+
+    def test_finalize_step_maps_to_strategist(self):
+        assert STEP_TO_AGENT["finalize"] == "strategist"
+
+    def test_finalize_command(self):
+        assert STEP_TO_COMMAND["finalize"] == "finalize-outreach"
 
 
 # ── Leader Review Pairs ───────────────────────────────────────────────────────
@@ -257,14 +260,13 @@ class TestLeaderConstants:
 class TestSalesReviewPairs:
     def test_has_one_review_pair(self):
         bp = SalesLeaderBlueprint()
-        pairs = bp.get_review_pairs()
-        assert len(pairs) == 1
+        assert len(bp.get_review_pairs()) == 1
 
-    def test_creator_is_pitch_personalizer(self):
+    def test_creator_is_strategist(self):
         bp = SalesLeaderBlueprint()
         pair = bp.get_review_pairs()[0]
-        assert pair["creator"] == "pitch_personalizer"
-        assert pair["creator_fix_command"] == "revise-pitches"
+        assert pair["creator"] == "strategist"
+        assert pair["creator_fix_command"] == "revise-strategy"
 
     def test_reviewer_is_sales_qa(self):
         bp = SalesLeaderBlueprint()
@@ -286,16 +288,12 @@ class TestSalesReviewPairs:
 class TestLeaderStateMachine:
     def test_starts_at_research(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-        result = bp._propose_step_task(leader, sprint, "research")
+        result = bp.generate_task_proposal(leader)
         assert result is not None
         assert result["tasks"][0]["target_agent_type"] == "researcher"
-        assert result["tasks"][0]["command_name"] == "research-industry"
 
-    def test_advances_through_pipeline(self, leader, sprint, workforce):
-        """When research is done, leader advances to strategy."""
+    def test_advances_to_strategy(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-
-        # Mark research step as done
         AgentTask.objects.create(
             agent=workforce["researcher"],
             sprint=sprint,
@@ -303,49 +301,55 @@ class TestLeaderStateMachine:
             status=AgentTask.Status.DONE,
             report="Industry briefing here.",
         )
-
-        # Set pipeline to research step
         leader.internal_state = {"pipeline_steps": {str(sprint.id): "research"}}
         leader.save(update_fields=["internal_state"])
-
         result = bp.generate_task_proposal(leader)
         assert result is not None
         assert result["tasks"][0]["target_agent_type"] == "strategist"
 
-    def test_context_injection_strategy_gets_research(self, leader, sprint, workforce):
-        """Strategy step gets research output in its context."""
+    def test_strategy_context_includes_research(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-
         AgentTask.objects.create(
             agent=workforce["researcher"],
             sprint=sprint,
             command_name="research-industry",
             status=AgentTask.Status.DONE,
-            report="Fintech is booming. Key players: Stripe, Plaid.",
+            report="Fintech is booming.",
         )
-
         result = bp._propose_step_task(leader, sprint, "strategy")
-        step_plan = result["tasks"][0]["step_plan"]
-        assert "Fintech is booming" in step_plan
+        assert "Fintech is booming" in result["tasks"][0]["step_plan"]
 
-    def test_personalization_gets_outreach_agents(self, leader, sprint, workforce):
-        """Personalization step includes available outreach agents."""
+    def test_returns_none_without_sprints(self, leader, workforce):
         bp = SalesLeaderBlueprint()
+        assert bp.generate_task_proposal(leader) is None
 
-        result = bp._propose_step_task(leader, sprint, "personalization")
+    def test_waits_for_active_task(self, leader, sprint, workforce):
+        bp = SalesLeaderBlueprint()
+        AgentTask.objects.create(
+            agent=workforce["researcher"],
+            sprint=sprint,
+            command_name="research-industry",
+            status=AgentTask.Status.PROCESSING,
+        )
+        leader.internal_state = {"pipeline_steps": {str(sprint.id): "research"}}
+        leader.save(update_fields=["internal_state"])
+        assert bp.generate_task_proposal(leader) is None
+
+    def test_strategy_gets_outreach_channels(self, leader, sprint, workforce):
+        """Strategy step includes available outreach agents."""
+        bp = SalesLeaderBlueprint()
+        result = bp._propose_step_task(leader, sprint, "strategy")
         step_plan = result["tasks"][0]["step_plan"]
         assert "email_outreach" in step_plan
 
     def test_qa_review_also_dispatches_authenticity_analyst(self, leader, sprint, workforce, department):
         """QA review step dispatches both sales_qa and authenticity_analyst."""
-        # Add authenticity analyst agent
         Agent.objects.create(
             name="Authenticity Analyst",
             agent_type="authenticity_analyst",
             department=department,
             status="active",
         )
-
         bp = SalesLeaderBlueprint()
         result = bp._propose_step_task(leader, sprint, "qa_review")
         agent_types = [t["target_agent_type"] for t in result["tasks"]]
@@ -360,28 +364,90 @@ class TestLeaderStateMachine:
         assert "sales_qa" in agent_types
         assert "authenticity_analyst" not in agent_types
 
-    def test_waits_for_active_task(self, leader, sprint, workforce):
-        """Leader returns None if current step task is already in progress."""
+
+# ── Fan-Out Personalization ──────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestFanOutPersonalization:
+    def test_creates_clones_after_strategy(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-
         AgentTask.objects.create(
-            agent=workforce["researcher"],
+            agent=workforce["strategist"],
             sprint=sprint,
-            command_name="research-industry",
-            status=AgentTask.Status.PROCESSING,
+            command_name="draft-strategy",
+            status=AgentTask.Status.DONE,
+            report=(
+                "### Target Area 1: Fintech CTOs\nDetails here\n\n"
+                "### Target Area 2: SaaS Founders\nMore details\n\n"
+                "### Target Area 3: DevOps Leads\nEven more\n\n"
+                "### Priority Ranking\n1. Fintech\n"
+            ),
         )
-
-        leader.internal_state = {"pipeline_steps": {str(sprint.id): "research"}}
+        leader.internal_state = {"pipeline_steps": {str(sprint.id): "strategy"}}
         leader.save(update_fields=["internal_state"])
 
         result = bp.generate_task_proposal(leader)
-        assert result is None
+        assert result is not None
+        assert len(result["tasks"]) == 3
+        assert all(t["target_agent_type"] == "pitch_personalizer" for t in result["tasks"])
 
-    def test_returns_none_without_sprints(self, leader, workforce):
-        """No running sprints → None."""
+        assert ClonedAgent.objects.filter(sprint=sprint).count() == 3
+
+    def test_waits_for_all_clones(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
+        parent = workforce["pitch_personalizer"]
+        clone0 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
+        clone1 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=1)
+        AgentTask.objects.create(
+            agent=parent,
+            sprint=sprint,
+            command_name="personalize-pitches",
+            status=AgentTask.Status.DONE,
+            report="Done",
+            cloned_agent=clone0,
+        )
+        AgentTask.objects.create(
+            agent=parent,
+            sprint=sprint,
+            command_name="personalize-pitches",
+            status=AgentTask.Status.PROCESSING,
+            cloned_agent=clone1,
+        )
+        leader.internal_state = {"pipeline_steps": {str(sprint.id): "personalization"}}
+        leader.save(update_fields=["internal_state"])
+        assert bp.generate_task_proposal(leader) is None
+
+    def test_advances_to_finalize_when_all_done(self, leader, sprint, workforce):
+        bp = SalesLeaderBlueprint()
+        parent = workforce["pitch_personalizer"]
+        clone0 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
+        clone1 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=1)
+        AgentTask.objects.create(
+            agent=parent,
+            sprint=sprint,
+            command_name="personalize-pitches",
+            status=AgentTask.Status.DONE,
+            report="Clone 0 output",
+            cloned_agent=clone0,
+        )
+        AgentTask.objects.create(
+            agent=parent,
+            sprint=sprint,
+            command_name="personalize-pitches",
+            status=AgentTask.Status.DONE,
+            report="Clone 1 output",
+            cloned_agent=clone1,
+        )
+        leader.internal_state = {"pipeline_steps": {str(sprint.id): "personalization"}}
+        leader.save(update_fields=["internal_state"])
+
         result = bp.generate_task_proposal(leader)
-        assert result is None
+        assert result is not None
+        assert result["tasks"][0]["target_agent_type"] == "strategist"
+        assert result["tasks"][0]["command_name"] == "finalize-outreach"
+        assert "Clone 0 output" in result["tasks"][0]["step_plan"]
+        assert "Clone 1 output" in result["tasks"][0]["step_plan"]
 
 
 # ── QA Cascade Fix Routing ────────────────────────────────────────────────────
@@ -389,59 +455,49 @@ class TestLeaderStateMachine:
 
 @pytest.mark.django_db
 class TestQACascadeRouting:
-    def test_find_earliest_failing_agent_single_dimension(self, leader):
+    def test_find_earliest_researcher(self, leader):
         bp = SalesLeaderBlueprint()
-        report = "research_accuracy: 7.5/10\nstrategy_quality: 9.5/10\nstoryline_effectiveness: 9.5/10\nprofile_accuracy: 9.5/10\npitch_personalization: 9.5/10"
-        result = bp._find_earliest_failing_agent(report, 7.5)
-        assert result == "researcher"
+        report = "research_accuracy: 7.5/10\nstrategy_quality: 9.5/10"
+        assert bp._find_earliest_failing_agent(report, 7.5) == "researcher"
 
-    def test_find_earliest_failing_agent_multiple_dimensions(self, leader):
+    def test_find_earliest_strategist(self, leader):
         bp = SalesLeaderBlueprint()
-        report = "research_accuracy: 9.5/10\nstrategy_quality: 7.0/10\nstoryline_effectiveness: 9.5/10\nprofile_accuracy: 8.0/10\npitch_personalization: 9.5/10"
-        result = bp._find_earliest_failing_agent(report, 7.0)
-        # strategist comes before profile_selector in CHAIN_ORDER
-        assert result == "strategist"
+        report = "research_accuracy: 9.5/10\nstrategy_quality: 7.0/10\nprofile_accuracy: 8.0/10"
+        assert bp._find_earliest_failing_agent(report, 7.0) == "strategist"
 
-    def test_find_earliest_failing_agent_returns_none_when_all_pass(self, leader):
+    def test_all_pass_returns_none(self, leader):
         bp = SalesLeaderBlueprint()
         report = "research_accuracy: 9.5/10\nstrategy_quality: 9.5/10"
-        result = bp._find_earliest_failing_agent(report, 9.5)
-        assert result is None
+        assert bp._find_earliest_failing_agent(report, 9.5) is None
 
-    def test_propose_fix_task_routes_to_earliest(self, leader, sprint, workforce):
+    def test_fix_routes_to_researcher(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-
         review_task = AgentTask.objects.create(
             agent=workforce["sales_qa"],
             sprint=sprint,
             command_name="review-pipeline",
             status=AgentTask.Status.DONE,
-            report="research_accuracy: 7.0/10\nstrategy_quality: 9.5/10\nstoryline_effectiveness: 9.5/10\nprofile_accuracy: 9.5/10\npitch_personalization: 9.5/10",
+            report="research_accuracy: 7.0/10\nstrategy_quality: 9.5/10",
             review_verdict="CHANGES_REQUESTED",
             review_score=7.0,
         )
-
         result = bp._propose_fix_task(leader, review_task, 7.0, 1, 0)
-        assert result is not None
         assert result["tasks"][0]["target_agent_type"] == "researcher"
-        assert result["tasks"][0]["command_name"] == "research-industry"
 
-    def test_propose_fix_task_fallback_to_personalizer(self, leader, sprint, workforce):
-        """When no dimension scores can be parsed, falls back to pitch_personalizer."""
+    def test_fallback_to_strategist(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-
         review_task = AgentTask.objects.create(
             agent=workforce["sales_qa"],
             sprint=sprint,
             command_name="review-pipeline",
             status=AgentTask.Status.DONE,
-            report="Needs improvement overall.",
+            report="Needs improvement.",
             review_verdict="CHANGES_REQUESTED",
             review_score=8.0,
         )
-
         result = bp._propose_fix_task(leader, review_task, 8.0, 1, 0)
-        assert result["tasks"][0]["target_agent_type"] == "pitch_personalizer"
+        assert result["tasks"][0]["target_agent_type"] == "strategist"
+        assert result["tasks"][0]["command_name"] == "revise-strategy"
 
 
 # ── Document Persistence ──────────────────────────────────────────────────────
@@ -488,7 +544,7 @@ class TestDocumentPersistence:
 
         bp = SalesLeaderBlueprint()
         count_before = Document.objects.count()
-        bp._persist_step_document(leader, sprint, "pitch_design")
+        bp._persist_step_document(leader, sprint, "personalization")
         assert Document.objects.count() == count_before
 
     def test_updates_existing_document(self, leader, sprint, workforce):
