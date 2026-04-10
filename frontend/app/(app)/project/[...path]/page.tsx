@@ -101,7 +101,7 @@ export default function ProjectDetailPage() {
       .getProjectDetail(projectSlug)
       .then((proj) => {
         setProject(proj);
-        api.listSprints(proj.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+        api.listSprints(proj.id, { status: "running,paused,done" }).then(setSprints).catch(() => {});
         setSelectedDept((prev) => {
           if (!prev) return prev;
           return proj.departments.find((d) => d.id === prev.id) ?? prev;
@@ -170,7 +170,7 @@ export default function ProjectDetailPage() {
     if (data.type === "sprint.created" || data.type === "sprint.updated") {
       const pid = projectIdRef.current;
       if (pid) {
-        api.listSprints(pid, { status: "running,paused" }).then(setSprints).catch(() => {});
+        api.listSprints(pid, { status: "running,paused,done" }).then(setSprints).catch(() => {});
       }
     }
     if (data.type === "agent.status") {
@@ -522,7 +522,7 @@ export default function ProjectDetailPage() {
         <SprintSidebar
           sprints={sprints}
           onUpdate={() => {
-            api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+            api.listSprints(project!.id, { status: "running,paused,done" }).then(setSprints).catch(() => {});
           }}
           projectId={project.id}
           onNavigateToDept={(deptType) => {
@@ -617,7 +617,7 @@ export default function ProjectDetailPage() {
               wsEvent={taskWsEvent}
               departments={project.departments}
               onSprintCreated={() => {
-                api.listSprints(project!.id, { status: "running,paused" }).then(setSprints).catch(() => {});
+                api.listSprints(project!.id, { status: "running,paused,done" }).then(setSprints).catch(() => {});
               }}
             />
           </>

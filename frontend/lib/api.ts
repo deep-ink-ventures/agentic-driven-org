@@ -277,6 +277,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  resetSprint: (projectId: string, sprintId: string) =>
+    request<import("./types").Sprint>(`/api/projects/${projectId}/sprints/${sprintId}/reset/`, {
+      method: "POST",
+    }),
+
   updateSprint: (projectId: string, sprintId: string, data: { status?: string; completion_summary?: string }) =>
     request<import("./types").Sprint>(`/api/projects/${projectId}/sprints/${sprintId}/`, {
       method: "PATCH",

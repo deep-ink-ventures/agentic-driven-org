@@ -113,6 +113,59 @@ class SprintDetailView(generics.RetrieveUpdateAPIView):
                     create_next_leader_task.delay(str(leader.id))
 
 
+class SprintResetView(generics.GenericAPIView):
+    """POST /api/projects/{project_id}/sprints/{sprint_id}/reset/ — reset and restart a done sprint."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_url_kwarg = "sprint_id"
+
+    def get_queryset(self):
+        return Sprint.objects.filter(project_id=self.kwargs["project_id"])
+
+    def post(self, request, *args, **kwargs):
+        from rest_framework.response import Response
+
+        sprint = self.get_object()
+        if sprint.status != Sprint.Status.DONE:
+            return Response({"error": "Only done sprints can be reset."}, status=400)
+
+        from agents.models import AgentTask, ClonedAgent
+        from agents.tasks import create_next_leader_task
+        from projects.models import Document, Output
+
+        AgentTask.objects.filter(sprint=sprint).delete()
+        ClonedAgent.objects.filter(sprint=sprint).delete()
+        Document.objects.filter(sprint=sprint).delete()
+        Output.objects.filter(sprint=sprint).delete()
+
+        sprint.department_state = {}
+        sprint.status = Sprint.Status.RUNNING
+        sprint.completion_summary = ""
+        sprint.completed_at = None
+        sprint.save(
+            update_fields=[
+                "department_state",
+                "status",
+                "completion_summary",
+                "completed_at",
+                "updated_at",
+            ]
+        )
+
+        _broadcast_sprint(sprint, "sprint.updated")
+
+        for dept in sprint.departments.all():
+            leader = dept.agents.filter(is_leader=True, status="active").first()
+            if leader:
+                create_next_leader_task.delay(str(leader.id))
+
+        logger.info("SPRINT_RESET sprint=%s via API", str(sprint.id)[:8])
+
+        from projects.serializers import SprintSerializer
+
+        return Response(SprintSerializer(sprint).data)
+
+
 def _broadcast_sprint(sprint, event_type="sprint.updated"):
     import json
 
