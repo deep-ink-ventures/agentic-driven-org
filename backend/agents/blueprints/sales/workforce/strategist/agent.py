@@ -123,7 +123,8 @@ After personalizer clones produce outreach for each target area, consolidate eve
     revise_strategy = revise_strategy
 
     def get_task_suffix(self, agent, task):
-        return """# STRATEGY & NARRATIVE METHODOLOGY
+        max_areas = agent.get_config_value("max_target_areas", 5)
+        return f"""# STRATEGY & NARRATIVE METHODOLOGY
 
 ## Target Area Quality Criteria
 - Each target area must cite at least 2 specific signals from the research briefing
@@ -158,7 +159,7 @@ After personalizer clones produce outreach for each target area, consolidate eve
 - No duplicate identifiers in the CSV
 
 ## Anti-Patterns to Avoid
-- Do not propose more than 5 target areas — focus beats breadth
+- Produce EXACTLY {max_areas} target areas — no more, no fewer. Focus beats breadth.
 - Do not propose generic segments like "small businesses" without specificity
 - Do not claim "no competition" — there is always competition
 - Do not confuse addressable market with total market

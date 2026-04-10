@@ -116,6 +116,12 @@ class SalesLeaderBlueprint(LeaderBlueprint):
         },
     ]
     config_schema = {
+        "max_target_areas": {
+            "type": "int",
+            "description": "Maximum number of target areas the strategist produces per sprint. Each area spawns one clone agent.",
+            "label": "Max Target Areas",
+            "default": 5,
+        },
         "include_inactive_outreach": {
             "type": "bool",
             "description": "Include inactive outreach agents as channels in the CSV. Their rows won't be auto-dispatched but can be used for manual outreach.",
@@ -365,7 +371,8 @@ You don't write pitches or do research directly — you create tasks for your wo
             logger.warning("SALES_NO_STRATEGY dept=%s — cannot fan out without strategy", department.name)
             return None
 
-        target_areas = self._parse_target_areas(strategy_task.report)
+        max_areas = agent.get_config_value("max_target_areas", 5)
+        target_areas = self._parse_target_areas(strategy_task.report, max_areas=max_areas)
         if not target_areas:
             logger.warning("SALES_NO_TARGET_AREAS dept=%s — no target areas found in strategy", department.name)
             return None
@@ -425,14 +432,25 @@ You don't write pitches or do research directly — you create tasks for your wo
             "tasks": tasks,
         }
 
-    def _parse_target_areas(self, strategy_text: str) -> list[tuple[str, str]]:
-        """Extract target areas from strategy output. Returns list of (name, content) tuples."""
+    def _parse_target_areas(self, strategy_text: str, max_areas: int = 5) -> list[tuple[str, str]]:
+        """Extract target areas from strategy output. Returns list of (name, content) tuples.
+
+        Hard-caps to max_areas. If the strategy produced more, they are silently dropped.
+        """
         matches = list(TARGET_AREA_PATTERN.finditer(strategy_text))
         areas = []
         for match in matches:
             full = match.group(0).strip()
             name = match.group(1).strip() if match.group(1) else f"Area {len(areas) + 1}"
             areas.append((name, full))
+        if len(areas) > max_areas:
+            logger.warning(
+                "TARGET_AREA_CAP parsed=%d cap=%d — truncating to top %d",
+                len(areas),
+                max_areas,
+                max_areas,
+            )
+            areas = areas[:max_areas]
         return areas
 
     def _advance_to_next_step(self, agent: Agent, sprint, current_step: str) -> dict | None:
