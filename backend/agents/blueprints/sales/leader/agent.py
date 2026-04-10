@@ -240,33 +240,28 @@ You don't write pitches or do research directly — you create tasks for your wo
             return None
 
         sprint = running_sprints[0]
-        sprint_id = str(sprint.id)
+        dept_id = str(department.id)
 
-        # 3. Determine current pipeline step
-        internal_state = agent.internal_state or {}
-        pipeline_steps = internal_state.get("pipeline_steps", {})
-        current_step = pipeline_steps.get(sprint_id, None)
+        # 3. Determine current pipeline step from sprint state
+        dept_state = sprint.get_department_state(dept_id)
+        current_step = dept_state.get("pipeline_step")
 
         if current_step is None:
             current_step = "research"
-            pipeline_steps[sprint_id] = current_step
-            internal_state["pipeline_steps"] = pipeline_steps
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
+            dept_state["pipeline_step"] = current_step
+            sprint.set_department_state(dept_id, dept_state)
 
         # 4. Route to appropriate handler
         if current_step == "dispatch":
-            return self._handle_dispatch_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+            return self._handle_dispatch_step(agent, sprint)
 
         if current_step == "personalization":
-            return self._handle_personalization_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+            return self._handle_personalization_step(agent, sprint)
 
         # Linear steps: research, strategy, finalize, qa_review
-        return self._handle_linear_step(agent, sprint, sprint_id, internal_state, pipeline_steps, current_step)
+        return self._handle_linear_step(agent, sprint, current_step)
 
-    def _handle_linear_step(
-        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict, current_step: str
-    ) -> dict | None:
+    def _handle_linear_step(self, agent: Agent, sprint, current_step: str) -> dict | None:
         """Handle a linear (non-fan-out) pipeline step."""
         from agents.models import AgentTask
 
@@ -308,11 +303,9 @@ You don't write pitches or do research directly — you create tasks for your wo
 
         # Step is done — persist document if applicable, then advance
         self._persist_step_document(agent, sprint, current_step)
-        return self._advance_to_next_step(agent, sprint, sprint_id, internal_state, pipeline_steps, current_step)
+        return self._advance_to_next_step(agent, sprint, current_step)
 
-    def _handle_personalization_step(
-        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict
-    ) -> dict | None:
+    def _handle_personalization_step(self, agent: Agent, sprint) -> dict | None:
         """Handle the personalization fan-out/join step."""
         from agents.models import AgentTask, ClonedAgent
 
@@ -327,7 +320,7 @@ You don't write pitches or do research directly — you create tasks for your wo
 
         if clone_count == 0:
             # Need to create clones — parse target areas from strategy output
-            return self._create_clones_and_dispatch(agent, sprint, sprint_id, internal_state, pipeline_steps)
+            return self._create_clones_and_dispatch(agent, sprint)
 
         # Clones exist — check if all clone tasks are done
         clone_tasks = AgentTask.objects.filter(
@@ -338,18 +331,16 @@ You don't write pitches or do research directly — you create tasks for your wo
 
         if not clone_tasks.exists():
             # Clones created but no tasks yet — shouldn't happen normally, but dispatch
-            return self._create_clones_and_dispatch(agent, sprint, sprint_id, internal_state, pipeline_steps)
+            return self._create_clones_and_dispatch(agent, sprint)
 
         pending = clone_tasks.exclude(status=AgentTask.Status.DONE)
         if pending.exists():
             return None  # Wait for all clones to finish
 
         # All clones done — advance to finalize
-        return self._advance_to_next_step(agent, sprint, sprint_id, internal_state, pipeline_steps, "personalization")
+        return self._advance_to_next_step(agent, sprint, "personalization")
 
-    def _create_clones_and_dispatch(
-        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict
-    ) -> dict | None:
+    def _create_clones_and_dispatch(self, agent: Agent, sprint) -> dict | None:
         """Parse target areas from strategy output, create clones, and dispatch tasks."""
         from agents.models import AgentTask
 
@@ -442,31 +433,27 @@ You don't write pitches or do research directly — you create tasks for your wo
             areas.append((name, full))
         return areas
 
-    def _advance_to_next_step(
-        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict, current_step: str
-    ) -> dict | None:
+    def _advance_to_next_step(self, agent: Agent, sprint, current_step: str) -> dict | None:
         """Advance from current_step to the next pipeline step."""
         step_idx = PIPELINE_STEPS.index(current_step)
         if step_idx + 1 >= len(PIPELINE_STEPS):
             return None
 
         next_step = PIPELINE_STEPS[step_idx + 1]
-        pipeline_steps[sprint_id] = next_step
-        internal_state["pipeline_steps"] = pipeline_steps
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id)
+        dept_state["pipeline_step"] = next_step
+        sprint.set_department_state(dept_id, dept_state)
 
         if next_step == "dispatch":
-            return self._handle_dispatch_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+            return self._handle_dispatch_step(agent, sprint)
 
         if next_step == "personalization":
-            return self._handle_personalization_step(agent, sprint, sprint_id, internal_state, pipeline_steps)
+            return self._handle_personalization_step(agent, sprint)
 
         return self._propose_step_task(agent, sprint, next_step)
 
-    def _handle_dispatch_step(
-        self, agent: Agent, sprint, sprint_id: str, internal_state: dict, pipeline_steps: dict
-    ) -> dict | None:
+    def _handle_dispatch_step(self, agent: Agent, sprint) -> dict | None:
         """Handle the dispatch step — send to outreach agents or finalize sprint."""
         from agents.models import Agent as AgentModel
         from agents.models import AgentTask
@@ -507,11 +494,6 @@ You don't write pitches or do research directly — you create tasks for your wo
 
             _broadcast_sprint(sprint, "sprint.updated")
             logger.info("SALES_SPRINT_DONE dept=%s (manual dispatch) sprint=%s", department.name, sprint.text[:60])
-
-            pipeline_steps.pop(sprint_id, None)
-            internal_state["pipeline_steps"] = pipeline_steps
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
             return None
 
         outreach_tasks = AgentTask.objects.filter(
@@ -534,12 +516,6 @@ You don't write pitches or do research directly — you create tasks for your wo
 
             _broadcast_sprint(sprint, "sprint.updated")
             logger.info("SALES_SPRINT_DONE dept=%s sprint=%s", department.name, sprint.text[:60])
-
-            # Clean up pipeline state
-            pipeline_steps.pop(sprint_id, None)
-            internal_state["pipeline_steps"] = pipeline_steps
-            agent.internal_state = internal_state
-            agent.save(update_fields=["internal_state"])
             return None
 
         if not outreach_tasks.exists():
