@@ -1669,6 +1669,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
     def _propose_review_task(self, agent: Agent, stage: str, config: dict) -> dict:
         """Dispatch the creative_reviewer to consolidate analyst feedback."""
+        sprint = self._get_current_sprint(agent)
         locale = config.get("locale", "en")
 
         from agents.models import AgentTask
@@ -1689,6 +1690,21 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             if report:
                 feedback_text += f"\n\n## {agent_type}\n{report}"
 
+        # Inject story bible for canon verification
+        bible_context = ""
+        try:
+            from projects.models import Output
+
+            bible_output = Output.objects.filter(
+                sprint=sprint,
+                department=agent.department,
+                label="story_bible",
+            ).first()
+            if bible_output and bible_output.content:
+                bible_context = f"\n\n## Story Bible (CANON — do not contradict)\n{bible_output.content}"
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not load story bible for review context: %s", exc)
+
         # Resolve the real current_stage for _on_dispatch
         internal_state = agent.internal_state or {}
         dispatch_stage = internal_state.get("current_stage", stage)
@@ -1708,7 +1724,9 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                         f"## Analyst Feedback Reports\n{feedback_text}\n\n"
                         f"Score each dimension 1.0-10.0. Overall score = minimum of all dimensions.\n"
                         f"After your review, call the submit_verdict tool with your verdict and score.\n\n"
-                        f"For CHANGES_REQUESTED: group fix instructions by creative agent."
+                        f"For CHANGES_REQUESTED: group fix instructions by creative agent.\n"
+                        f"For WEAK_IDEA: explain what is fundamentally weak and why, but do not prescribe replacement."
+                        f"{bible_context}"
                     ),
                     "depends_on_previous": False,
                 }

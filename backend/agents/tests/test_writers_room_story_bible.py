@@ -504,3 +504,51 @@ class TestWeakIdeaVerdict:
         stage_info = leader.internal_state["stage_status"]["pitch"]
         # CHANGES_REQUESTED increments as before
         assert stage_info["iterations"] == 3
+
+
+@pytest.mark.django_db
+class TestBibleInReviewContext:
+    def test_review_task_includes_bible(self):
+        from agents.models import Agent
+        from projects.models import Department, Output, Project, Sprint
+
+        project = Project.objects.create(name="Test", goal="Story")
+        dept = Department.objects.create(
+            project=project,
+            name="WR",
+            department_type="writers_room",
+        )
+        leader = Agent.objects.create(
+            name="Showrunner",
+            agent_type="leader",
+            department=dept,
+            is_leader=True,
+            status="active",
+            internal_state={
+                "format_type": "standalone",
+                "current_stage": "expose",
+                "entry_detected": True,
+            },
+        )
+        sprint = Sprint.objects.create(
+            project=project,
+            text="Write",
+            status=Sprint.Status.RUNNING,
+        )
+        sprint.departments.add(dept)
+        Output.objects.create(
+            sprint=sprint,
+            department=dept,
+            label="story_bible",
+            title="Story Bible",
+            output_type="markdown",
+            content="# Story Bible\n\n## Canon\n- Company: Hartmann Capital",
+        )
+
+        bp = WritersRoomLeaderBlueprint()
+        config = {"locale": "de"}
+        result = bp._propose_review_task(leader, "expose", config)
+
+        step_plan = result["tasks"][0]["step_plan"]
+        assert "Story Bible" in step_plan
+        assert "Hartmann Capital" in step_plan
