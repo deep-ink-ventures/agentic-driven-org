@@ -435,9 +435,10 @@ Rules:
 def review_agent_instructions_after_goal_change(project_id: str):
     """Review agent instructions across all departments after the project goal changes.
 
-    Similar to sprint-triggered review, but the change context is the goal itself
-    rather than sprint outcomes.
+    Sets all active agents to provisioning while reviewing, then restores them
+    to active once their department's review is complete.
     """
+    from agents.models import Agent
     from projects.models import Department, Project
 
     try:
@@ -446,14 +447,57 @@ def review_agent_instructions_after_goal_change(project_id: str):
         logger.warning("Project %s not found — skipping instructions review", project_id)
         return
 
-    all_departments = list(Department.objects.filter(project=project).values_list("id", "department_type"))
+    all_departments = list(
+        Department.objects.filter(project=project).prefetch_related("agents").values_list("id", "department_type")
+    )
     if not all_departments:
         return
 
-    change_context = f"The project goal has been updated.\n\n" f"## Current Project Goal\n{project.goal or '(empty)'}"
+    # Set all active agents to provisioning and broadcast
+    active_agents = list(
+        Agent.objects.filter(
+            department__project=project,
+            status=Agent.Status.ACTIVE,
+        ).values_list("id", "department_id")
+    )
+    if active_agents:
+        Agent.objects.filter(id__in=[a[0] for a in active_agents]).update(status=Agent.Status.PROVISIONING)
+        for agent_id, dept_id in active_agents:
+            _broadcast_agent_status(project_id, dept_id, agent_id, "provisioning")
+
+    change_context = f"The project goal has been updated.\n\n## Current Project Goal\n{project.goal or '(empty)'}"
 
     for dept_id, _dept_type in all_departments:
-        _review_department_agents_for_change(dept_id, project, change_context)
+        try:
+            _review_department_agents_for_change(dept_id, project, change_context)
+        finally:
+            # Restore this department's agents to active regardless of success/failure
+            dept_agents = [a for a in active_agents if str(a[1]) == str(dept_id)]
+            if dept_agents:
+                Agent.objects.filter(id__in=[a[0] for a in dept_agents]).update(status=Agent.Status.ACTIVE)
+                for agent_id, d_id in dept_agents:
+                    _broadcast_agent_status(project_id, d_id, agent_id, "active")
+
+
+def _broadcast_agent_status(project_id, department_id, agent_id, status):
+    """Send agent status update via WebSocket."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"project_{project_id}",
+            {
+                "type": "agent.status",
+                "agent_id": str(agent_id),
+                "department_id": str(department_id),
+                "status": status,
+                "error_message": "",
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast agent status")
 
 
 def _review_department_agents_for_change(department_id, project, change_context: str):
@@ -463,10 +507,11 @@ def _review_department_agents_for_change(department_id, project, change_context:
 
     department = Department.objects.get(id=department_id)
 
+    # Query agents that are active or provisioning (we set them to provisioning at the start)
     agents = list(
         Agent.objects.filter(
             department=department,
-            status=Agent.Status.ACTIVE,
+            status__in=[Agent.Status.ACTIVE, Agent.Status.PROVISIONING],
         ).values_list("id", "name", "agent_type", "instructions")
     )
     if not agents:
@@ -537,7 +582,7 @@ Rules:
         return
 
     agent_map = {at: (aid, name) for aid, name, at, _ in agents}
-    leader = Agent.objects.filter(department=department, is_leader=True, status="active").first()
+    leader = Agent.objects.filter(department=department, is_leader=True, status__in=["active", "provisioning"]).first()
 
     updated_count = 0
     for agent_data in result.get("agents", []):
