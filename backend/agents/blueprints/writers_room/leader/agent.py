@@ -175,36 +175,6 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     plan_room = plan_room
     check_progress = check_progress
 
-    # ── Review pairs (universal pattern) ───────────────────────────────
-
-    def get_review_pairs(self):
-        return [
-            {
-                "creator": "lead_writer",
-                "creator_fix_command": "write",
-                "reviewer": "creative_reviewer",
-                "reviewer_command": "review-creative",
-                "dimensions": [
-                    "concept_fidelity",
-                    "originality",
-                    "market_fit",
-                    "structure",
-                    "character",
-                    "dialogue",
-                    "craft",
-                    "feasibility",
-                ],
-            }
-        ]
-
-    def _propose_review_chain(self, agent, creator_task, workforce_types):
-        """Override: writers room does NOT do direct creator->reviewer chains.
-
-        Instead, feedback agents analyze first, then creative_reviewer consolidates.
-        The state machine handles this via feedback -> _propose_review_task.
-        """
-        return None
-
     # ── Task execution (uses base class delegation with stage context) ──
 
     def _get_delegation_context(self, agent):
@@ -701,6 +671,20 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             return _tag_sprint(self._propose_lead_writer_task(agent, current_stage, config, sprint=sprint))
 
         if status == "lead_writing":
+            # Verify lead_writer actually completed before proceeding
+            lead_writer_done = AgentTask.objects.filter(
+                agent__department=agent.department,
+                agent__agent_type="lead_writer",
+                status=AgentTask.Status.DONE,
+            ).exists()
+            if not lead_writer_done:
+                logger.warning(
+                    "Writers Room: stage '%s' status is 'lead_writing' but no completed "
+                    "lead_writer task found — waiting",
+                    current_stage,
+                )
+                return None
+
             # Lead writer done → create docs, dispatch deliverable gate
             logger.info(
                 "Writers Room: stage '%s' lead writing complete — dispatching deliverable gate",
@@ -1577,6 +1561,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             tasks.append(
                 {
                     "target_agent_type": agent_type,
+                    "command_name": "analyze",
                     "exec_summary": f"Analyze {effective_stage} content ({agent_type}, depth={depth})",
                     "step_plan": (
                         f"Stage: {effective_stage}\n"

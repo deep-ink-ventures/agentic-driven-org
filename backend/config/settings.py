@@ -151,6 +151,13 @@ CELERY_TASK_SOFT_TIME_LIMIT = 900  # 15 min soft limit — raises SoftTimeLimitE
 CELERY_TASK_TIME_LIMIT = 960  # 16 min hard kill — safety net if soft limit is caught/ignored
 CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
+
+# ── Agent concurrency and spawning limits ────────────────────────────────
+AGENT_MAX_CONCURRENT_PER_DEPT = 5  # max queued+processing tasks per department
+AGENT_MAX_CLONES_PER_SPRINT = 10  # hard wall in create_clones — raises ValueError
+AGENT_MAX_TASKS_PER_PROPOSAL = 20  # max tasks from a single leader proposal
+AGENT_MAX_TASKS_PER_SPRINT = 50  # absolute ceiling per sprint
+
 CELERY_BEAT_SCHEDULE = {
     "recover-stuck-proposals": {
         "task": "projects.tasks.recover_stuck_proposals",
