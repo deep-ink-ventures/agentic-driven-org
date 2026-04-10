@@ -110,6 +110,19 @@ The iteration wraps the entire department output, not just the Synthesizer:
 2. **Invalid problem:** FPT determines no falsifiable DoD is possible. Sprint marked done with rejection output.
 3. **Exhausted:** 10 rounds completed without acceptance. Sprint marked done with best-attempt output.
 
+## Legitimacy Gate
+
+The Reviewer must reject any solution that is not genuinely innovative. Specifically, the following are illegitimate approaches and must score 0 on `dod_validation`:
+
+- **Brute force / random search** — randomly trying combinations until one works is not a solution, it's a lottery
+- **Hardcoded results** — embedding the expected answer in the code and "discovering" it is fraud
+- **Trivial lookup** — if the answer is already publicly known and the PoC just retrieves it, no insight was generated
+- **Overfitting to the DoD** — engineering the PoC to pass the specific DoD checks without the underlying approach actually working in general
+
+A legitimate solution must demonstrate a **causal chain of insight**: the cross-domain field provided a structural analogy or principle that, when applied to the problem, produces the result for an identifiable reason. The Reviewer must be able to articulate *why* the approach works, not just *that* it passes.
+
+This gate applies before any scoring. If the Reviewer determines the approach is illegitimate, the verdict is `CHANGES_REQUESTED` with score 0 and feedback explaining why the approach doesn't qualify.
+
 ## Review Pair Declaration
 
 ```python
@@ -120,6 +133,7 @@ def get_review_pairs(self):
         "reviewer": "reviewer",
         "reviewer_command": "review_solution",
         "dimensions": [
+            "legitimacy",          # Is this a genuine insight, not brute force/hardcoded/trivial? (0 = instant reject)
             "dod_validation",      # Does the PoC actually meet the definition of done?
             "mathematical_rigor",  # Is the approach mathematically sound?
             "reproducibility",     # Can the result be reproduced independently?
@@ -248,8 +262,10 @@ Key behaviors:
 Core persona: Independent evaluator. Scores Synthesizer output against the DoD without anchoring on the Synthesizer's self-score.
 
 Key behaviors:
-- Score each dimension independently: dod_validation, mathematical_rigor, reproducibility, insight_novelty
-- Overall score = minimum of all dimensions
+- First check legitimacy: is this brute force, hardcoded, trivial lookup, or overfitted? If yes, score 0 and reject immediately
+- Require a causal chain of insight: the reviewer must be able to articulate *why* the approach works, not just *that* it passes
+- Score each dimension independently: legitimacy, dod_validation, mathematical_rigor, reproducibility, insight_novelty
+- Overall score = minimum of all dimensions (legitimacy = 0 means overall = 0)
 - Provide actionable feedback for what would improve the score
 - Call submit_verdict tool with verdict and score
 
