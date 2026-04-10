@@ -859,3 +859,33 @@ class TestClonedAgent:
             status=AgentTask.Status.QUEUED,
         )
         assert task.cloned_agent is None
+
+
+# ── Leader Clone Helpers ─────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeaderCloneHelpers:
+    def test_create_clones(self, leader, workforce, sprint):
+        bp = SalesLeaderBlueprint()
+        parent = workforce["pitch_personalizer"]
+        clones = bp.create_clones(parent, 3, sprint)
+        assert len(clones) == 3
+        assert all(c.parent == parent for c in clones)
+        assert [c.clone_index for c in clones] == [0, 1, 2]
+        assert all(c.sprint == sprint for c in clones)
+
+    def test_destroy_sprint_clones(self, leader, workforce, sprint):
+        bp = SalesLeaderBlueprint()
+        parent = workforce["pitch_personalizer"]
+        bp.create_clones(parent, 3, sprint)
+        assert ClonedAgent.objects.filter(sprint=sprint).count() == 3
+
+        bp.destroy_sprint_clones(sprint)
+        assert ClonedAgent.objects.filter(sprint=sprint).count() == 0
+
+    def test_create_clones_with_initial_state(self, leader, workforce, sprint):
+        bp = SalesLeaderBlueprint()
+        parent = workforce["pitch_personalizer"]
+        clones = bp.create_clones(parent, 2, sprint, initial_state={"target_count": 50})
+        assert all(c.internal_state == {"target_count": 50} for c in clones)
