@@ -317,25 +317,18 @@ def review_agent_instructions_after_goal_change(project_id: str):
     except Project.DoesNotExist as e:
         raise ValueError(f"Project {project_id} not found") from e
 
-    agents = list(
+    agent_ids = list(
         Agent.objects.filter(
             department__project=project,
             status=Agent.Status.ACTIVE,
-        )
-        .select_related("department")
-        .values_list("id", "department_id")
+        ).values_list("id", flat=True)
     )
-    if not agents:
+    if not agent_ids:
         return
 
-    # Set all to provisioning + broadcast
-    Agent.objects.filter(id__in=[a[0] for a in agents]).update(status=Agent.Status.PROVISIONING)
-    for agent_id, dept_id in agents:
-        _broadcast_agent_status(project_id, dept_id, agent_id, "provisioning")
-
-    # Fan out: one Celery task per agent
-    for agent_id, _dept_id in agents:
-        review_single_agent_instructions.delay(str(agent_id), project_id)
+    # Fan out: each task manages its own provisioning→active lifecycle
+    for aid in agent_ids:
+        review_single_agent_instructions.delay(str(aid), project_id)
 
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=10)
@@ -355,6 +348,11 @@ def review_single_agent_instructions(self, agent_id: str, project_id: str):
 
     project = agent.department.project
     department = agent.department
+
+    # Set to provisioning at the start of THIS task
+    agent.status = Agent.Status.PROVISIONING
+    agent.save(update_fields=["status", "updated_at"])
+    _broadcast_agent_status(project_id, department.id, agent_id, "provisioning")
 
     try:
         bp = agent.get_blueprint()
