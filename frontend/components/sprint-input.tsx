@@ -4,7 +4,9 @@
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { DepartmentDetail } from "@/lib/types";
-import { Loader2, Paperclip, X } from "lucide-react";
+import type { Sprint } from "@/lib/types";
+import { SprintPickerDialog } from "@/components/sprint-picker-dialog";
+import { Loader2, Paperclip, X, History } from "lucide-react";
 
 interface SprintInputProps {
   projectId: string;
@@ -25,6 +27,8 @@ export function SprintInput({
   );
   const [files, setFiles] = useState<File[]>([]);
   const [showDropZone, setShowDropZone] = useState(false);
+  const [selectedSprints, setSelectedSprints] = useState<Sprint[]>([]);
+  const [showSprintPicker, setShowSprintPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +60,10 @@ export function SprintInput({
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function removeSprint(sprintId: string) {
+    setSelectedSprints((prev) => prev.filter((s) => s.id !== sprintId));
+  }
+
   async function handleSubmit() {
     if (!text.trim() || selectedDeptIds.size === 0) return;
     setSubmitting(true);
@@ -72,11 +80,13 @@ export function SprintInput({
         text: text.trim(),
         department_ids: Array.from(selectedDeptIds),
         source_ids: sourceIds,
+        progress_from_sprint_ids: selectedSprints.map((s) => s.id),
       });
 
       setText("");
       setFiles([]);
       setShowDropZone(false);
+      setSelectedSprints([]);
       onCreated?.();
     } finally {
       setSubmitting(false);
@@ -165,6 +175,24 @@ export function SprintInput({
           </div>
         )}
 
+        {/* Sprint chips */}
+        {selectedSprints.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+            {selectedSprints.map((s) => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-violet/10 border border-accent-violet/20 text-[10px] text-accent-violet"
+              >
+                <History className="h-2.5 w-2.5" />
+                {s.text.length > 40 ? s.text.slice(0, 40) + "..." : s.text}
+                <button onClick={() => removeSprint(s.id)} className="hover:text-flag-critical">
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Department selector + submit */}
         <div className="flex items-center justify-between border-t border-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -196,6 +224,13 @@ export function SprintInput({
             })}
           </div>
           <button
+            onClick={() => setShowSprintPicker(true)}
+            className="shrink-0 p-1.5 text-text-secondary hover:text-accent-violet transition-colors"
+            title="Progress from sprint"
+          >
+            <History className="h-3.5 w-3.5" />
+          </button>
+          <button
             onClick={handleSubmit}
             disabled={submitting || !text.trim() || selectedDeptIds.size === 0}
             className="shrink-0 px-4 py-1.5 rounded-lg text-xs font-semibold bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50 transition-colors"
@@ -204,6 +239,14 @@ export function SprintInput({
           </button>
         </div>
       </div>
+      <SprintPickerDialog
+        open={showSprintPicker}
+        onClose={() => setShowSprintPicker(false)}
+        onConfirm={setSelectedSprints}
+        projectId={projectId}
+        departmentId={defaultDepartmentId}
+        alreadySelectedIds={new Set(selectedSprints.map((s) => s.id))}
+      />
     </div>
   );
 }

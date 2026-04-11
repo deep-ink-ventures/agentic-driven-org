@@ -271,7 +271,7 @@ export const api = {
     );
   },
 
-  createSprint: (projectId: string, data: { text: string; department_ids: string[]; source_ids?: string[] }) =>
+  createSprint: (projectId: string, data: { text: string; department_ids: string[]; source_ids?: string[]; progress_from_sprint_ids?: string[] }) =>
     request<import("./types").Sprint>(`/api/projects/${projectId}/sprints/`, {
       method: "POST",
       body: JSON.stringify(data),
