@@ -57,6 +57,11 @@ urlpatterns = [
         name="sprint-reset",
     ),
     path(
+        "projects/<uuid:project_id>/sprints/<uuid:sprint_id>/notes/",
+        views.SprintNoteListCreateView.as_view(),
+        name="sprint-notes",
+    ),
+    path(
         "projects/<uuid:project_id>/departments/<uuid:department_id>/documents/",
         DocumentListView.as_view(),
         name="document-list",

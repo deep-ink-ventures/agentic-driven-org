@@ -6,6 +6,7 @@ from .project_config_view import ProjectConfigView
 from .project_detail_view import ProjectDetailView
 from .project_view import ProjectListView
 from .source_view import ProjectSourceListView
+from .sprint_note_view import SprintNoteListCreateView
 from .sprint_view import SprintDetailView, SprintListCreateView, SprintResetView
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "SprintListCreateView",
     "SprintDetailView",
     "SprintResetView",
+    "SprintNoteListCreateView",
 ]
