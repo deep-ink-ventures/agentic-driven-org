@@ -238,12 +238,16 @@ class BaseBlueprint(ABC):
                 prop["format"] = "email"
             elif t == "str":
                 prop["type"] = "string"
+            elif t == "int":
+                prop["type"] = "integer"
             elif t == "bool":
                 prop["type"] = "boolean"
             elif t == "list":
                 prop["type"] = "array"
             elif t == "dict":
                 prop["type"] = "object"
+            if "default" in spec:
+                prop["default"] = spec["default"]
             properties[key] = prop
             if spec.get("required"):
                 required.append(key)
@@ -392,7 +396,14 @@ borrowed from reference shows. When the creator references existing shows, they 
         """Build a task execution message with user-controlled content wrapped in XML tags."""
         context_msg = self.build_context_message(agent)
         extra = f"\n\n{suffix}" if suffix else ""
-        return f"""{context_msg}
+
+        sprint_notes = ""
+        if task.sprint:
+            notes_text = self._format_sprint_notes(task.sprint)
+            if notes_text:
+                sprint_notes = f"\n\n<user_notes>\n{notes_text}\n</user_notes>"
+
+        return f"""{context_msg}{sprint_notes}
 
 # Task to Execute
 <task_summary>
@@ -403,6 +414,33 @@ borrowed from reference shows. When the creator references existing shows, they 
 </task_plan>
 
 Execute this task now.{extra}"""
+
+    @staticmethod
+    def _format_sprint_notes(sprint) -> str:
+        """Format sprint notes for injection into agent context."""
+        if sprint is None:
+            return ""
+
+        from projects.models import SprintNote
+
+        notes = list(
+            SprintNote.objects.filter(sprint=sprint)
+            .select_related("user")
+            .prefetch_related("sources")
+            .order_by("created_at")
+        )
+        if not notes:
+            return ""
+
+        parts = ["## User Notes\n"]
+        for note in notes:
+            timestamp = note.created_at.strftime("%Y-%m-%d %H:%M")
+            parts.append(f"**[{timestamp}]** {note.text}")
+            for src in note.sources.all():
+                content = src.summary or src.extracted_text or src.raw_content or ""
+                if content:
+                    parts.append(f"  Attachment ({src.original_filename}): {content}")
+        return "\n".join(parts)
 
 
 # ── Workforce Blueprint ──────────────────────────────────────────────────────
@@ -1169,6 +1207,8 @@ You MUST respond with valid JSON only. No markdown fences, no explanation.
     ]
 }}}}"""
 
+        notes_text = self._format_sprint_notes(sprint)
+
         user_message = f"""# Project: {project.name}
 
 ## Project Goal
@@ -1179,6 +1219,8 @@ You MUST respond with valid JSON only. No markdown fences, no explanation.
 
 ## Sprint Context Files
 {source_context or "None."}
+
+{notes_text}
 
 ## Leader Instructions
 {agent.instructions or "No specific instructions."}
