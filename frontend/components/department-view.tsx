@@ -9,6 +9,7 @@ import { Loader2, CheckCircle, Plus, Zap, Settings2, Pause, Play, Square, Rotate
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConfigFields, type ConfigSchema } from "@/components/config-fields";
+import { SprintNotes } from "@/components/sprint-notes";
 
 export function DepartmentView({
   dept,
@@ -558,6 +559,12 @@ export function DepartmentView({
                           ))}
                         </div>
                       )}
+                      {/* Sprint notes */}
+                      <SprintNotes
+                        projectId={projectId}
+                        sprintId={sprint.id}
+                        sprintStatus={sprint.status}
+                      />
                     </div>
                   )}
                 </div>
@@ -568,7 +575,7 @@ export function DepartmentView({
       )}
 
       {tab === "config" && (
-        <div className="max-w-lg">
+        <div>
           {(() => {
             const schema = dept.config_schema as ConfigSchema | undefined;
             const properties = schema?.properties || {};

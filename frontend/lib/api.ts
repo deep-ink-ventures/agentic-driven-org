@@ -288,6 +288,17 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  listSprintNotes: (projectId: string, sprintId: string) =>
+    request<import("./types").SprintNote[]>(
+      `/api/projects/${projectId}/sprints/${sprintId}/notes/`,
+    ),
+
+  createSprintNote: (projectId: string, sprintId: string, data: { text: string; source_ids?: string[] }) =>
+    request<import("./types").SprintNote>(
+      `/api/projects/${projectId}/sprints/${sprintId}/notes/`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
   uploadSource: (projectId: string, formData: FormData) =>
     fetch(`${API_URL}/api/projects/${projectId}/sources/`, {
       method: "POST",

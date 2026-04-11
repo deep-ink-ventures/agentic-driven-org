@@ -125,6 +125,20 @@ export interface Sprint {
   completed_at: string | null;
 }
 
+export interface SprintNoteSource {
+  id: string;
+  original_filename: string;
+  source_type: string;
+}
+
+export interface SprintNote {
+  id: string;
+  text: string;
+  user_email: string;
+  sources: SprintNoteSource[];
+  created_at: string;
+}
+
 export interface AgentTask {
   id: string;
   agent: string;
