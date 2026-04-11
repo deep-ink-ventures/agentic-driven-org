@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from agents.models import Agent, AgentTask
-from projects.models import Department, Project, Sprint
+from projects.models import Department, Output, Project, Sprint
 
 User = get_user_model()
 
@@ -230,6 +230,122 @@ class TestSprintListCreateView:
     def test_list_requires_auth(self, api_client, project):
         resp = api_client.get(f"/api/projects/{project.id}/sprints/")
         assert resp.status_code in (401, 403)
+
+    @patch("agents.tasks.create_next_leader_task")
+    def test_create_sprint_with_progress_from_sprint(self, mock_task, authed_client, project, department, user):
+        """Outputs from a done sprint become Sources on the new sprint."""
+        old_sprint = Sprint.objects.create(project=project, text="Old work", created_by=user, status="done")
+        old_sprint.departments.add(department)
+        Output.objects.create(
+            sprint=old_sprint,
+            department=department,
+            title="Pitch Deliverable",
+            label="pitch:deliverable",
+            output_type="markdown",
+            content="# The Pitch\n\nThis is the pitch content.",
+        )
+        Output.objects.create(
+            sprint=old_sprint,
+            department=department,
+            title="Research Notes",
+            label="pitch:research",
+            output_type="markdown",
+            content="## Research\n\nMarket analysis here.",
+        )
+
+        resp = authed_client.post(
+            f"/api/projects/{project.id}/sprints/",
+            {
+                "text": "Continue the work",
+                "department_ids": [str(department.id)],
+                "progress_from_sprint_ids": [str(old_sprint.id)],
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        new_sprint = Sprint.objects.get(id=resp.data["id"])
+
+        sources = list(new_sprint.sources.all())
+        assert len(sources) == 2
+        titles = {s.original_filename for s in sources}
+        assert "Pitch Deliverable.md" in titles
+        assert "Research Notes.md" in titles
+
+        pitch_src = next(s for s in sources if "Pitch" in s.original_filename)
+        assert pitch_src.source_type == "text"
+        assert pitch_src.raw_content == "# The Pitch\n\nThis is the pitch content."
+        assert pitch_src.extracted_text == pitch_src.raw_content
+        assert pitch_src.project == project
+        assert pitch_src.user == user
+
+    @patch("agents.tasks.create_next_leader_task")
+    def test_progress_from_sprint_skips_empty_outputs(self, mock_task, authed_client, project, department, user):
+        """Outputs with no content or link/file type are skipped."""
+        old_sprint = Sprint.objects.create(project=project, text="Old", created_by=user, status="done")
+        old_sprint.departments.add(department)
+        Output.objects.create(
+            sprint=old_sprint,
+            department=department,
+            title="Empty",
+            label="empty",
+            output_type="markdown",
+            content="",
+        )
+        Output.objects.create(
+            sprint=old_sprint,
+            department=department,
+            title="A Link",
+            label="link",
+            output_type="link",
+            url="https://example.com",
+        )
+
+        resp = authed_client.post(
+            f"/api/projects/{project.id}/sprints/",
+            {
+                "text": "New sprint",
+                "department_ids": [str(department.id)],
+                "progress_from_sprint_ids": [str(old_sprint.id)],
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        new_sprint = Sprint.objects.get(id=resp.data["id"])
+        assert new_sprint.sources.count() == 0
+
+    @patch("agents.tasks.create_next_leader_task")
+    def test_progress_from_sprint_validates_project(self, mock_task, authed_client, project, department, user):
+        """Sprints from other projects are rejected."""
+        other_project = Project.objects.create(name="Other", goal="Other", owner=user)
+        other_sprint = Sprint.objects.create(project=other_project, text="Other", created_by=user, status="done")
+
+        resp = authed_client.post(
+            f"/api/projects/{project.id}/sprints/",
+            {
+                "text": "New sprint",
+                "department_ids": [str(department.id)],
+                "progress_from_sprint_ids": [str(other_sprint.id)],
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    @patch("agents.tasks.create_next_leader_task")
+    def test_progress_from_sprint_validates_done_status(self, mock_task, authed_client, project, department, user):
+        """Only done sprints can be referenced."""
+        running_sprint = Sprint.objects.create(project=project, text="Still running", created_by=user, status="running")
+        running_sprint.departments.add(department)
+
+        resp = authed_client.post(
+            f"/api/projects/{project.id}/sprints/",
+            {
+                "text": "New sprint",
+                "department_ids": [str(department.id)],
+                "progress_from_sprint_ids": [str(running_sprint.id)],
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
 
 
 # ── Sprint API: Update ────────────────────────────────────────────────────────

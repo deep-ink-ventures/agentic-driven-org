@@ -14,6 +14,12 @@ class SprintSerializer(serializers.ModelSerializer):
         required=False,
         default=list,
     )
+    progress_from_sprint_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        default=list,
+    )
     departments = serializers.SerializerMethodField()
     task_count = serializers.SerializerMethodField()
     outputs = serializers.SerializerMethodField()
@@ -30,6 +36,7 @@ class SprintSerializer(serializers.ModelSerializer):
             "departments",
             "department_ids",
             "source_ids",
+            "progress_from_sprint_ids",
             "task_count",
             "outputs",
             "created_by_email",
@@ -51,6 +58,7 @@ class SprintSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("department_ids", None)
         validated_data.pop("source_ids", None)
+        validated_data.pop("progress_from_sprint_ids", None)
         return super().create(validated_data)
 
     def get_departments(self, obj):

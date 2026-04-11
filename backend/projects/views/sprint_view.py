@@ -55,6 +55,43 @@ class SprintListCreateView(generics.ListCreateAPIView):
                 project_id=self.kwargs["project_id"],
             ).update(sprint=sprint)
 
+        # Convert outputs from referenced done sprints into Sources
+        progress_sprint_ids = serializer.validated_data.get("progress_from_sprint_ids", [])
+        if progress_sprint_ids:
+            from projects.models import Output
+
+            # Validate: must be done sprints in same project
+            valid_sprints = Sprint.objects.filter(
+                id__in=progress_sprint_ids,
+                project_id=self.kwargs["project_id"],
+                status=Sprint.Status.DONE,
+            )
+            if valid_sprints.count() != len(progress_sprint_ids):
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError(
+                    {
+                        "progress_from_sprint_ids": "All referenced sprints must exist, belong to this project, and be done."
+                    }
+                )
+
+            outputs = Output.objects.filter(
+                sprint__in=valid_sprints,
+                output_type__in=[Output.OutputType.MARKDOWN, Output.OutputType.PLAINTEXT],
+            ).exclude(content="")
+
+            for output in outputs:
+                Source.objects.create(
+                    project_id=self.kwargs["project_id"],
+                    source_type=Source.SourceType.TEXT,
+                    original_filename=f"{output.title}.md",
+                    raw_content=output.content,
+                    extracted_text=output.content,
+                    word_count=len(output.content.split()),
+                    user=self.request.user,
+                    sprint=sprint,
+                )
+
         _broadcast_sprint(sprint, "sprint.created")
 
         from agents.models import Agent
@@ -99,11 +136,34 @@ class SprintDetailView(generics.RetrieveUpdateAPIView):
         sprint = serializer.save(**update_fields)
         _broadcast_sprint(sprint, "sprint.updated")
 
-        if old_status == Sprint.Status.PAUSED and new_status == Sprint.Status.RUNNING:
-            from agents.models import Agent
-            from agents.tasks import create_next_leader_task
+        if old_status != Sprint.Status.RUNNING and new_status == Sprint.Status.RUNNING:
+            from agents.models import Agent, AgentTask
+            from agents.tasks import create_next_leader_task, execute_agent_task
 
             for dept in sprint.departments.all():
+                # Skip if already has active work (processing)
+                has_processing = AgentTask.objects.filter(
+                    agent__department=dept,
+                    sprint=sprint,
+                    status=AgentTask.Status.PROCESSING,
+                ).exists()
+                if has_processing:
+                    continue
+
+                # Re-dispatch any orphaned queued tasks
+                queued_tasks = list(
+                    AgentTask.objects.filter(
+                        agent__department=dept,
+                        sprint=sprint,
+                        status=AgentTask.Status.QUEUED,
+                    )
+                )
+                if queued_tasks:
+                    for task in queued_tasks:
+                        execute_agent_task.delay(str(task.id))
+                    continue
+
+                # No active work at all — kick the leader
                 leader = Agent.objects.filter(
                     department=dept,
                     is_leader=True,
