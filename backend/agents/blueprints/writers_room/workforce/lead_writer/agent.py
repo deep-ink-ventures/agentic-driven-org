@@ -720,10 +720,36 @@ class LeadWriterBlueprint(WritersRoomCreativeBlueprint):
         format_spec = FORMAT_SPECS.get(command_name, FORMAT_SPECS["write_pitch"])
         return self._execute_write(agent, task, craft, format_spec)
 
+    # Schema for structured revision output — guarantees valid JSON from the API.
+    REVISION_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "revisions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "enum": ["replace", "replace_section", "replace_between"]},
+                        "old_text": {"type": "string", "description": "Exact text to find (for replace)"},
+                        "new_text": {"type": "string", "description": "Replacement text (for replace)"},
+                        "section": {"type": "string", "description": "Markdown header (for replace_section)"},
+                        "new_content": {
+                            "type": "string",
+                            "description": "New content (for replace_section/replace_between)",
+                        },
+                        "start": {"type": "string", "description": "Start anchor (for replace_between)"},
+                        "end": {"type": "string", "description": "End anchor (for replace_between)"},
+                    },
+                    "required": ["type"],
+                },
+            },
+            "preserved": {"type": "string", "description": "Brief note on what was deliberately kept and why"},
+        },
+        "required": ["revisions"],
+    }
+
     def _execute_write(self, agent: Agent, task: AgentTask, craft_directive: str, format_spec: str) -> str:
         """Execute a writing task with the given craft and format directives."""
-        from agents.ai.claude_client import call_claude
-
         locale = agent.get_config_value("locale") or "en"
 
         suffix = (
@@ -737,12 +763,41 @@ class LeadWriterBlueprint(WritersRoomCreativeBlueprint):
         suffix += self._get_voice_constraint(agent)
 
         cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
+        model = self.get_model(agent, task.command_name or "write_pitch")
+        max_tokens = self._get_max_tokens(task.command_name)
+
+        # Revision rounds: use structured output to guarantee valid JSON.
+        # Free-form text output with German „..." quotes breaks JSON parsing.
+        is_revision = task.step_plan and "REVISION" in task.step_plan
+        if is_revision:
+            import json
+
+            from agents.ai.claude_client import call_claude_structured
+
+            data, usage = call_claude_structured(
+                system_prompt=self.build_system_prompt(agent),
+                user_message=task_msg,
+                output_schema=self.REVISION_SCHEMA,
+                tool_name="submit_revisions",
+                tool_description="Submit your revision edits to the deliverable",
+                cache_context=cache_context,
+                model=model,
+                max_tokens=max_tokens,
+            )
+            task.token_usage = usage
+            task.save(update_fields=["token_usage"])
+
+            # Return as JSON string — _apply_revision_or_replace will parse it
+            return json.dumps(data, ensure_ascii=False)
+
+        from agents.ai.claude_client import call_claude
+
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
             cache_context=cache_context,
-            model=self.get_model(agent, task.command_name or "write_pitch"),
-            max_tokens=self._get_max_tokens(task.command_name),
+            model=model,
+            max_tokens=max_tokens,
         )
         task.token_usage = usage
         task.save(update_fields=["token_usage"])
