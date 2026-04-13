@@ -11,6 +11,7 @@ from agents.blueprints.base import command
         "Output must use numbered headers for system parsing."
     ),
     model="claude-opus-4-6",
+    max_tokens=16384,
 )
 def draft_strategy(self, agent) -> dict:
     return {

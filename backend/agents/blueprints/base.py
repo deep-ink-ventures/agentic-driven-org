@@ -602,7 +602,15 @@ class WorkforceBlueprint(BaseBlueprint):
         return ""
 
     def get_max_tokens(self, agent: Agent, task: AgentTask) -> int | None:
-        """Return max output tokens for this task, or None for default."""
+        """Return max output tokens for this task, or None for default.
+
+        Checks command metadata first — @command(max_tokens=N) is respected.
+        Subclasses can override for per-agent logic.
+        """
+        if task.command_name:
+            for cmd in self.get_commands():
+                if cmd["name"] == task.command_name and cmd.get("max_tokens"):
+                    return cmd["max_tokens"]
         return None
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:

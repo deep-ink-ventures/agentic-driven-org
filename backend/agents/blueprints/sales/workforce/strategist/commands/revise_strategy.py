@@ -10,6 +10,7 @@ from agents.blueprints.base import command
         "in thesis reasoning, target selection, or market positioning."
     ),
     model="claude-sonnet-4-6",
+    max_tokens=16384,
 )
 def revise_strategy(self, agent) -> dict:
     return {
