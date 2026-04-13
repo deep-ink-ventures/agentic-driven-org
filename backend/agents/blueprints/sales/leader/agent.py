@@ -193,26 +193,32 @@ You don't write pitches or do research directly — you create tasks for your wo
 
         department = agent.department
         step_agent_type = STEP_TO_AGENT.get(current_step)
-        step_command = STEP_TO_COMMAND.get(current_step)
 
         if not step_agent_type:
             return None
 
-        step_done = AgentTask.objects.filter(
+        # After a QA loop-back, only count tasks created after the loop-back as "done".
+        # Otherwise old completed tasks from previous rounds trick the step-done check.
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id)
+        since = dept_state.get("qa_loopback_at")
+
+        task_qs = AgentTask.objects.filter(
             sprint=sprint,
             agent__agent_type=step_agent_type,
             agent__department=department,
-            command_name=step_command,
-            status=AgentTask.Status.DONE,
-        ).exists()
+        )
+        if since:
+            from django.utils.dateparse import parse_datetime as _parse_dt
+
+            dt = _parse_dt(since)
+            if dt:
+                task_qs = task_qs.filter(created_at__gte=dt)
+
+        step_done = task_qs.filter(status=AgentTask.Status.DONE).exists()
 
         if not step_done:
-            # Check if task is already in progress or queued
-            step_active = AgentTask.objects.filter(
-                sprint=sprint,
-                agent__agent_type=step_agent_type,
-                agent__department=department,
-                command_name=step_command,
+            step_active = task_qs.filter(
                 status__in=[
                     AgentTask.Status.PROCESSING,
                     AgentTask.Status.QUEUED,
@@ -413,8 +419,11 @@ You don't write pitches or do research directly — you create tasks for your wo
     def _loop_back_from_qa(self, agent, sprint, review_task, round_num) -> dict:
         """QA score too low — loop back to strategy revision."""
         dept_id = str(agent.department_id)
+        from django.utils import timezone as tz
+
         dept_state = sprint.get_department_state(dept_id)
         dept_state["pipeline_step"] = "strategy"
+        dept_state["qa_loopback_at"] = tz.now().isoformat()
         sprint.set_department_state(dept_id, dept_state)
 
         locale = agent.get_config_value("locale") or "en"
