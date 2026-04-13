@@ -27,11 +27,11 @@ class TestCallClaude:
         )
 
         assert result == "Hello from Claude"
-        assert usage["model"] == "claude-opus-4-6"
+        assert usage["model"] == "claude-sonnet-4-6"
         assert usage["input_tokens"] == 100
         assert usage["output_tokens"] == 50
         mock_client.messages.create.assert_called_once_with(
-            model="claude-opus-4-6",
+            model="claude-sonnet-4-6",
             max_tokens=8192,
             system="You are helpful",
             messages=[{"role": "user", "content": "Hi"}],
@@ -131,7 +131,7 @@ class TestCallClaudeWithTools:
 
         assert text == "Here is my analysis."
         assert tool_input == {"verdict": "approved", "score": 9}
-        assert usage["model"] == "claude-opus-4-6"
+        assert usage["model"] == "claude-sonnet-4-6"
         assert usage["input_tokens"] == 150
         assert usage["output_tokens"] == 75
         call_kwargs = mock_client.messages.create.call_args
@@ -231,7 +231,7 @@ class TestCallClaudeStructured:
         )
 
         assert data == {"name": "Test Project", "count": 3}
-        assert usage["model"] == "claude-opus-4-6"
+        assert usage["model"] == "claude-sonnet-4-6"
         # Verify tool_choice forces the tool
         call_kwargs = mock_client.messages.create.call_args
         assert call_kwargs.kwargs["tool_choice"] == {"type": "tool", "name": "structured_output"}

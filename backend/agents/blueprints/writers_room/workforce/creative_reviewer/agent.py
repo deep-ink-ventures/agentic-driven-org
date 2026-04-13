@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
-    default_model = "claude-opus-4-6"
+    default_model = "claude-sonnet-4-6"
     source_privileged = True  # sees important + minor sources
     name = "Creative Reviewer"
     slug = "creative_reviewer"
@@ -97,7 +97,7 @@ Only score dimensions that were analyzed by feedback agents this round.
 Always score concept_fidelity, originality, and format_compliance — they apply at every stage.
 
 SCORING:
-- Overall score = MINIMUM of all dimension scores
+- Overall score = AVERAGE of all dimension scores
 - The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold
 
 ## WHAT YOU REVIEW
@@ -193,7 +193,7 @@ Consolidate findings, score each dimension, and submit your verdict.
 {format_ref}
 
 ## Verdict
-The overall score is the MINIMUM of all dimension scores.
+The overall score is the AVERAGE of all dimension scores.
 After your review, call the submit_verdict tool with your verdict and score.
 For CHANGES_REQUESTED, include specific fix instructions grouped by creative agent."""
 

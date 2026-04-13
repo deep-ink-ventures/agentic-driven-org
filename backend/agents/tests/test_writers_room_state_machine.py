@@ -577,7 +577,7 @@ class TestMaxReviewRoundsEscalation(TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(sprint.status, "done")
-        self.assertIn("5 rounds", sprint.completion_summary)
+        self.assertIn(f"{MAX_REVIEW_ROUNDS} rounds", sprint.completion_summary)
 
 
 # ── Active tasks blocking ──────────────────────────────────────────────────

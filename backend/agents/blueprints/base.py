@@ -14,10 +14,10 @@ if TYPE_CHECKING:
 # ── Universal quality standards ─────────────────────────────────────────────
 # These apply to ALL departments. Quality is not configurable.
 
-EXCELLENCE_THRESHOLD = 9.5  # Score needed to pass review
-NEAR_EXCELLENCE_THRESHOLD = 9.0  # Score at which we start counting "polish" attempts
-MAX_POLISH_ATTEMPTS = 3  # After reaching 9.0, max attempts to reach 9.5 before accepting
-MAX_REVIEW_ROUNDS = 5  # Hard cap before human escalation
+EXCELLENCE_THRESHOLD = 9.0  # Score needed to pass review (average of dimensions)
+NEAR_EXCELLENCE_THRESHOLD = 8.5  # Score at which we start counting "polish" attempts
+MAX_POLISH_ATTEMPTS = 2  # After reaching 8.5, max attempts to reach 9.0 before accepting
+MAX_REVIEW_ROUNDS = 3  # Hard cap before completing sprint with best deliverable
 
 VERDICT_TOOL = {
     "name": "submit_verdict",
@@ -55,10 +55,10 @@ def parse_review_verdict(report: str) -> tuple[str, float]:
 
 
 def should_accept_review(score: float, round_num: int, polish_attempts: int) -> bool:
-    """Decide whether to accept a review score.
+    """Decide whether to accept a review score (average of dimensions).
 
-    - score >= 9.5 → always accept (excellence)
-    - score >= 9.0 and polish_attempts >= 3 → accept (diminishing returns)
+    - score >= 9.0 → always accept (excellence)
+    - score >= 8.5 and polish_attempts >= 2 → accept (diminishing returns)
     - otherwise → another round
     """
     return score >= EXCELLENCE_THRESHOLD or (

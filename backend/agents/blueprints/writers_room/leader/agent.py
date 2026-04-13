@@ -199,7 +199,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         context = (
             f"# Current Stage: {current_stage}\n"
             f"# Stage Status: {json.dumps(stage_status, indent=2)}\n"
-            f"# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (minimum dimension score)"
+            f"# Quality: Excellence threshold {EXCELLENCE_THRESHOLD}/10 (average dimension score)"
         )
 
         # Inject story bible if one exists
