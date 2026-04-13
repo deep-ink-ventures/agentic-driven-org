@@ -550,9 +550,9 @@ class TestReviewOutcomes(TestCase):
 
 @override_settings(ANTHROPIC_API_KEY="test-key")
 class TestMaxReviewRoundsEscalation(TestCase):
-    """Safety cap triggers human escalation."""
+    """Safety cap completes the sprint."""
 
-    def test_escalates_at_max_rounds(self):
+    def test_completes_sprint_at_max_rounds(self):
         from agents.blueprints.base import MAX_REVIEW_ROUNDS
 
         dept_id = _uuid()
@@ -567,14 +567,17 @@ class TestMaxReviewRoundsEscalation(TestCase):
                 "format_type": "standalone",
             },
         )
+        sprint.save = MagicMock()
 
         bp = WritersRoomLeaderBlueprint()
         with _patch_agent_task() as MockTask:
             _setup_task_mock(MockTask)
-            result = _run_proposal(bp, agent, sprint, MockTask)
+            with patch("projects.views.sprint_view._broadcast_sprint"):
+                result = _run_proposal(bp, agent, sprint, MockTask)
 
-        self.assertIsNotNone(result)
-        self.assertIn("ESCALATION", result["exec_summary"])
+        self.assertIsNone(result)
+        self.assertEqual(sprint.status, "done")
+        self.assertIn("5 rounds", sprint.completion_summary)
 
 
 # ── Active tasks blocking ──────────────────────────────────────────────────

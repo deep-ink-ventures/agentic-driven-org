@@ -791,25 +791,23 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         # Safety cap — uses universal MAX_REVIEW_ROUNDS
         if iteration >= MAX_REVIEW_ROUNDS:
             logger.warning(
-                "Writers Room: stage '%s' hit max iterations (%d) — escalating",
+                "Writers Room: stage '%s' hit max iterations (%d) — completing sprint",
                 current_stage,
                 MAX_REVIEW_ROUNDS,
             )
-            return _tag_sprint(
-                {
-                    "exec_summary": f"ESCALATION: Stage '{current_stage}' reached {MAX_REVIEW_ROUNDS} iterations",
-                    "tasks": [
-                        {
-                            "target_agent_type": "leader",
-                            "exec_summary": (
-                                f"Stage '{current_stage}' needs human intervention "
-                                f"after {MAX_REVIEW_ROUNDS} iterations."
-                            ),
-                            "step_plan": "Review feedback history and decide next steps.",
-                        }
-                    ],
-                }
+            from django.utils import timezone as tz
+
+            from projects.views.sprint_view import _broadcast_sprint
+
+            sprint.status = Sprint.Status.DONE
+            sprint.completion_summary = (
+                f"Stage '{current_stage}' completed after {MAX_REVIEW_ROUNDS} rounds. "
+                f"Best deliverable preserved in documents."
             )
+            sprint.completed_at = tz.now()
+            sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+            _broadcast_sprint(sprint, "sprint.updated")
+            return None
 
         effective_stage = self._get_effective_stage(agent, current_stage, sprint=sprint)
         config = _get_merged_config(agent)
