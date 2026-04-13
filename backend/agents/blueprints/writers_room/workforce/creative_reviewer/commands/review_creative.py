@@ -10,7 +10,6 @@ from agents.blueprints.base import command
         "Score each dimension 1-10, overall = minimum. "
         "Submit verdict via tool call."
     ),
-    model="claude-opus-4-6",
 )
 def review_creative(self, agent) -> dict:
     return {

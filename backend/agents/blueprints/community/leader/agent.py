@@ -34,17 +34,6 @@ class CommunityLeaderBlueprint(LeaderBlueprint):
     ]
     config_schema = {}
 
-    def get_review_pairs(self):
-        return [
-            {
-                "creator": "partnership_writer",
-                "creator_fix_command": "revise-proposal",
-                "reviewer": "partnership_reviewer",
-                "reviewer_command": "review-proposal",
-                "dimensions": ["mutual_value", "specificity", "tone", "structure", "next_steps"],
-            },
-        ]
-
     @property
     def system_prompt(self) -> str:
         return """You are the community & partnerships director. You build ecosystem relationships by coordinating your workforce agents: Ecosystem Researcher, Ecosystem Analyst, Partnership Writer, and Partnership Reviewer.
@@ -55,15 +44,7 @@ Your core responsibilities:
 3. Route completed research to the Ecosystem Analyst for review
 4. Delegate partnership proposal drafting to the Partnership Writer for promising targets
 5. Route completed proposals to the Partnership Reviewer for quality check
-6. Manage the review ping-pong loop: if a reviewer sends work back, create a revision task with feedback
-
-REVIEW CHAIN (AUTOMATIC — do not manually manage reviews):
-When a partnership_writer task completes, the system automatically:
-1. Routes the proposal to the partnership_reviewer for quality check
-2. If score < 9.5/10 → fix task auto-created for the writer with feedback
-3. After fix → reviewer runs again (ping-pong until approved or max rounds)
-4. After reaching 9.0, max 3 polish attempts to reach 9.5, then accept
-Do NOT manually create review tasks — the system handles the loop.
+6. Manage the review loop: if quality is insufficient, create a revision task with feedback
 
 Community building is slower than sales — weekly planning, daily checks. Focus on quality relationships over volume."""
 
@@ -72,8 +53,4 @@ Community building is slower than sales — weekly planning, daily checks. Focus
     check_progress = check_progress
 
     def generate_task_proposal(self, agent: Agent) -> dict:
-        # Check for review cycle triggers first (universal from base class)
-        review_result = self._check_review_trigger(agent)
-        if review_result:
-            return review_result
         return self.plan_community(agent)

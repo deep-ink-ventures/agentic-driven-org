@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomCreativeBlueprint
 from agents.blueprints.writers_room.workforce.story_architect.commands import (
     develop_concept,
     fix_structure,
@@ -19,7 +19,7 @@ from agents.blueprints.writers_room.workforce.story_architect.commands import (
 logger = logging.getLogger(__name__)
 
 
-class StoryArchitectBlueprint(WorkforceBlueprint):
+class StoryArchitectBlueprint(WritersRoomCreativeBlueprint):
     name = "Story Architect"
     slug = "story_architect"
     description = "Master of narrative structure -- builds story frameworks across all formats and stages"
@@ -182,6 +182,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
         return ""
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        # On revision rounds, use base class which respects the step_plan's
+        # targeted improvement instructions instead of the full creative suffix.
+        if task.step_plan and "REVISION ROUND" in task.step_plan:
+            return super().execute_task(agent, task)
+
         dispatch = {
             "write_structure": self._execute_write_structure,
             "fix_structure": self._execute_fix_structure,
@@ -267,10 +272,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "write_structure"),
             max_tokens=32768,
         )
@@ -305,10 +311,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "fix_structure"),
             max_tokens=16384,
         )
@@ -377,10 +384,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "outline_act_structure"),
             max_tokens=16384,
         )
@@ -466,10 +474,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "map_subplot_threads"),
             max_tokens=16384,
         )
@@ -535,10 +544,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "generate_concepts"),
             max_tokens=16384,
         )
@@ -605,10 +615,11 @@ class StoryArchitectBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "develop_concept"),
             max_tokens=16384,
         )

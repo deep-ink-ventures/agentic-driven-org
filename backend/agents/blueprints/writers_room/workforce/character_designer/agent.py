@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomCreativeBlueprint
 from agents.blueprints.writers_room.workforce.character_designer.commands import (
     build_character_profile,
     design_character_voice,
@@ -17,7 +17,7 @@ from agents.blueprints.writers_room.workforce.character_designer.commands import
 logger = logging.getLogger(__name__)
 
 
-class CharacterDesignerBlueprint(WorkforceBlueprint):
+class CharacterDesignerBlueprint(WritersRoomCreativeBlueprint):
     name = "Character Designer"
     slug = "character_designer"
     description = "Designs and develops character ensembles -- profiles, arcs, relationships, and voice"
@@ -202,6 +202,8 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
         return ""
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        if task.step_plan and "REVISION ROUND" in task.step_plan:
+            return super().execute_task(agent, task)
         if task.command_name == "fix_characters":
             return self._execute_fix_characters(agent, task)
         if task.command_name == "build_character_profile":
@@ -306,10 +308,11 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "write_characters"),
             max_tokens=16384,
         )
@@ -368,10 +371,11 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "fix_characters"),
             max_tokens=16384,
         )
@@ -453,10 +457,11 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "build_character_profile"),
             max_tokens=16384,
         )
@@ -539,10 +544,11 @@ class CharacterDesignerBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "design_character_voice"),
             max_tokens=16384,
         )

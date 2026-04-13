@@ -36,7 +36,6 @@ def get_proposal_json_schema() -> dict:
             },
             "departments": {
                 "type": "array",
-                "minItems": 1,
                 "items": {
                     "type": "object",
                     "required": ["department_type", "agents"],

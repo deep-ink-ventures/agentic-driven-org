@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomCreativeBlueprint
 from agents.blueprints.writers_room.workforce.lead_writer.commands import (
     write_concept,
     write_expose,
@@ -565,7 +565,19 @@ ANTI_AI_RULES = (
 )
 
 
-class LeadWriterBlueprint(WorkforceBlueprint):
+class LeadWriterBlueprint(WritersRoomCreativeBlueprint):
+    """Lead writer gets deliverable + full critique + voice profile.
+
+    Inherits WritersRoomCreativeBlueprint's filtered context (no research notes,
+    no sibling reports) but overrides critique filtering to keep the full critique
+    — the lead writer needs all analyst feedback for revisions.
+    """
+
+    default_model = "claude-opus-4-6"
+    source_privileged = True  # sees important + minor sources
+    # Lead writer sees all analyst feedback + creative agents' research output
+    _skip_critique_filter = True
+    _include_research = True
     name = "Lead Writer"
     slug = "lead_writer"
     description = (
@@ -724,10 +736,11 @@ class LeadWriterBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, task.command_name or "write_pitch"),
             max_tokens=self._get_max_tokens(task.command_name),
         )

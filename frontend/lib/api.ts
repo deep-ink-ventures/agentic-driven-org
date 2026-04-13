@@ -142,6 +142,7 @@ export const api = {
       agent?: string;
       limit?: number;
       before?: string;
+      current_sprint?: boolean;
     },
   ): Promise<import("./types").TaskPage> => {
     const sp = new URLSearchParams();
@@ -150,6 +151,7 @@ export const api = {
     if (params?.agent) sp.set("agent", params.agent);
     if (params?.limit) sp.set("limit", String(params.limit));
     if (params?.before) sp.set("before", params.before);
+    if (params?.current_sprint) sp.set("current_sprint", "true");
     const qs = sp.toString();
     const { data, headers } = await requestWithHeaders<import("./types").AgentTask[]>(
       `/api/projects/${projectId}/tasks/${qs ? `?${qs}` : ""}`,

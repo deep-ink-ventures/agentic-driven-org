@@ -16,7 +16,7 @@ import {
   Filter,
   RefreshCw,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/ui/markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -174,7 +174,7 @@ function TaskCard({
                     onClick={isApproval ? () => setEditing(true) : undefined}
                     className={`rounded-lg border border-dashed border-border p-3 text-sm text-text-primary max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&>*:last-child]:mb-0 ${isApproval ? "cursor-pointer hover:border-accent-violet/40 transition-colors" : ""}`}
                   >
-                    <ReactMarkdown>{task.step_plan}</ReactMarkdown>
+                    <Markdown>{task.step_plan}</Markdown>
                   </div>
                 )
               )}
@@ -193,7 +193,7 @@ function TaskCard({
               </button>
               {showReport && (
                 <div className="report-markdown text-sm text-text-primary bg-bg-input rounded-lg p-4 border border-border max-w-none">
-                  <ReactMarkdown>{task.report}</ReactMarkdown>
+                  <Markdown>{task.report}</Markdown>
                 </div>
               )}
             </div>
@@ -310,12 +310,14 @@ function TaskLane({
   department,
   agent,
   wsEvent,
+  currentSprintOnly,
 }: {
   config: LaneConfig;
   projectId: string;
   department?: string;
   agent?: string;
   wsEvent?: { type: string; task: AgentTask } | null;
+  currentSprintOnly?: boolean;
 }) {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -336,16 +338,17 @@ function TaskLane({
         agent,
         limit: 25,
         before,
+        current_sprint: currentSprintOnly || undefined,
       });
       return page;
     },
-    [projectId, activeStatuses, department, agent],
+    [projectId, activeStatuses, department, agent, currentSprintOnly],
   );
 
   // For collapsible lanes, fetch count immediately; defer full task fetch until expand
   useEffect(() => {
     if (config.collapsible && !hasFetched) {
-      api.getProjectTasks(projectId, { status: config.statuses, department, agent, limit: 1 })
+      api.getProjectTasks(projectId, { status: config.statuses, department, agent, limit: 1, current_sprint: currentSprintOnly || undefined })
         .then((page) => setTotalCount(page.totalCount))
         .catch(() => {});
     }
@@ -376,7 +379,7 @@ function TaskLane({
     const laneStatuses = config.statuses.split(",");
     const belongsInLane =
       laneStatuses.includes(task.status) &&
-      (!department || task.agent === department) &&
+      (!department || task.department === department) &&
       (!agent || task.agent === agent);
 
     if (wsEvent.type === "task.created") {
@@ -559,6 +562,8 @@ export function TaskQueue({
   departments?: import("@/lib/types").DepartmentDetail[];
   onSprintCreated?: () => void;
 }) {
+  const [currentSprintOnly, setCurrentSprintOnly] = useState(false);
+
   return (
     <div>
       {/* Sprint input — show when on department or dashboard view (not agent) */}
@@ -574,6 +579,17 @@ export function TaskQueue({
         </>
       )}
 
+      {/* Filter bar */}
+      <label className="flex items-center gap-2 mb-4 text-sm text-text-secondary cursor-pointer select-none w-fit">
+        <input
+          type="checkbox"
+          checked={currentSprintOnly}
+          onChange={(e) => setCurrentSprintOnly(e.target.checked)}
+          className="rounded border-border bg-bg-surface text-accent-violet focus:ring-accent-violet/50 h-3.5 w-3.5"
+        />
+        Current sprints only
+      </label>
+
       {/* Two lanes side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <TaskLane
@@ -582,6 +598,7 @@ export function TaskQueue({
           department={department}
           agent={agent}
           wsEvent={wsEvent}
+          currentSprintOnly={currentSprintOnly}
         />
         <TaskLane
           config={{ title: "In Progress", statuses: "queued,processing,awaiting_dependencies,planned", pulse: true }}
@@ -589,6 +606,7 @@ export function TaskQueue({
           department={department}
           agent={agent}
           wsEvent={wsEvent}
+          currentSprintOnly={currentSprintOnly}
         />
       </div>
 
@@ -599,6 +617,7 @@ export function TaskQueue({
         department={department}
         agent={agent}
         wsEvent={wsEvent}
+        currentSprintOnly={currentSprintOnly}
       />
     </div>
   );

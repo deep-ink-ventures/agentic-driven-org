@@ -130,7 +130,7 @@ class BaseBlueprint(ABC):
     tags: list[str] = []
     skills: list[dict] = []  # [{"name": "...", "description": "..."}]
     outputs: list[str] = []  # metadata: what persistent artifacts this agent produces
-    default_model: str = "claude-opus-4-6"
+    default_model: str = "claude-sonnet-4-6"
     config_schema: dict[str, dict] = {}  # {"key": {"type": "str", "required": bool, "description": "..."}}
     uses_web_search: bool = False  # whether this agent needs web search tools at runtime
     essential: bool = False  # always pre-selected when department is added
@@ -271,6 +271,18 @@ class BaseBlueprint(ABC):
             lines.append(f"- {c['name']}{schedule}: {c['description']}")
         return "\n".join(lines)
 
+    # Default volume threshold for async consolidation (~170k tokens).
+    # Override in department-specific blueprints for departments that need
+    # larger context windows (e.g. writers room during late-stage work).
+    volume_threshold_chars = 500_000
+
+    def get_volume_threshold(self, agent: Agent) -> int:
+        """Return the volume threshold in chars for this agent's department.
+
+        Override in department blueprints for stage-aware thresholds.
+        """
+        return self.volume_threshold_chars
+
     def get_context(self, agent: Agent) -> dict:
         """Gather context with prefetched queries to avoid N+1."""
         from agents.models import AgentTask
@@ -285,12 +297,14 @@ class BaseBlueprint(ABC):
 
         # Volume safety net — trigger async consolidation if context is too large
         total_chars = sum(len(content) for _, content, _, _ in docs)
-        if total_chars > 1_500_000:  # ~500k tokens
+        threshold = self.get_volume_threshold(agent)
+        if total_chars > threshold:
             consolidate_department_documents.delay(str(department.id))
             logger.warning(
-                "VOLUME_THRESHOLD dept=%s chars=%d — async consolidation triggered",
+                "VOLUME_THRESHOLD dept=%s chars=%d threshold=%d — async consolidation triggered",
                 department.name,
                 total_chars,
+                threshold,
             )
 
         docs_text = ""
@@ -322,17 +336,21 @@ class BaseBlueprint(ABC):
                 recent = tasks_by_agent.get(sib_id, [])
                 if recent:
                     task_lines = ""
-                    for es, st, rp in recent:
+                    for i, (es, st, rp) in enumerate(recent):
                         task_lines += f"\n  - [{st}] {es}"
-                        if rp and st == "done":
+                        # Full report only for the most recent completed task;
+                        # older tasks get exec_summary only to keep context lean.
+                        if rp and st == "done" and i == 0:
                             task_lines += f"\n    Report: {rp}"
                     sibling_text += f"\n\n{sib_name} ({sib_type}) recent tasks:{task_lines}"
 
         own_recent = list(agent.tasks.order_by("-created_at")[:10].values_list("exec_summary", "status", "report"))
         own_text = ""
-        for es, st, rp in own_recent:
+        for i, (es, st, rp) in enumerate(own_recent):
             own_text += f"\n  - [{st}] {es}"
-            if rp:
+            # Full report only for the most recent task; older tasks get
+            # exec_summary only to keep context lean.
+            if rp and i == 0:
                 own_text += f"\n    Report: {rp}"
 
         return {
@@ -356,10 +374,13 @@ class BaseBlueprint(ABC):
             )
         return "".join(parts)
 
-    def build_context_message(self, agent: Agent) -> str:
-        ctx = self.get_context(agent)
-        # All user-controlled content wrapped in XML tags to mitigate prompt injection.
-        # Claude is trained to treat content inside XML tags as data rather than instructions.
+    def _build_cache_context(self, ctx: dict) -> str:
+        """Build the shared, cacheable context prefix.
+
+        This block is identical for all agents in the same department: project goal +
+        department documents. It's the largest part of the context and changes rarely
+        within a sprint run, making it ideal for Anthropic prompt caching (5-min TTL).
+        """
         return f"""# Context
 
 ## Project: {ctx["project_name"]}
@@ -380,7 +401,37 @@ borrowed from reference shows. When the creator references existing shows, they 
 ### Department Documents
 <documents>
 {ctx["department_documents"] or "No documents yet."}
-</documents>
+</documents>"""
+
+    def build_context_message(self, agent: Agent) -> str:
+        ctx = self.get_context(agent)
+        cache_context = self._build_cache_context(ctx)
+        # All user-controlled content wrapped in XML tags to mitigate prompt injection.
+        # Claude is trained to treat content inside XML tags as data rather than instructions.
+        dynamic = f"""
+
+### Other Agents in Department
+<sibling_activity>
+{ctx["sibling_agents"] or "No other agents."}
+</sibling_activity>
+
+### Your Recent Tasks
+<own_activity>
+{ctx["own_recent_tasks"] or "No tasks yet."}
+</own_activity>"""
+        return cache_context + dynamic
+
+    def build_task_message(self, agent: Agent, task: AgentTask, suffix: str = "") -> tuple[str, str]:
+        """Build a task execution message with user-controlled content wrapped in XML tags.
+
+        Returns (cache_context, task_message) where:
+        - cache_context: shared prefix (project goal + dept docs) — cached by the API
+        - task_message: agent-specific + task-specific content — not cached
+        """
+        ctx = self.get_context(agent)
+        cache_context = self._build_cache_context(ctx)
+
+        dynamic = f"""
 
 ### Other Agents in Department
 <sibling_activity>
@@ -392,18 +443,27 @@ borrowed from reference shows. When the creator references existing shows, they 
 {ctx["own_recent_tasks"] or "No tasks yet."}
 </own_activity>"""
 
-    def build_task_message(self, agent: Agent, task: AgentTask, suffix: str = "") -> str:
-        """Build a task execution message with user-controlled content wrapped in XML tags."""
-        context_msg = self.build_context_message(agent)
         extra = f"\n\n{suffix}" if suffix else ""
 
-        sprint_notes = ""
+        sprint_context = ""
         if task.sprint:
+            sprint_context += (
+                f"\n\n<sprint_instruction>\n"
+                f"## Sprint Instruction — BINDING DIRECTIVE FROM THE USER\n"
+                f"This overrides any conflicting information in source documents or prior sprint outputs.\n"
+                f"If source material says X but the sprint instruction says Y, follow Y.\n\n"
+                f"{task.sprint.text}\n"
+                f"</sprint_instruction>"
+            )
             notes_text = self._format_sprint_notes(task.sprint)
             if notes_text:
-                sprint_notes = f"\n\n<user_notes>\n{notes_text}\n</user_notes>"
+                sprint_context += f"\n\n<user_notes>\n{notes_text}\n</user_notes>"
+            is_privileged = getattr(self, "source_privileged", False)
+            sources_text = self._format_sprint_sources(task.sprint, privileged=is_privileged)
+            if sources_text:
+                sprint_context += f"\n\n<sprint_sources>\n" f"{sources_text}\n" f"</sprint_sources>"
 
-        return f"""{context_msg}{sprint_notes}
+        task_message = f"""{dynamic}{sprint_context}
 
 # Task to Execute
 <task_summary>
@@ -414,6 +474,8 @@ borrowed from reference shows. When the creator references existing shows, they 
 </task_plan>
 
 Execute this task now.{extra}"""
+
+        return cache_context, task_message
 
     @staticmethod
     def _format_sprint_notes(sprint) -> str:
@@ -441,6 +503,80 @@ Execute this task now.{extra}"""
                 if content:
                     parts.append(f"  Attachment ({src.original_filename}): {content}")
         return "\n".join(parts)
+
+    @staticmethod
+    def _format_sprint_sources(sprint, privileged: bool = False) -> str:
+        """Format sprint sources for injection into agent context.
+
+        Source priority controls visibility:
+        - essential: full content → ALL agents
+        - important: full content → privileged agents only (lead writer, reviewer)
+        - regular: summary → ALL agents (batched)
+        - minor: summary → privileged agents only (batched)
+
+        Args:
+            sprint: The Sprint instance.
+            privileged: If True, include important + minor sources.
+                       Set for lead writers, creative reviewers, and leaders.
+        """
+        if sprint is None:
+            return ""
+
+        from projects.models import Source
+
+        sources = list(sprint.sources.order_by("created_at")[:20])
+        if not sources:
+            return ""
+
+        full_parts = []  # full-content sources
+        summary_parts = []  # summarized sources
+
+        for src in sources:
+            priority = src.priority or Source.Priority.REGULAR
+            full_text = src.extracted_text or src.raw_content or ""
+            summary_text = src.summary or ""
+            name = src.original_filename or "Source"
+
+            if priority == Source.Priority.ESSENTIAL:
+                # Full content for everyone
+                text = full_text or summary_text
+                if text:
+                    full_parts.append(f"\n--- {name} [essential] ---\n{text}")
+
+            elif priority == Source.Priority.IMPORTANT:
+                # Full content for privileged only
+                if privileged:
+                    text = full_text or summary_text
+                    if text:
+                        full_parts.append(f"\n--- {name} ---\n{text}")
+
+            elif priority == Source.Priority.REGULAR:
+                # Summary for everyone
+                text = summary_text or full_text
+                if text:
+                    summary_parts.append(f"- **{name}**: {text}")
+
+            elif priority == Source.Priority.MINOR:
+                # Summary for privileged only
+                if privileged:
+                    text = summary_text or full_text
+                    if text:
+                        summary_parts.append(f"- **{name}** (background): {text}")
+
+        parts = []
+        if full_parts:
+            parts.append("## Sprint Source Material\n")
+            parts.extend(full_parts)
+        if summary_parts:
+            parts.append("\n## Source Summaries\n")
+            parts.extend(summary_parts)
+
+        # Cap total at ~50k chars
+        result = "\n".join(parts)
+        if len(result) > 50_000:
+            result = result[:50_000] + "\n[...truncated]"
+
+        return result
 
 
 # ── Workforce Blueprint ──────────────────────────────────────────────────────
@@ -478,7 +614,7 @@ class WorkforceBlueprint(BaseBlueprint):
         GitHub, SendGrid) or command-dispatch logic.
         """
         suffix = self.get_task_suffix(agent, task)
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         model = self.get_model(agent, task.command_name)
         max_tokens = self.get_max_tokens(agent, task)
 
@@ -490,6 +626,7 @@ class WorkforceBlueprint(BaseBlueprint):
                 "user_message": task_msg,
                 "tools": [VERDICT_TOOL],
                 "model": model,
+                "cache_context": cache_context,
             }
             if max_tokens:
                 kwargs["max_tokens"] = max_tokens
@@ -519,6 +656,7 @@ class WorkforceBlueprint(BaseBlueprint):
             "system_prompt": self.build_system_prompt(agent),
             "user_message": task_msg,
             "model": model,
+            "cache_context": cache_context,
         }
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
@@ -535,136 +673,6 @@ class WorkforceBlueprint(BaseBlueprint):
 
 class LeaderBlueprint(BaseBlueprint):
     """Base for department leader agents. Proposes and delegates tasks."""
-
-    # ── Declarative review ping-pong ────────────────────────────────────
-    #
-    # Subclasses define get_review_pairs() to declare creator→reviewer flows.
-    # The base class handles all review logic: triggering, scoring, looping, fixing.
-
-    def get_review_pairs(self) -> list[dict]:
-        """Define creator→reviewer ping-pong pairs.
-
-        Override in subclasses to enable automatic review loops.
-        Each pair describes one flow: when creator finishes, reviewer checks quality.
-
-        Returns list of dicts:
-        {
-            "creator": "agent_type",           # who creates content
-            "creator_fix_command": "cmd",       # command for revision tasks
-            "reviewer": "agent_type",           # who reviews (final quality gate)
-            "reviewer_command": "cmd",          # command for review tasks
-            "dimensions": ["dim1", "dim2"],     # scoring dimensions for the reviewer
-        }
-
-        For complex review chains (e.g. parallel reviewers → consolidator),
-        override _propose_review_chain() instead.
-        """
-        return []
-
-    def _get_creator_types(self) -> set[str]:
-        """Derive creator types from review pairs."""
-        return {p["creator"] for p in self.get_review_pairs()}
-
-    def _get_reviewer_types(self) -> set[str]:
-        """Derive reviewer types from review pairs."""
-        return {p["reviewer"] for p in self.get_review_pairs()}
-
-    def _get_pair_for_creator(self, creator_type: str) -> dict | None:
-        """Find the review pair for a given creator type."""
-        for pair in self.get_review_pairs():
-            if pair["creator"] == creator_type:
-                return pair
-        return None
-
-    def _get_pair_for_reviewer(self, reviewer_type: str) -> dict | None:
-        """Find the review pair for a given reviewer type."""
-        for pair in self.get_review_pairs():
-            if pair["reviewer"] == reviewer_type:
-                return pair
-        return None
-
-    def _propose_review_chain(self, agent: Agent, creator_task: AgentTask, workforce_types: set) -> dict | None:
-        """Build a review chain after a creator task completes.
-
-        Default implementation: simple 1:1 creator→reviewer from get_review_pairs().
-        Override for complex patterns (e.g., parallel reviewers → consolidator).
-        """
-        pair = self._get_pair_for_creator(creator_task.agent.agent_type)
-        if not pair:
-            return None
-        if pair["reviewer"] not in workforce_types:
-            logger.warning(
-                "REVIEW_SKIPPED dept=%s creator=%s — reviewer %s is not active, work passes without review",
-                agent.department.name,
-                creator_task.agent.agent_type,
-                pair["reviewer"],
-            )
-            return None
-
-        # Track review round and active chain key on sprint.department_state
-        sprint = creator_task.sprint
-        if not sprint:
-            logger.warning("REVIEW_NO_SPRINT task=%s — cannot track review state", creator_task.id)
-            return None
-
-        dept_id = str(agent.department_id)
-        dept_state = sprint.get_department_state(dept_id)
-        review_rounds = dept_state.get("review_rounds", {})
-        task_key = str(creator_task.id)
-        round_num = review_rounds.get(task_key, 0) + 1
-        review_rounds[task_key] = round_num
-        dept_state["review_rounds"] = review_rounds
-        dept_state["active_review_key"] = task_key  # so _evaluate_review_and_loop can find it
-        sprint.set_department_state(dept_id, dept_state)
-
-        if round_num > MAX_REVIEW_ROUNDS:
-            logger.warning(
-                "REVIEW_ESCALATION dept=%s rounds=%d max=%d task=%s",
-                agent.department.name,
-                round_num,
-                MAX_REVIEW_ROUNDS,
-                creator_task.exec_summary[:60],
-            )
-            return {
-                "exec_summary": f"Escalation: {round_num} review rounds on {creator_task.exec_summary}",
-                "tasks": [
-                    {
-                        "target_agent_type": pair["creator"],
-                        "command_name": pair["creator_fix_command"],
-                        "exec_summary": f"Human review needed: exceeded {MAX_REVIEW_ROUNDS} rounds — {creator_task.exec_summary}",
-                        "step_plan": f"This task has gone through {round_num} review rounds without reaching quality threshold ({EXCELLENCE_THRESHOLD}/10). A human needs to step in.",
-                        "depends_on_previous": False,
-                    }
-                ],
-            }
-
-        report_snippet = creator_task.report or ""
-        # Read dimensions from reviewer blueprint (single source of truth),
-        # falling back to pair definition for backwards compatibility
-        from agents.blueprints import get_blueprint
-
-        reviewer_bp = get_blueprint(pair["reviewer"], agent.department.department_type)
-        dims = reviewer_bp.review_dimensions or pair.get("dimensions", [])
-        dims_text = ", ".join(dims)
-
-        return {
-            "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary}",
-            "tasks": [
-                {
-                    "target_agent_type": pair["reviewer"],
-                    "command_name": pair["reviewer_command"],
-                    "exec_summary": f"Review (round {round_num}): {creator_task.exec_summary}",
-                    "step_plan": (
-                        f"Review round {round_num}. Quality threshold: {EXCELLENCE_THRESHOLD}/10.\n\n"
-                        f"Content to review:\n{report_snippet}\n\n"
-                        f"Score each dimension 1.0-10.0 (use decimals): {dims_text}.\n"
-                        f"Overall score = MINIMUM of all dimensions.\n\n"
-                        f"After your review, call the submit_verdict tool with your verdict and score."
-                    ),
-                    "depends_on_previous": False,
-                }
-            ],
-        }
 
     def _apply_quality_gate(self, agent: Agent, sprint, score: float, stage_key: str) -> tuple[bool, int, int]:
         """Apply universal quality scoring logic.
@@ -736,153 +744,6 @@ class LeaderBlueprint(BaseBlueprint):
         if sprint:
             sprint.set_department_state(dept_id, dept_state)
         return accepted, polish_count, round_num
-
-    def _evaluate_review_and_loop(self, agent: Agent, review_task: AgentTask, workforce_types: set) -> dict | None:
-        """After a reviewer completes, evaluate score and loop back if needed.
-
-        Universal logic using shared quality constants:
-        - score >= 9.5 → always accept (excellence)
-        - score >= 9.0 and polish_attempts >= 3 → accept (diminishing returns)
-        - otherwise → create fix task back to the original creator
-        """
-        if review_task.review_verdict and review_task.review_score is not None:
-            verdict = review_task.review_verdict
-            score = review_task.review_score
-        else:
-            report = review_task.report or ""
-            verdict, score = parse_review_verdict(report)
-            logger.warning(
-                "VERDICT_FROM_TEXT agent=%s task=%s — no structured verdict, parsed from report text",
-                review_task.agent.name,
-                review_task.id,
-            )
-
-        # Find the task key: use stored active_review_key (set when review chain starts)
-        sprint = review_task.sprint
-        dept_id = str(agent.department_id)
-        dept_state = sprint.get_department_state(dept_id) if sprint else {}
-        task_key = dept_state.get("active_review_key")
-        if not task_key:
-            review_rounds = dept_state.get("review_rounds", {})
-            for key in review_rounds:
-                task_key = key
-                break
-        if not task_key:
-            task_key = str(review_task.id)
-
-        accepted, polish_count, round_num = self._apply_quality_gate(agent, sprint, score, task_key)
-
-        if accepted:
-            return None  # Approved — fall through to standard proposal
-
-        # Find the original creator and route fix back
-        return self._propose_fix_task(agent, review_task, score, round_num, polish_count)
-
-    def _propose_fix_task(
-        self, agent: Agent, review_task: AgentTask, score: float, round_num: int, polish_count: int
-    ) -> dict | None:
-        """Create a fix task routed back to the original creator agent.
-
-        Override in subclasses for custom fix routing (e.g., writers room routes
-        specific flags to specific creative agents).
-        """
-        from agents.models import AgentTask as TaskModel
-
-        creator_types = self._get_creator_types()
-        if not creator_types:
-            return None
-
-        # Find the most recent completed creator task
-        recent_creator = (
-            TaskModel.objects.filter(
-                agent__department=agent.department,
-                agent__agent_type__in=list(creator_types),
-                status=TaskModel.Status.DONE,
-            )
-            .order_by("-completed_at")
-            .first()
-        )
-        if not recent_creator:
-            return None
-
-        creator_type = recent_creator.agent.agent_type
-        pair = self._get_pair_for_creator(creator_type)
-        fix_command = pair["creator_fix_command"] if pair else "implement"
-
-        review_snippet = review_task.report or ""
-        polish_msg = f" (polish {polish_count}/{MAX_POLISH_ATTEMPTS})" if score >= NEAR_EXCELLENCE_THRESHOLD else ""
-
-        return {
-            "exec_summary": f"Fix review issues (score {score}/10, need {EXCELLENCE_THRESHOLD}){polish_msg}: {recent_creator.exec_summary}",
-            "tasks": [
-                {
-                    "target_agent_type": creator_type,
-                    "command_name": fix_command,
-                    "exec_summary": f"Fix review issues (score {score}/10): {recent_creator.exec_summary}",
-                    "step_plan": (
-                        f"Current quality score: {score}/10. Target: {EXCELLENCE_THRESHOLD}/10.\n"
-                        f"Review round: {round_num}. Polish attempts: {polish_count}/{MAX_POLISH_ATTEMPTS}.\n\n"
-                        f"The reviewer has requested changes. Fix the issues below to reach "
-                        f"the quality threshold. Focus on the weakest dimensions first.\n\n"
-                        f"## Review Report\n{review_snippet}\n\n"
-                        f"Address every CHANGES_REQUESTED item. After fixing, the review chain "
-                        f"runs again automatically."
-                    ),
-                    "depends_on_previous": False,
-                }
-            ],
-        }
-
-    def _check_review_trigger(self, agent: Agent) -> dict | None:
-        """Check if the last completed task should trigger a review chain or loop.
-
-        Call this from generate_task_proposal() to handle review ping-pong.
-        Returns a task proposal dict, or None to proceed with normal proposal logic.
-        """
-        creator_types = self._get_creator_types()
-        reviewer_types = self._get_reviewer_types()
-        if not creator_types and not reviewer_types:
-            return None
-
-        from agents.models import AgentTask as TaskModel
-
-        workforce_types = set(
-            agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
-        )
-
-        last_completed = (
-            TaskModel.objects.filter(
-                agent__department=agent.department,
-                status=TaskModel.Status.DONE,
-            )
-            .order_by("-completed_at")
-            .select_related("agent", "created_by_agent")
-            .first()
-        )
-        if not last_completed:
-            return None
-
-        last_type = last_completed.agent.agent_type
-
-        # Creator just finished → propose review chain
-        if last_type in creator_types:
-            logger.info(
-                "REVIEW_TRIGGER dept=%s creator=%s task=%s",
-                agent.department.name,
-                last_type,
-                last_completed.exec_summary[:60],
-            )
-            review_proposal = self._propose_review_chain(agent, last_completed, workforce_types)
-            if review_proposal:
-                return review_proposal
-
-        # Reviewer just finished → evaluate and maybe loop back
-        if last_type in reviewer_types and last_completed.report:
-            loop_proposal = self._evaluate_review_and_loop(agent, last_completed, workforce_types)
-            if loop_proposal:
-                return loop_proposal
-
-        return None
 
     # ── Leader delegation (shared execute_task) ───────────────────────
 
@@ -994,12 +855,13 @@ Respond with JSON:
     "report": "Summary of what was decided and why"
 }}"""
 
-        task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=delegation_suffix)
 
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
             model=self.get_model(agent),
+            cache_context=cache_context,
         )
         task.token_usage = usage
         task.save(update_fields=["token_usage"])
@@ -1112,23 +974,8 @@ Respond with JSON:
         if not workforce.exists():
             return None
 
-        # Filter out orphaned reviewers whose creator pair is not active
-        active_types = set(workforce.values_list("agent_type", flat=True))
-        orphaned_reviewers = set()
-        for pair in self.get_review_pairs():
-            if pair["creator"] not in active_types and pair["reviewer"] in active_types:
-                orphaned_reviewers.add(pair["reviewer"])
-                logger.info(
-                    "ORPHANED_REVIEWER dept=%s reviewer=%s — creator %s is not active, excluding from task proposals",
-                    department.name,
-                    pair["reviewer"],
-                    pair["creator"],
-                )
-
         agents_desc = []
         for a in workforce:
-            if a.agent_type in orphaned_reviewers:
-                continue
             bp = a.get_blueprint()
             cmds = bp.get_commands() if bp else []
             cmd_names = [c["name"] for c in cmds]
@@ -1164,11 +1011,7 @@ Respond with JSON:
 
         docs = list(Document.objects.filter(department=department).values_list("title", flat=True)[:20])
 
-        source_context = ""
-        for src in sprint.sources.all()[:5]:
-            text = src.summary or src.extracted_text or src.raw_content or ""
-            if text:
-                source_context += f"\n- {src.original_filename or 'Attached file'}: {text}"
+        source_context = self._format_sprint_sources(sprint, privileged=True)
 
         locale = agent.get_config_value("locale") or "en"
 

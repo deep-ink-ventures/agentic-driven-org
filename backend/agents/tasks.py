@@ -4,6 +4,8 @@ from celery import shared_task
 from django.db import models
 from django.utils import timezone
 
+from agents.ai.claude_client import APILimitReached
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,13 +117,9 @@ def _mark_task_failed(task, error_message: str):
     from django.db import close_old_connections
 
     def _do_save():
-        task.status = task.__class__.Status.FAILED
         task.error_message = error_message
-        task.completed_at = timezone.now()
-        task.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
-        _broadcast_task(task)
-        _fail_dependents(task)
-        _trigger_next_sprint_work(task)
+        task.save(update_fields=["error_message", "updated_at"])
+        _schedule_retry(task)
 
     try:
         _do_save()
@@ -169,20 +167,121 @@ def execute_agent_task(self, task_id: str):
         blueprint = task.agent.get_blueprint()
         report = blueprint.execute_task(task.agent, task)
 
+        # Guard: task may have been deleted by a sprint reset during execution.
+        # update_fields does UPDATE … WHERE id=<uuid>, returning 0 rows if gone.
         task.status = AgentTask.Status.DONE
         task.report = report
         task.completed_at = timezone.now()
-        task.save(update_fields=["status", "report", "completed_at", "updated_at"])
+        rows = AgentTask.objects.filter(id=task_id, status=AgentTask.Status.PROCESSING).update(
+            status=AgentTask.Status.DONE,
+            report=report,
+            completed_at=task.completed_at,
+        )
+        if rows == 0:
+            logger.warning("Task %s vanished during execution (sprint reset?) — discarding result", task_id)
+            return
 
+        task.refresh_from_db()
         _broadcast_task(task)
         _unblock_dependents(task)
         _trigger_next_sprint_work(task)
 
         logger.info("Task %s completed: %s", task_id, task.exec_summary[:80])
 
+    except APILimitReached as e:
+        logger.warning("Task %s paused — API limit reached: %s", task_id, task.exec_summary[:80])
+        if not AgentTask.objects.filter(id=task_id).exists():
+            logger.warning("Task %s vanished — skipping pause", task_id)
+            return
+        _pause_sprint_on_api_limit(task, str(e)[:500])
+
     except Exception as e:
         logger.exception("Task %s failed: %s", task_id, e)
+        if not AgentTask.objects.filter(id=task_id).exists():
+            logger.warning("Task %s vanished — skipping failure handling", task_id)
+            return
         _mark_task_failed(task, str(e)[:500])
+
+
+def _pause_sprint_on_api_limit(task, error_message: str):
+    """Pause the sprint when hitting a hard API usage limit. Task stays queued for later."""
+    from agents.models import AgentTask
+    from projects.models import Sprint
+
+    task.status = AgentTask.Status.QUEUED  # Keep queued — will resume when limit lifts
+    task.error_message = error_message
+    task.save(update_fields=["status", "error_message", "updated_at"])
+    _broadcast_task(task)
+
+    # Pause the sprint so no new work is proposed
+    if task.sprint and task.sprint.status == Sprint.Status.RUNNING:
+        task.sprint.status = Sprint.Status.PAUSED
+        task.sprint.completion_summary = f"Paused: API usage limit reached. {error_message[:200]}"
+        task.sprint.save(update_fields=["status", "completion_summary", "updated_at"])
+        logger.warning("Sprint %s paused due to API limit: %s", task.sprint.id, error_message[:100])
+
+
+def _pause_sprint_on_api_limit_no_task(sprint, error_message: str):
+    """Pause a sprint on API limit when there's no task to update (e.g. leader proposal phase)."""
+    from projects.models import Sprint
+
+    if sprint.status != Sprint.Status.RUNNING:
+        return
+    sprint.status = Sprint.Status.PAUSED
+    sprint.completion_summary = f"Paused: API usage limit reached. {error_message[:200]}"
+    sprint.save(update_fields=["status", "completion_summary", "updated_at"])
+
+    from projects.views.sprint_view import _broadcast_sprint
+
+    _broadcast_sprint(sprint, "sprint.updated")
+    logger.warning("Sprint %s paused due to API limit (leader proposal): %s", sprint.id, error_message[:100])
+
+
+MAX_TASK_RETRIES = 3
+RETRY_BACKOFF_SECONDS = [60, 300, 900]  # 1min, 5min, 15min
+
+
+def _schedule_retry(task):
+    """Schedule a retry with exponential backoff. After max retries, mark as truly failed."""
+    from agents.models import AgentTask
+
+    retry_count = task.retry_count or 0
+
+    if retry_count >= MAX_TASK_RETRIES:
+        logger.warning(
+            "Task %s failed %d times — giving up: %s",
+            task.id,
+            retry_count,
+            task.exec_summary[:80],
+        )
+        if not AgentTask.objects.filter(id=task.id).exists():
+            logger.warning("Task %s vanished (sprint reset?) — skipping final failure", task.id)
+            return
+        task.status = AgentTask.Status.FAILED
+        task.completed_at = timezone.now()
+        task.save(update_fields=["status", "completed_at", "updated_at"])
+        _broadcast_task(task)
+        _fail_dependents(task)
+        _trigger_next_sprint_work(task)
+        return
+
+    delay = RETRY_BACKOFF_SECONDS[min(retry_count, len(RETRY_BACKOFF_SECONDS) - 1)]
+
+    # Re-queue for retry
+    task.status = AgentTask.Status.QUEUED
+    task.completed_at = None
+    task.retry_count = retry_count + 1
+    task.save(update_fields=["status", "completed_at", "retry_count", "updated_at"])
+    _broadcast_task(task)
+
+    execute_agent_task.apply_async(args=[str(task.id)], countdown=delay)
+    logger.info(
+        "Retry #%d for task %s in %ds: %s",
+        task.retry_count,
+        task.id,
+        delay,
+        task.exec_summary[:80],
+    )
 
 
 def _fail_dependents(failed_task):
@@ -271,10 +370,12 @@ def _apply_on_dispatch(agent, on_dispatch, sprint_id=None):
 
 
 @shared_task
-def recover_stuck_tasks():
+def recover_stuck_tasks(on_boot=False):
     """
-    Self-healing: find AgentTask records stuck in processing for >1 hour.
-    Marks them failed so users can retry via the UI.
+    Self-healing: find AgentTask records stuck in processing.
+    - Normal mode: >1 hour cutoff (safe for running workers)
+    - on_boot: no cutoff (worker just started, nothing is legitimately running)
+    Marks them failed so the sprint chain can resume.
     Runs every 15 minutes via celery beat.
     """
     from datetime import timedelta
@@ -282,17 +383,23 @@ def recover_stuck_tasks():
     from agents.models import AgentTask
 
     now = timezone.now()
-    cutoff = now - timedelta(hours=1)
 
-    stuck = (
-        AgentTask.objects.filter(
+    if on_boot:
+        # On boot, ALL processing tasks are stuck (the worker just died and restarted)
+        stuck = AgentTask.objects.filter(
             status=AgentTask.Status.PROCESSING,
+        ).select_related("agent", "agent__department__project", "created_by_agent", "blocked_by")
+    else:
+        cutoff = now - timedelta(hours=1)
+        stuck = (
+            AgentTask.objects.filter(
+                status=AgentTask.Status.PROCESSING,
+            )
+            .filter(
+                models.Q(started_at__isnull=True) | models.Q(started_at__lt=cutoff),
+            )
+            .select_related("agent", "agent__department__project", "created_by_agent", "blocked_by")
         )
-        .filter(
-            models.Q(started_at__isnull=True) | models.Q(started_at__lt=cutoff),
-        )
-        .select_related("agent", "agent__department__project", "created_by_agent", "blocked_by")
-    )
 
     for task in stuck:
         logger.warning("Recovering stuck task %s (%s): %s", task.id, task.agent.name, task.exec_summary[:80])
@@ -303,6 +410,50 @@ def recover_stuck_tasks():
         _broadcast_task(task)
         _fail_dependents(task)
         _trigger_next_sprint_work(task)
+
+
+@shared_task
+def resume_idle_sprints():
+    """
+    Resume stalled sprints on boot:
+    1. Re-dispatch orphaned QUEUED tasks (Celery message lost on restart)
+    2. Kick leaders for departments with no tasks at all
+    """
+    from agents.models import AgentTask
+    from projects.models import Sprint
+
+    running_sprints = Sprint.objects.filter(status=Sprint.Status.RUNNING).prefetch_related("departments")
+
+    for sprint in running_sprints:
+        for department in sprint.departments.all():
+            # Skip if already has active work
+            has_processing = AgentTask.objects.filter(
+                agent__department=department,
+                sprint=sprint,
+                status=AgentTask.Status.PROCESSING,
+            ).exists()
+            if has_processing:
+                continue
+
+            # Re-dispatch any orphaned queued tasks
+            queued_tasks = list(
+                AgentTask.objects.filter(
+                    agent__department=department,
+                    sprint=sprint,
+                    status=AgentTask.Status.QUEUED,
+                )
+            )
+            if queued_tasks:
+                for task in queued_tasks:
+                    execute_agent_task.delay(str(task.id))
+                    logger.info("Re-dispatched orphaned queued task %s: %s", task.id, task.exec_summary[:80])
+                continue
+
+            # No active work at all — kick the leader
+            leader = department.agents.filter(is_leader=True, status="active").first()
+            if leader:
+                create_next_leader_task.delay(str(leader.id))
+                logger.info("Resume idle sprint: triggering leader %s for sprint %s", leader.name, sprint.id)
 
 
 def _trigger_next_sprint_work(completed_task):
@@ -511,6 +662,17 @@ def create_next_leader_task(leader_agent_id: str):
 
             logger.info("Leader %s proposed %d task(s): %s", agent.name, created, proposal.get("exec_summary", "")[:80])
             return
+
+    except APILimitReached as e:
+        logger.warning("Leader %s proposal paused — API limit: %s", agent.name, str(e)[:100])
+        from projects.models import Sprint
+
+        running_sprint = Sprint.objects.filter(
+            departments=agent.department,
+            status=Sprint.Status.RUNNING,
+        ).first()
+        if running_sprint:
+            _pause_sprint_on_api_limit_no_task(running_sprint, str(e)[:500])
 
     except Exception as e:
         logger.exception("Failed to create next leader task for %s: %s", agent.name, e)

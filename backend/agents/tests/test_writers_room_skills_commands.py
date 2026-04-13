@@ -32,11 +32,11 @@ class TestStoryArchitectSkillsAndCommands:
         for line in lines:
             assert line.startswith("- **")
 
-    def test_command_metadata_preserved(self):
+    def test_commands_use_blueprint_default(self):
         bp = get_blueprint("story_architect", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["write_structure"]["model"] == "claude-opus-4-6"
-        assert cmds["fix_structure"]["model"] == "claude-opus-4-6"
+        assert cmds["write_structure"].get("model") is None
+        assert cmds["fix_structure"].get("model") is None
 
 
 class TestDialogWriterSkillsAndCommands:
@@ -66,11 +66,11 @@ class TestDialogWriterSkillsAndCommands:
         for line in lines:
             assert line.startswith("- **")
 
-    def test_command_metadata_preserved(self):
+    def test_commands_use_blueprint_default(self):
         bp = get_blueprint("dialog_writer", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["write_content"]["model"] == "claude-opus-4-6"
-        assert cmds["fix_content"]["model"] == "claude-opus-4-6"
+        assert cmds["write_content"].get("model") is None
+        assert cmds["fix_content"].get("model") is None
 
 
 class TestCharacterDesignerSkillsAndCommands:

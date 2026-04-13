@@ -11,7 +11,6 @@ from agents.blueprints.base import command
         "full draft with complete scenes, dialogue blocks, and narrative prose. Builds "
         "on the Story Architect's structure and Character Designer's ensemble."
     ),
-    model="claude-opus-4-6",
 )
 def write_content(self, agent, **kwargs):
     pass  # Dispatched via execute_task

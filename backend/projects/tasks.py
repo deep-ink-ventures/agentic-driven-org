@@ -3,6 +3,8 @@ import logging
 
 from celery import shared_task
 
+from agents.ai.claude_client import APILimitReached
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,6 +83,69 @@ def summarize_source(self, source_id: str):
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e) from e
         logger.exception("Failed to summarize source %s", source_id)
+
+
+@shared_task(bind=True, max_retries=1, default_retry_delay=5)
+def classify_source_priority(self, source_id: str):
+    """Classify a source's priority using a cheap LLM call.
+
+    Reads the filename, source type, and first ~500 chars of content to determine:
+    - essential: canonical reference material (bibles, style guides, specs, contracts)
+    - important: primary creative work (deliverables, drafts, treatments)
+    - regular: research, analysis, market data, background material
+    - minor: meta-commentary, process notes, old critiques, changelogs
+    """
+    from agents.ai.claude_client import call_claude
+    from projects.models import Source
+
+    try:
+        source = Source.objects.get(id=source_id)
+    except Source.DoesNotExist:
+        return
+
+    text = source.extracted_text or source.raw_content or source.summary or ""
+    preview = text[:800] if text else ""
+    filename = source.original_filename or ""
+
+    if not preview and not filename:
+        return  # nothing to classify
+
+    try:
+        response, _usage = call_claude(
+            system_prompt=(
+                "You classify documents for a creative production pipeline. "
+                "Respond with EXACTLY one word: essential, important, regular, or minor.\n\n"
+                "- essential: canonical reference material that ALL team members must see in full. "
+                "Examples: series bibles, show bibles, style guides, brand guidelines, production specs, "
+                "contracts, regulatory documents, character sheets, world-building bibles.\n"
+                "- important: primary creative work that lead writers and reviewers need in full. "
+                "Examples: deliverables, drafts, treatments, pitches, scripts, manuscripts.\n"
+                "- regular: research and analysis useful as context summaries for the whole team. "
+                "Examples: market research, competitive analysis, audience reports, comp analyses.\n"
+                "- minor: process artifacts useful only as background for lead writers. "
+                "Examples: review critiques, revision histories, feedback logs, changelogs, meeting notes."
+            ),
+            user_message=f"Filename: {filename}\nSource type: {source.source_type}\n\nContent preview:\n{preview}",
+            model="claude-haiku-4-5",
+            max_tokens=10,
+        )
+
+        priority = response.strip().lower()
+        if priority in ("essential", "important", "regular", "minor"):
+            source.priority = priority
+            source.save(update_fields=["priority"])
+            logger.info(
+                "Classified source %s (%s) as %s",
+                source.original_filename or source.id,
+                source.source_type,
+                priority,
+            )
+        else:
+            logger.warning("Unexpected priority response for source %s: %s", source.id, response)
+    except Exception as e:
+        logger.warning("classify_source_priority failed for %s: %s", source_id, e)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e) from e
 
 
 def get_sources_context(project) -> str:
@@ -281,6 +346,28 @@ def bootstrap_project(self, proposal_id: str):
             project.id, proposal.id, "processing", phase="Validating proposal", progress=98, events=events[:]
         )
 
+        # Detect refusal: if summary indicates Claude refused, surface it clearly (no retry)
+        summary = proposal_data.get("summary", "")
+        departments = proposal_data.get("departments", [])
+        refusal_signals = ["cannot", "unable to", "not appropriate", "decline", "ethical", "harmful"]
+        if not departments and any(signal in summary.lower() for signal in refusal_signals):
+            proposal.status = BootstrapProposal.Status.FAILED
+            proposal.error_message = f"Claude refused: {summary}"
+            proposal.save(update_fields=["status", "error_message", "updated_at"])
+            _broadcast_bootstrap(project.id, proposal.id, "failed", f"Claude refused: {summary[:200]}")
+            return
+
+        # If no departments proposed, fall back to Problem Solver
+        if not departments:
+            logger.info("No departments proposed — falling back to problem_solver for project %s", project.name)
+            departments = [
+                {
+                    "department_type": "problem_solver",
+                    "agents": [],
+                }
+            ]
+            proposal_data["departments"] = departments
+
         # Ensure ALL workforce agents are included for each department
         # (Claude may cherry-pick despite instructions — enforce in code)
         for dept_data in proposal_data.get("departments", []):
@@ -312,6 +399,13 @@ def bootstrap_project(self, proposal_id: str):
 
         logger.info("Bootstrap proposal generated for project %s", project.name)
         _broadcast_bootstrap(project.id, proposal.id, "proposed")
+
+    except APILimitReached as e:
+        logger.warning("Bootstrap paused for project %s — API limit reached", project.name)
+        proposal.status = BootstrapProposal.Status.FAILED
+        proposal.error_message = f"API limit reached: {e}"[:1000]
+        proposal.save(update_fields=["status", "error_message", "updated_at"])
+        _broadcast_bootstrap(project.id, proposal.id, "failed", "API usage limit reached — retry later")
 
     except Exception as e:
         logger.warning("bootstrap_project attempt %d failed: %s", self.request.retries + 1, e)
@@ -350,10 +444,10 @@ def recover_stuck_proposals():
         logger.info("Recovering pending proposal %s for project %s", p.id, p.project.name)
         bootstrap_project.delay(str(p.id))
 
-    # Processing proposals stuck for >5min (task crashed)
+    # Processing proposals stuck for >15min (task crashed or worker died)
     stuck = BootstrapProposal.objects.filter(
         status=BootstrapProposal.Status.PROCESSING,
-        updated_at__lt=now - timedelta(minutes=5),
+        updated_at__lt=now - timedelta(minutes=15),
     )
     for p in stuck:
         logger.warning("Recovering stuck proposal %s for project %s", p.id, p.project.name)

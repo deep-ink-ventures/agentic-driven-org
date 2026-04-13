@@ -68,7 +68,7 @@ class TestSprintNotesInContext:
 
         bp = ConcreteWorkforceBlueprint()
         bp._system_prompt = "Test"
-        msg = bp.build_task_message(agent, task)
+        _, msg = bp.build_task_message(agent, task)
 
         assert "Change the name to Kaya" in msg
         assert "Make the ending ambiguous" in msg
@@ -77,7 +77,7 @@ class TestSprintNotesInContext:
     def test_no_notes_section_when_empty(self, agent, task, sprint):
         bp = ConcreteWorkforceBlueprint()
         bp._system_prompt = "Test"
-        msg = bp.build_task_message(agent, task)
+        _, msg = bp.build_task_message(agent, task)
 
         assert "User Notes" not in msg
 
@@ -96,7 +96,7 @@ class TestSprintNotesInContext:
 
         bp = ConcreteWorkforceBlueprint()
         bp._system_prompt = "Test"
-        msg = bp.build_task_message(agent, task)
+        _, msg = bp.build_task_message(agent, task)
 
         assert "reference.md" in msg
         assert "Reference doc content" in msg

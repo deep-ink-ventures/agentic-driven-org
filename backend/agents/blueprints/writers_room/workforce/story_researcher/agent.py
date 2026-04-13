@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomCreativeBlueprint
 from agents.blueprints.writers_room.workforce.story_researcher.commands import (
     fact_check_narrative,
     profile_voice,
@@ -18,7 +18,8 @@ from agents.blueprints.writers_room.workforce.story_researcher.commands import (
 logger = logging.getLogger(__name__)
 
 
-class StoryResearcherBlueprint(WorkforceBlueprint):
+class StoryResearcherBlueprint(WritersRoomCreativeBlueprint):
+    default_model = "claude-haiku-4-5"
     name = "Story Researcher"
     slug = "story_researcher"
     description = "Researches market trends, comps, platform appetites, audience demographics, and cultural zeitgeist to inform creative decisions"
@@ -128,6 +129,13 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             return self._execute_research_setting(agent, task)
         if task.command_name == "fact_check_narrative":
             return self._execute_fact_check(agent, task)
+
+        # On revision rounds (step_plan contains REVISION ROUND), use the base
+        # class which respects the step_plan's targeted improvement instructions.
+        # Only the first round uses the full research brief template.
+        if task.step_plan and "REVISION ROUND" in task.step_plan:
+            return super().execute_task(agent, task)
+
         return self._execute_research(agent, task)
 
     def _get_voice_constraint(self, agent: Agent) -> str:
@@ -212,10 +220,11 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "research"),
             max_tokens=16384,
         )
@@ -245,10 +254,11 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "revise_research"),
             max_tokens=16384,
         )
@@ -338,10 +348,11 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             "Actual quotes. Every pattern claim must have evidence."
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=voice_system,
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "profile_voice"),
             max_tokens=16384,
         )
@@ -416,10 +427,11 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "research_setting"),
             max_tokens=16384,
         )
@@ -469,10 +481,11 @@ class StoryResearcherBlueprint(WorkforceBlueprint):
             "most critical fixes needed, and areas where additional research is recommended."
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "fact_check_narrative"),
             max_tokens=16384,
         )

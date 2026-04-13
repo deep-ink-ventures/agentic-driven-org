@@ -223,20 +223,22 @@ export function SprintInput({
               );
             })}
           </div>
-          <button
-            onClick={() => setShowSprintPicker(true)}
-            className="shrink-0 p-1.5 text-text-secondary hover:text-accent-violet transition-colors"
-            title="Progress from sprint"
-          >
-            <History className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !text.trim() || selectedDeptIds.size === 0}
-            className="shrink-0 px-4 py-1.5 rounded-lg text-xs font-semibold bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50 transition-colors"
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Start Sprint"}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowSprintPicker(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary bg-bg-input border border-border hover:border-accent-violet/30 hover:text-accent-violet transition-colors flex items-center gap-1.5"
+            >
+              <History className="h-3 w-3" />
+              Progress from sprint
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !text.trim() || selectedDeptIds.size === 0}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-accent-gold text-bg-primary hover:bg-accent-gold-hover disabled:opacity-50 transition-colors"
+            >
+              {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Start Sprint"}
+            </button>
+          </div>
         </div>
       </div>
       <SprintPickerDialog

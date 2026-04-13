@@ -28,7 +28,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/ui/markdown";
 
 function slugifyName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -168,6 +168,10 @@ export default function ProjectDetailPage() {
       }
     }
     if (data.type === "sprint.created" || data.type === "sprint.updated") {
+      const sprint = data.sprint as Sprint | undefined;
+      if (sprint?.status === "paused" && sprint?.completion_summary) {
+        console.warn(`[Sprint] paused: ${sprint.completion_summary}`);
+      }
       const pid = projectIdRef.current;
       if (pid) {
         api.listSprints(pid, { status: "running,paused" }).then(setSprints).catch(() => {});
@@ -368,7 +372,7 @@ export default function ProjectDetailPage() {
                   title="Click to edit"
                 >
                   {project!.goal ? (
-                    <ReactMarkdown>{project!.goal}</ReactMarkdown>
+                    <Markdown>{project!.goal}</Markdown>
                   ) : (
                     <p className="text-text-secondary italic">No project goal set. Click to add one.</p>
                   )}

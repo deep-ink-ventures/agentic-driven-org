@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.models import Agent, AgentTask
 
-from agents.blueprints.base import WorkforceBlueprint
+from agents.blueprints.writers_room.workforce.base import WritersRoomCreativeBlueprint
 from agents.blueprints.writers_room.workforce.dialog_writer.commands import (
     fix_content,
     rewrite_for_subtext,
@@ -17,7 +17,7 @@ from agents.blueprints.writers_room.workforce.dialog_writer.commands import (
 logger = logging.getLogger(__name__)
 
 
-class DialogWriterBlueprint(WorkforceBlueprint):
+class DialogWriterBlueprint(WritersRoomCreativeBlueprint):
     name = "Dialog Writer"
     slug = "dialog_writer"
     description = "Writes the actual content -- dialogue, prose, scenes -- for every stage and format"
@@ -209,6 +209,8 @@ class DialogWriterBlueprint(WorkforceBlueprint):
         return ""
 
     def execute_task(self, agent: Agent, task: AgentTask) -> str:
+        if task.step_plan and "REVISION ROUND" in task.step_plan:
+            return super().execute_task(agent, task)
         if task.command_name == "fix_content":
             return self._execute_fix_content(agent, task)
         if task.command_name == "write_scene_dialogue":
@@ -257,10 +259,11 @@ class DialogWriterBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "write_content"),
             max_tokens=16384,
         )
@@ -315,10 +318,11 @@ class DialogWriterBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "fix_content"),
             max_tokens=16384,
         )
@@ -397,10 +401,11 @@ class DialogWriterBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "write_scene_dialogue"),
             max_tokens=16384,
         )
@@ -476,10 +481,11 @@ class DialogWriterBlueprint(WorkforceBlueprint):
 
         suffix += self._get_voice_constraint(agent)
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "rewrite_for_subtext"),
             max_tokens=16384,
         )

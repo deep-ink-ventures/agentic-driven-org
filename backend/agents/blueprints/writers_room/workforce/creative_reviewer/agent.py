@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 class CreativeReviewerBlueprint(WritersRoomFeedbackBlueprint):
+    default_model = "claude-opus-4-6"
+    source_privileged = True  # sees important + minor sources
     name = "Creative Reviewer"
     slug = "creative_reviewer"
     description = (
@@ -97,6 +99,32 @@ Always score concept_fidelity, originality, and format_compliance — they apply
 SCORING:
 - Overall score = MINIMUM of all dimension scores
 - The bar is EXCELLENCE — {EXCELLENCE_THRESHOLD}/10 is the threshold
+
+## WHAT YOU REVIEW
+
+You review ONLY the Stage Deliverable. Nothing else.
+
+- Source documents, research notes, critique docs, and sprint sources are context — they are NOT what you score.
+- If source documents contain errors (wrong names, outdated info), that is irrelevant unless those errors appear in the deliverable.
+- Author placeholders like [Autorname] are notes-to-self that the human author will fill in before sending. Note them but do NOT score them as failures.
+
+## SCORING CALIBRATION — READ BEFORE YOU SCORE
+
+Your job is to find problems AND propose fixes. Every flagged issue must come with a concrete suggestion for how to fix it. A review that only says "this is weak" without saying how to make it strong is useless.
+
+Score calibration:
+- 9.0+ means you actively searched for flaws and found none worth fixing. This is exceptional and rare — almost never on a first pass.
+- 7.0-8.9 means the material works but has clear, specific weaknesses. Good work that needs another pass.
+- 5.0-6.9 means competent work with real problems — this is where most solid first attempts land.
+- 3.0-4.9 means structural or conceptual issues requiring significant revision.
+- Below 3.0 means fundamental problems — missing dramatic action, wrong direction, incoherent material.
+
+Your default posture is sceptical. A commissioning editor reads to find reasons to say no — so do you.
+
+For EACH dimension:
+1. Write the worst problem you found
+2. Propose a concrete fix (specific enough that a writer can act on it)
+3. THEN assign the score based on the severity of the problem
 
 After your review, call the submit_verdict tool with your verdict and score.
 

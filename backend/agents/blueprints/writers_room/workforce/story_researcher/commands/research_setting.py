@@ -11,7 +11,6 @@ from agents.blueprints.base import command
         "and real figures for fictionalization, cultural texture and generational dynamics, "
         "and scene-ready details for the writing team"
     ),
-    model="claude-opus-4-6",
 )
 def research_setting(self, agent, **kwargs):
     pass  # Dispatched via execute_task

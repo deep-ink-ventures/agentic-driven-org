@@ -452,10 +452,11 @@ would produce visually identical results from your spec. Ambiguity is failure.""
             "- Propose new tokens where needed, following the project's naming convention"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "design_component"),
             max_tokens=16384,
         )
@@ -544,10 +545,11 @@ would produce visually identical results from your spec. Ambiguity is failure.""
             "- The complete visual hierarchy, readable as a blueprint"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "design_page"),
             max_tokens=16384,
         )
@@ -651,10 +653,11 @@ would produce visually identical results from your spec. Ambiguity is failure.""
             "- Figma-to-code mapping notes if applicable"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "design_system"),
             max_tokens=16384,
         )
@@ -739,10 +742,11 @@ would produce visually identical results from your spec. Ambiguity is failure.""
             "- Overall assessment: Ship it / Needs work / Needs redesign"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "critique"),
             max_tokens=16384,
         )
@@ -829,10 +833,11 @@ would produce visually identical results from your spec. Ambiguity is failure.""
             "- **Estimated effort**: quick wins (< 5 min each) vs. larger refactors"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "polish"),
             max_tokens=16384,
         )

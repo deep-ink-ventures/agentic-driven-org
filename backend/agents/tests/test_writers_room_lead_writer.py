@@ -51,11 +51,12 @@ class TestLeadWriterBlueprint:
         cmds = {c["name"] for c in bp.get_commands()}
         assert "write_first_draft" in cmds
 
-    def test_all_commands_use_sonnet(self):
+    def test_commands_use_blueprint_default_model(self):
         bp = get_blueprint("lead_writer", "writers_room")
+        assert bp.default_model == "claude-opus-4-6"
         cmds = {c["name"]: c for c in bp.get_commands()}
         for name in ["write_pitch", "write_expose", "write_treatment", "write_concept", "write_first_draft"]:
-            assert cmds[name]["model"] == "claude-opus-4-6", f"{name} should use claude-opus-4-6"
+            assert cmds[name].get("model") is None, f"{name} should not override model"
 
     def test_system_prompt_contains_key_principles(self):
         bp = get_blueprint("lead_writer", "writers_room")
@@ -273,12 +274,6 @@ class TestStateMachine:
         assert proposal is not None
         agent_types = [t["target_agent_type"] for t in proposal["tasks"]]
         assert any(a in agent_types for a in ["market_analyst", "structure_analyst", "character_analyst"])
-
-    @pytest.mark.django_db
-    def test_no_review_pairs(self, leader_blueprint):
-        """Writers room uses custom QA flows, not base class review pairs."""
-        pairs = leader_blueprint.get_review_pairs()
-        assert len(pairs) == 0
 
 
 class TestDocumentCreation:
@@ -627,6 +622,66 @@ class TestRevisionAwareDocCreation:
         assert revised == "Completely new prose content."
         assert applied is False
 
+    @pytest.mark.django_db
+    def test_code_fenced_revision_json_is_applied(self, leader_blueprint, mock_leader_agent):
+        """LLMs often wrap JSON in ```json ... ``` — revisions must still apply."""
+        import json
+
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="pitch",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "Original pitch. Keep this."},
+        )
+        revision_json = json.dumps(
+            {
+                "revisions": [{"type": "replace", "old_text": "Original pitch.", "new_text": "Revised pitch."}],
+                "preserved": "Keep this.",
+            }
+        )
+        code_fenced = f"```json\n{revision_json}\n```"
+        revised, applied = leader_blueprint._apply_revision_or_replace(
+            agent=mock_leader_agent,
+            doc_type="stage_deliverable",
+            new_content=code_fenced,
+            stage="pitch",
+        )
+        assert applied is True
+        assert "Revised pitch." in revised
+        assert "Keep this." in revised
+        # Must NOT contain raw JSON or code fences
+        assert '"revisions"' not in revised
+        assert "```" not in revised
+
+    @pytest.mark.django_db
+    def test_revision_json_without_existing_doc_does_not_store_diff(self, leader_blueprint, mock_leader_agent):
+        """If revision JSON is received but no existing doc exists, never store the diff."""
+        import json
+
+        # No existing deliverable created — simulate missing doc
+        revision_json = json.dumps(
+            {
+                "revisions": [{"type": "replace", "old_text": "something", "new_text": "else"}],
+            }
+        )
+        revised, applied = leader_blueprint._apply_revision_or_replace(
+            agent=mock_leader_agent,
+            doc_type="stage_deliverable",
+            new_content=revision_json,
+            stage="pitch",
+        )
+        assert applied is False
+        # Must NOT contain raw revision JSON
+        assert '"revisions"' not in revised
+        assert "old_text" not in revised
+
+    def test_strip_code_fences(self, leader_blueprint):
+        assert leader_blueprint._strip_code_fences('```json\n{"a": 1}\n```') == '{"a": 1}'
+        assert leader_blueprint._strip_code_fences('```\n{"a": 1}\n```') == '{"a": 1}'
+        assert leader_blueprint._strip_code_fences('{"a": 1}') == '{"a": 1}'
+        assert leader_blueprint._strip_code_fences('  ```json\n{"a": 1}\n```  ') == '{"a": 1}'
+
 
 def _make_mock_sprint(dept_state=None):
     """Create a mock sprint with get/set_department_state."""
@@ -733,7 +788,7 @@ class TestRevisionInstructions:
             result = leader_blueprint._propose_creative_tasks(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION ROUND" in step_plan
-        assert "Critique" in step_plan
+        assert "critique" in step_plan.lower()
 
 
 class TestSprintOutput:
@@ -841,8 +896,8 @@ class TestLeadWriterRevisionPrompt:
         result = bp._propose_lead_writer_task(agent, "expose", config, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
 
-        assert "stage research document" in step_plan
-        assert "creative decision is yours" in step_plan
+        assert "Research & Notes" in step_plan
+        assert "creative agents" in step_plan.lower()
 
 
 class TestUpdateSprintOutput:

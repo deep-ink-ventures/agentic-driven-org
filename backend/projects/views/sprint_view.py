@@ -48,12 +48,17 @@ class SprintListCreateView(generics.ListCreateAPIView):
         )
         sprint.departments.set(valid_dept_ids)
 
+        from projects.tasks import classify_source_priority
+
         source_ids = serializer.validated_data.get("source_ids", [])
         if source_ids:
             Source.objects.filter(
                 id__in=source_ids,
                 project_id=self.kwargs["project_id"],
             ).update(sprint=sprint)
+            # Classify priority for user-uploaded sources
+            for sid in source_ids:
+                classify_source_priority.delay(str(sid))
 
         # Convert outputs from referenced done sprints into Sources
         progress_sprint_ids = serializer.validated_data.get("progress_from_sprint_ids", [])
@@ -80,8 +85,10 @@ class SprintListCreateView(generics.ListCreateAPIView):
                 output_type__in=[Output.OutputType.MARKDOWN, Output.OutputType.PLAINTEXT],
             ).exclude(content="")
 
+            from projects.tasks import summarize_source
+
             for output in outputs:
-                Source.objects.create(
+                src = Source.objects.create(
                     project_id=self.kwargs["project_id"],
                     source_type=Source.SourceType.TEXT,
                     original_filename=f"{output.title}.md",
@@ -91,6 +98,8 @@ class SprintListCreateView(generics.ListCreateAPIView):
                     user=self.request.user,
                     sprint=sprint,
                 )
+                summarize_source.delay(str(src.id))
+                classify_source_priority.delay(str(src.id))
 
         _broadcast_sprint(sprint, "sprint.created")
 
@@ -186,8 +195,6 @@ class SprintResetView(generics.GenericAPIView):
         from rest_framework.response import Response
 
         sprint = self.get_object()
-        if sprint.status != Sprint.Status.DONE:
-            return Response({"error": "Only done sprints can be reset."}, status=400)
 
         from agents.models import AgentTask, ClonedAgent
         from agents.tasks import create_next_leader_task

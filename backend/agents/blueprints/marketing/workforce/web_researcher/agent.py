@@ -86,10 +86,11 @@ Return structured JSON with classification and source metadata:
     ]
 }}"""
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model="claude-haiku-4-5",
             max_tokens=8192,
         )
@@ -160,10 +161,11 @@ Return JSON:
     "report": "Executive summary of the analysis with key takeaways and recommended actions"
 }}"""
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model="claude-opus-4-6",
             max_tokens=16384,
         )

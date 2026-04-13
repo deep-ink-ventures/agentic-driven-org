@@ -39,7 +39,7 @@ class TestWritersRoomFeedbackBlueprint:
             ctx = bp.get_context(MagicMock())
 
         assert "long dialogue" not in ctx["sibling_agents"]
-        assert "not available" in ctx["sibling_agents"].lower()
+        assert ctx["sibling_agents"] == ""
 
     def test_department_documents_preserved(self):
         from agents.blueprints.writers_room.workforce.base import WritersRoomFeedbackBlueprint

@@ -11,7 +11,6 @@ from agents.blueprints.base import command
         "season one breakdown, episode overviews, future season sketches. "
         "Series works only (TV, film series, audio drama series)."
     ),
-    model="claude-opus-4-6",
     max_tokens=32768,
 )
 def write_concept(self, agent, **kwargs):

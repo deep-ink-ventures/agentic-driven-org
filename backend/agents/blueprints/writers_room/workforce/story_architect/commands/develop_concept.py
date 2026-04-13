@@ -12,7 +12,6 @@ from agents.blueprints.base import command
         "shape or franchise strategy), protagonist sketch (want/need/wound/contradiction), "
         "central relationship trajectory, and cultural timing argument."
     ),
-    model="claude-opus-4-6",
 )
 def develop_concept(self, agent, **kwargs):
     pass  # Dispatched via execute_task

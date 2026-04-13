@@ -230,16 +230,6 @@ class TestProblemSolverLeaderBlueprint:
         assert "github_token" in bp.config_schema
         assert bp.config_schema["github_token"]["required"] is True
 
-    def test_review_pairs(self):
-        bp = ProblemSolverLeaderBlueprint()
-        pairs = bp.get_review_pairs()
-        assert len(pairs) == 1
-        assert pairs[0]["creator"] == "synthesizer"
-        assert pairs[0]["reviewer"] == "reviewer"
-        assert pairs[0]["creator_fix_command"] == "fix-poc"
-        assert pairs[0]["reviewer_command"] == "review-solution"
-        assert "legitimacy" in pairs[0]["dimensions"]
-
 
 # ---------------------------------------------------------------------------
 # Registration test (no DB needed)

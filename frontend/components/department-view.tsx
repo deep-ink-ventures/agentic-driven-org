@@ -17,16 +17,14 @@ export function DepartmentView({
   deptStatus,
   onSelectAgent,
   onRefresh,
-  wsEventQueue,
-  wsEventTick,
+  taskWsEvent,
 }: {
   dept: DepartmentDetail;
   projectId: string;
   deptStatus?: "working" | "setup" | "provisioning" | "ready" | "idle";
   onSelectAgent: (a: AgentSummary) => void;
   onRefresh: () => void;
-  wsEventQueue?: Array<{ type: string; task: import("@/lib/types").AgentTask }>;
-  wsEventTick?: number;
+  taskWsEvent?: { type: string; task: import("@/lib/types").AgentTask } | null;
 }) {
   const leader = dept.agents.find((a) => a.is_leader);
   const workforce = dept.agents.filter((a) => !a.is_leader);
@@ -378,8 +376,7 @@ export function DepartmentView({
         <TaskQueue
           projectId={projectId}
           department={dept.id}
-          wsEventQueue={wsEventQueue}
-          wsEventTick={wsEventTick}
+          wsEvent={taskWsEvent}
           departments={[dept]}
         />
       )}

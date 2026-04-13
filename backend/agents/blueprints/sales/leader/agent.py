@@ -126,25 +126,9 @@ class SalesLeaderBlueprint(LeaderBlueprint):
             "type": "bool",
             "description": "Include inactive outreach agents as channels in the CSV. Their rows won't be auto-dispatched but can be used for manual outreach.",
             "label": "Include Inactive Outreach Channels",
+            "default": False,
         },
     }
-
-    def get_review_pairs(self):
-        return [
-            {
-                "creator": "strategist",
-                "creator_fix_command": "revise-strategy",
-                "reviewer": "sales_qa",
-                "reviewer_command": "review-pipeline",
-                "dimensions": [
-                    "research_accuracy",
-                    "strategy_quality",
-                    "storyline_effectiveness",
-                    "profile_accuracy",
-                    "pitch_personalization",
-                ],
-            },
-        ]
 
     @property
     def system_prompt(self) -> str:
@@ -158,79 +142,15 @@ YOUR PIPELINE:
 5. sales_qa: Multi-dimensional quality review of the entire pipeline
 6. Outreach dispatch: Send approved pitches via available outreach agents
 
-REVIEW CHAIN (AUTOMATIC — do not manually manage reviews):
-When the strategist's finalize step completes, the system automatically routes to sales_qa.
-- Score >= 9.5/10 → approved, dispatch to outreach
-- Score >= 9.0 after 3 polish attempts → accept (diminishing returns)
-- Score < threshold → system routes fix to the earliest failing agent in the chain
-Do NOT manually create review tasks — the system handles the loop.
-
 OUTREACH DISCOVERY:
 Query your department for agents with outreach=True to discover available channels.
 Pass the list to the strategist so it can assign channels in the strategy.
 
 You don't write pitches or do research directly — you create tasks for your workforce."""
 
-    def _check_review_trigger(self, agent: Agent) -> dict | None:
-        """Override: only trigger review after finalize-outreach, not after draft-strategy.
-
-        The base class triggers review whenever a 'creator' agent type completes a task.
-        Since the creator is now 'strategist' (which also handles draft-strategy), we must
-        restrict the trigger to finalize-outreach only.
-        """
-        from agents.models import AgentTask as TaskModel
-
-        creator_types = self._get_creator_types()
-        reviewer_types = self._get_reviewer_types()
-        if not creator_types and not reviewer_types:
-            return None
-
-        workforce_types = set(
-            agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
-        )
-
-        last_completed = (
-            TaskModel.objects.filter(
-                agent__department=agent.department,
-                status=TaskModel.Status.DONE,
-            )
-            .order_by("-completed_at")
-            .select_related("agent", "created_by_agent")
-            .first()
-        )
-        if not last_completed:
-            return None
-
-        last_type = last_completed.agent.agent_type
-
-        # Creator just finished — but only trigger if it's the finalize command
-        if last_type in creator_types and last_completed.command_name == "finalize-outreach":
-            logger.info(
-                "REVIEW_TRIGGER dept=%s creator=%s task=%s",
-                agent.department.name,
-                last_type,
-                last_completed.exec_summary[:60] if last_completed.exec_summary else "",
-            )
-            review_proposal = self._propose_review_chain(agent, last_completed, workforce_types)
-            if review_proposal:
-                return review_proposal
-
-        # Reviewer just finished — evaluate and maybe loop back
-        if last_type in reviewer_types and last_completed.report:
-            loop_proposal = self._evaluate_review_and_loop(agent, last_completed, workforce_types)
-            if loop_proposal:
-                return loop_proposal
-
-        return None
-
     def generate_task_proposal(self, agent: Agent) -> dict | None:
         """Pipeline state machine — proposes next step in the sales chain."""
-        # 1. Check for review cycle triggers first (base class handles QA ping-pong)
-        review_result = self._check_review_trigger(agent)
-        if review_result:
-            return review_result
-
-        # 2. Find the active sprint
+        # Find the active sprint
         from projects.models import Sprint
 
         department = agent.department
@@ -328,12 +248,21 @@ You don't write pitches or do research directly — you create tasks for your wo
             # Need to create clones — parse target areas from strategy output
             return self._create_clones_and_dispatch(agent, sprint)
 
-        # Clones exist — check if all clone tasks are done
+        # Clones exist — check if all clone tasks are done.
+        # Primary query: tasks linked via cloned_agent FK.
         clone_tasks = AgentTask.objects.filter(
             sprint=sprint,
             cloned_agent__sprint=sprint,
             command_name="personalize-pitches",
         )
+        # Fallback: tasks may exist without cloned_agent FK set (legacy key mismatch).
+        if not clone_tasks.exists():
+            clone_tasks = AgentTask.objects.filter(
+                sprint=sprint,
+                agent__agent_type="pitch_personalizer",
+                agent__department=department,
+                command_name="personalize-pitches",
+            )
 
         if not clone_tasks.exists():
             # Clones exist but tasks not yet created (race condition — another worker
@@ -422,7 +351,7 @@ You don't write pitches or do research directly — you create tasks for your wo
                     "exec_summary": f"Personalize pitches — {area_name.strip()}",
                     "step_plan": step_plan,
                     "depends_on_previous": False,
-                    "_clone_id": str(clone.id),
+                    "_cloned_agent_id": str(clone.id),
                 }
             )
 
@@ -459,6 +388,10 @@ You don't write pitches or do research directly — you create tasks for your wo
         if step_idx + 1 >= len(PIPELINE_STEPS):
             return None
 
+        # After finalize completes, assemble CSV from personalizer outputs (code, not LLM)
+        if current_step == "finalize":
+            self._assemble_csv_output(agent, sprint)
+
         next_step = PIPELINE_STEPS[step_idx + 1]
         dept_id = str(agent.department_id)
         dept_state = sprint.get_department_state(dept_id)
@@ -472,6 +405,133 @@ You don't write pitches or do research directly — you create tasks for your wo
             return self._handle_personalization_step(agent, sprint)
 
         return self._propose_step_task(agent, sprint, next_step)
+
+    def _assemble_csv_output(self, agent: Agent, sprint) -> None:
+        """Assemble CSV from personalizer clone outputs — no LLM needed.
+
+        Personalizer reports use structured markdown:
+          ## Pitch for [Name] — [Company]
+          **Identifier:** email@example.com
+          **Outreach channel:** email_outreach
+          ### Personalized Pitch
+          **Subject:** ...
+          **Body:**
+          ... pitch text ...
+          ---
+
+        We also try ```csv blocks as a fallback.
+        """
+        import csv
+        import io
+
+        from agents.models import AgentTask
+        from projects.models import Output
+
+        clone_tasks = AgentTask.objects.filter(
+            sprint=sprint,
+            cloned_agent__sprint=sprint,
+            command_name="personalize-pitches",
+            status=AgentTask.Status.DONE,
+        )
+
+        rows = []
+        for task in clone_tasks:
+            if not task.report:
+                continue
+            report = task.report
+
+            # Strategy 1: parse structured markdown pitch payloads
+            rows.extend(self._extract_pitches_from_markdown(report))
+
+            # Strategy 2 (fallback): look for ```csv blocks
+            if not rows:
+                csv_blocks = re.findall(r"```csv\s*\n(.*?)```", report, re.DOTALL)
+                for block in csv_blocks:
+                    reader = csv.DictReader(io.StringIO(block.strip()))
+                    for row in reader:
+                        if row.get("identifier"):
+                            rows.append(row)
+
+        if not rows:
+            logger.warning("No pitch payloads extracted from personalizer outputs for sprint %s", sprint.id)
+            return
+
+        # Deduplicate by identifier
+        seen = set()
+        unique_rows = []
+        for row in rows:
+            ident = row.get("identifier", "").strip().lower()
+            if ident and ident not in seen:
+                seen.add(ident)
+                unique_rows.append(row)
+
+        # Write CSV output
+        output_buffer = io.StringIO()
+        fieldnames = ["channel", "identifier", "subject", "content"]
+        writer = csv.DictWriter(output_buffer, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in unique_rows:
+            writer.writerow(row)
+
+        csv_content = output_buffer.getvalue()
+
+        Output.objects.update_or_create(
+            sprint=sprint,
+            department=agent.department,
+            label="outreach_csv",
+            defaults={
+                "title": f"Outreach CSV — {len(unique_rows)} prospects",
+                "output_type": Output.OutputType.PLAINTEXT,
+                "content": csv_content,
+            },
+        )
+        logger.info("Assembled outreach CSV: %d rows for sprint %s", len(unique_rows), sprint.id)
+
+    @staticmethod
+    def _extract_pitches_from_markdown(report: str) -> list[dict]:
+        """Extract pitch payloads from personalizer markdown output."""
+        pitches = []
+
+        # Split on pitch headers: ## Pitch for ...
+        sections = re.split(r"(?=^## Pitch for )", report, flags=re.MULTILINE)
+
+        for section in sections:
+            if not section.startswith("## Pitch for"):
+                continue
+
+            # Extract identifier (email, LinkedIn, etc.)
+            ident_match = re.search(r"\*\*Identifier:\*\*\s*(.+?)(?:\n|$)", section)
+            if not ident_match:
+                continue
+            identifier = ident_match.group(1).strip()
+
+            # Extract channel
+            channel_match = re.search(r"\*\*Outreach channel:\*\*\s*(.+?)(?:\n|$)", section)
+            channel = channel_match.group(1).strip() if channel_match else "email"
+
+            # Extract subject
+            subject_match = re.search(r"\*\*Subject:\*\*\s*(.+?)(?:\n|$)", section)
+            subject = subject_match.group(1).strip() if subject_match else ""
+
+            # Extract body — text after **Body:** until next ## or ---
+            body_match = re.search(
+                r"\*\*Body:\*\*\s*\n(.*?)(?=\n---|\n## |\n### Personalization|\Z)",
+                section,
+                re.DOTALL,
+            )
+            content = body_match.group(1).strip() if body_match else ""
+
+            if identifier and (subject or content):
+                pitches.append(
+                    {
+                        "channel": channel,
+                        "identifier": identifier,
+                        "subject": subject,
+                        "content": content,
+                    }
+                )
+
+        return pitches
 
     def _handle_dispatch_step(self, agent: Agent, sprint) -> dict | None:
         """Handle the dispatch step — send to outreach agents or finalize sprint."""

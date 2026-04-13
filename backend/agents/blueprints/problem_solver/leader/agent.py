@@ -61,23 +61,6 @@ class ProblemSolverLeaderBlueprint(LeaderBlueprint):
     # Register commands
     decompose_problem = decompose_problem
 
-    def get_review_pairs(self):
-        return [
-            {
-                "creator": "synthesizer",
-                "creator_fix_command": "fix-poc",
-                "reviewer": "reviewer",
-                "reviewer_command": "review-solution",
-                "dimensions": [
-                    "legitimacy",
-                    "dod_validation",
-                    "mathematical_rigor",
-                    "reproducibility",
-                    "insight_novelty",
-                ],
-            },
-        ]
-
     @property
     def system_prompt(self) -> str:
         return """You are the First Principle Thinker — the leader of the Problem Solver department. You decompose problems into their fundamental building blocks and orchestrate a multi-round pipeline to find novel solutions.
@@ -124,12 +107,59 @@ When a synthesizer task completes, the system automatically:
 3. After fix → reviewer runs again (ping-pong until approved or max rounds)
 Do NOT manually create review tasks — the system handles the loop."""
 
-    def generate_task_proposal(self, agent: Agent) -> dict | None:
-        # 1. Check review cycle triggers first (synthesizer -> reviewer ping-pong)
-        review_result = self._check_review_trigger(agent)
-        if review_result:
-            return review_result
+    def execute_task(self, agent: Agent, task) -> str:
+        """Override to persist decomposition state when decompose-problem completes."""
+        from agents.ai.claude_client import call_claude
 
+        if task.command_name == "decompose-problem":
+            # Run the LLM directly with decomposition-specific instructions (no delegation suffix)
+            cache_context, task_msg = self.build_task_message(agent, task)
+            model = self.get_model(agent, task.command_name)
+            max_tokens = self.get_max_tokens(agent, task)
+
+            kwargs = {
+                "system_prompt": self.build_system_prompt(agent),
+                "user_message": task_msg,
+                "model": model,
+            }
+            if max_tokens:
+                kwargs["max_tokens"] = max_tokens
+
+            response, usage = call_claude(**kwargs)
+            task.token_usage = usage
+            task.save(update_fields=["token_usage"])
+
+            # Parse and persist decomposition into sprint department state
+            try:
+                parsed = json.loads(response) if response.strip().startswith("{") else None
+                if parsed and parsed.get("decomposition"):
+                    from projects.models import Sprint
+
+                    sprint = task.sprint
+                    if sprint:
+                        dept_id = str(agent.department_id)
+                        dept_state = sprint.get_department_state(dept_id)
+                        dept_state["decomposition"] = parsed["decomposition"]
+                        dept_state["status"] = parsed.get("status", "running")
+                        sprint.set_department_state(dept_id, dept_state)
+
+                        if dept_state["status"] == "invalid_problem":
+                            sprint.status = Sprint.Status.DONE
+                            sprint.completion_summary = (
+                                f"Problem rejected: {parsed.get('rejection_reason', 'No clear DoD')}"
+                            )
+                            sprint.completed_at = django.utils.timezone.now()
+                            sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+            except (json.JSONDecodeError, AttributeError, KeyError):
+                logger.warning("Failed to parse decomposition from leader response for task %s", task.id)
+
+            # Return full response as the report (preserves the decomposition JSON)
+            return response
+
+        # All other commands use standard leader delegation flow
+        return super().execute_task(agent, task)
+
+    def generate_task_proposal(self, agent: Agent) -> dict | None:
         # 2. Get sprint and department state
         from projects.models import Sprint
 
@@ -182,37 +212,69 @@ Do NOT manually create review tasks — the system handles the loop."""
         )
         last_type = recent_tasks[0].agent.agent_type if recent_tasks else None
 
-        # Stage 1: No decomposition yet -> decompose
-        if status == "new" or not dept_state.get("decomposition"):
-            return {
-                "_sprint_id": str(sprint.id),
-                "exec_summary": "Decompose problem into first principles",
-                "tasks": [
-                    {
-                        "target_agent_type": "leader",
-                        "command_name": "decompose-problem",
-                        "exec_summary": f"First-principles decomposition of: {sprint.text[:100]}",
-                        "step_plan": (
-                            f"Problem statement: {sprint.text}\n\n"
-                            "Apply first-principles methodology:\n"
-                            "1. List all assumptions\n"
-                            "2. Challenge each\n"
-                            "3. Identify actors, dynamics, variants\n"
-                            "4. Define a falsifiable, measurable definition of done\n"
-                            "5. If no clear DoD possible, declare invalid_problem\n\n"
-                            "Respond with JSON:\n"
-                            '{"decomposition": {"actors": [...], "dynamics": [...], "variants": [...], '
-                            '"assumptions_challenged": [...], "definition_of_done": "...", "math_bias": "..."}, '
-                            '"status": "running" or "invalid_problem", '
-                            '"rejection_reason": "..." (if invalid), "report": "..."}'
-                        ),
-                        "depends_on_previous": False,
-                    }
-                ],
-            }
+        # Stage 1: No decomposition yet -> try to extract from completed leader task, or propose one
+        if not dept_state.get("decomposition"):
+            # Check if a decompose task already completed — extract and persist its result
+            leader_tasks = [t for t in recent_tasks if t.agent.agent_type == "leader"]
+            for lt in leader_tasks:
+                if lt.report:
+                    try:
+                        parsed = json.loads(lt.report) if lt.report.strip().startswith("{") else None
+                        if parsed and parsed.get("decomposition"):
+                            dept_state["decomposition"] = parsed["decomposition"]
+                            dept_state["status"] = parsed.get("status", "running")
+                            sprint.set_department_state(dept_id, dept_state)
+                            if dept_state["status"] == "invalid_problem":
+                                sprint.status = Sprint.Status.DONE
+                                sprint.completion_summary = (
+                                    f"Problem rejected: {parsed.get('rejection_reason', 'No clear DoD')}"
+                                )
+                                sprint.completed_at = django.utils.timezone.now()
+                                sprint.save(
+                                    update_fields=["status", "completion_summary", "completed_at", "updated_at"]
+                                )
+                                return None
+                            break
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+
+            # If we successfully extracted decomposition, fall through to Stage 2
+            # Otherwise, propose the decompose task (only if none completed yet)
+            if not dept_state.get("decomposition"):
+                if leader_tasks:
+                    # Leader task completed but report wasn't parseable — don't re-queue infinitely
+                    return None
+                return {
+                    "_sprint_id": str(sprint.id),
+                    "exec_summary": "Decompose problem into first principles",
+                    "tasks": [
+                        {
+                            "target_agent_type": "leader",
+                            "command_name": "decompose-problem",
+                            "exec_summary": f"First-principles decomposition of: {sprint.text[:100]}",
+                            "step_plan": (
+                                f"Problem statement: {sprint.text}\n\n"
+                                "Apply first-principles methodology:\n"
+                                "1. List all assumptions\n"
+                                "2. Challenge each\n"
+                                "3. Identify actors, dynamics, variants\n"
+                                "4. Define a falsifiable, measurable definition of done\n"
+                                "5. If no clear DoD possible, declare invalid_problem\n\n"
+                                "Respond with JSON:\n"
+                                '{"decomposition": {"actors": [...], "dynamics": [...], "variants": [...], '
+                                '"assumptions_challenged": [...], "definition_of_done": "...", "math_bias": "..."}, '
+                                '"status": "running" or "invalid_problem", '
+                                '"rejection_reason": "..." (if invalid), "report": "..."}'
+                            ),
+                            "depends_on_previous": False,
+                        }
+                    ],
+                }
 
         # Stage 2: Decomposition done -> dispatch Out-of-Box Thinker
-        if last_type == "leader" or (dept_state.get("decomposition") and not self._has_pending_work(recent_tasks)):
+        if last_type == "leader" or (
+            dept_state.get("decomposition") and not self._has_pending_work(sprint, department)
+        ):
             current_round = dept_state.get("round", 0) + 1
             dept_state["round"] = current_round
             sprint.set_department_state(dept_id, dept_state)
@@ -389,7 +451,7 @@ Do NOT manually create review tasks — the system handles the loop."""
         # Default: fall back to base class
         return super().generate_task_proposal(agent)
 
-    def _has_pending_work(self, recent_tasks) -> bool:
+    def _has_pending_work(self, sprint, department) -> bool:
         """Check if any task in the department is still queued or processing."""
         from agents.models import AgentTask
 
@@ -398,4 +460,8 @@ Do NOT manually create review tasks — the system handles the loop."""
             AgentTask.Status.PROCESSING,
             AgentTask.Status.AWAITING_APPROVAL,
         )
-        return any(t.status in pending_statuses for t in recent_tasks)
+        return AgentTask.objects.filter(
+            sprint=sprint,
+            agent__department=department,
+            status__in=pending_statuses,
+        ).exists()

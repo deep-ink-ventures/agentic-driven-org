@@ -8,7 +8,7 @@ from agents.blueprints.base import command
     description=(
         "Take personalized pitch payloads, format as plain text emails, " "and send via configured email channel."
     ),
-    model="claude-opus-4-6",
+    model="claude-sonnet-4-6",
 )
 def send_outreach(self, agent) -> dict:
     return {

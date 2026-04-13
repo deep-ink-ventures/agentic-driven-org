@@ -11,7 +11,6 @@ from agents.blueprints.base import command
         "power dynamics between characters, layers subtext beneath surface conversation, "
         "and differentiates each character's voice using the character bible."
     ),
-    model="claude-opus-4-6",
 )
 def write_scene_dialogue(self, agent, **kwargs):
     pass  # Dispatched via execute_task

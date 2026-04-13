@@ -20,6 +20,7 @@ export async function connectWs(
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      console.log(`[WS] message:`, data);
       onMessage(data);
     } catch {
       // ignore non-JSON messages

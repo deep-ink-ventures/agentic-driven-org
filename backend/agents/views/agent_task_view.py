@@ -51,6 +51,11 @@ class ProjectTaskListView(ListAPIView):
         if agent:
             qs = qs.filter(agent_id=agent)
 
+        # ?current_sprint=true — only tasks belonging to running/paused sprints
+        current_sprint = self.request.query_params.get("current_sprint")
+        if current_sprint and current_sprint.lower() in ("true", "1"):
+            qs = qs.filter(sprint__status__in=["running", "paused"])
+
         before = self.request.query_params.get("before")
         if before:
             dt = parse_datetime(before)

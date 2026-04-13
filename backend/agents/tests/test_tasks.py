@@ -194,13 +194,34 @@ class TestExecuteAgentTask:
         "agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task",
         side_effect=RuntimeError("API down"),
     )
-    def test_failure_sets_failed_status(self, mock_bp_exec, twitter_agent):
+    def test_failure_schedules_retry(self, mock_bp_exec, twitter_agent):
         from agents.tasks import execute_agent_task
 
         task = AgentTask.objects.create(
             agent=twitter_agent,
             status=AgentTask.Status.QUEUED,
             exec_summary="Will fail",
+        )
+        execute_agent_task(str(task.id))
+
+        task.refresh_from_db()
+        # First failure triggers retry — task is re-queued, not failed
+        assert task.status == AgentTask.Status.QUEUED
+        assert "API down" in task.error_message
+        assert task.retry_count == 1
+
+    @patch(
+        "agents.blueprints.marketing.workforce.twitter.agent.TwitterBlueprint.execute_task",
+        side_effect=RuntimeError("API down"),
+    )
+    def test_failure_exhausts_retries(self, mock_bp_exec, twitter_agent):
+        from agents.tasks import execute_agent_task
+
+        task = AgentTask.objects.create(
+            agent=twitter_agent,
+            status=AgentTask.Status.QUEUED,
+            exec_summary="Will fail",
+            retry_count=3,  # Already at max
         )
         execute_agent_task(str(task.id))
 

@@ -7,7 +7,7 @@ export type ConfigSchema = {
   required?: string[];
   properties?: Record<
     string,
-    { type: string; format?: string; description: string; title?: string }
+    { type: string; format?: string; description: string; title?: string; default?: unknown }
   >;
 };
 
@@ -50,11 +50,11 @@ export function ConfigFields({
                 </p>
               </div>
               <button
-                onClick={() => onChange(key, !values[key])}
+                onClick={() => onChange(key, !(values[key] ?? spec.default ?? false))}
                 disabled={disabled}
-                className={`transition-colors ${disabled ? "animate-pulse opacity-50" : ""} ${values[key] ? "text-accent-violet" : "text-text-secondary hover:text-accent-violet"}`}
+                className={`transition-colors ${disabled ? "animate-pulse opacity-50" : ""} ${(values[key] ?? spec.default) ? "text-accent-violet" : "text-text-secondary hover:text-accent-violet"}`}
               >
-                {values[key] ? (
+                {(values[key] ?? spec.default) ? (
                   <ToggleRight className="h-6 w-6" />
                 ) : (
                   <ToggleLeft className="h-6 w-6" />
@@ -73,20 +73,22 @@ export function ConfigFields({
                 {spec.description}
               </p>
               <Input
-                type={spec.format === "email" ? "email" : "text"}
+                type={spec.type === "integer" ? "number" : spec.format === "email" ? "email" : "text"}
                 value={
-                  values[key] == null
-                    ? ""
-                    : typeof values[key] === "string"
+                  values[key] != null
+                    ? typeof values[key] === "string"
                       ? (values[key] as string)
-                      : JSON.stringify(values[key])
+                      : String(values[key])
+                    : spec.default != null
+                      ? String(spec.default)
+                      : ""
                 }
                 placeholder={
                   effectiveValues?.[key] != null && !(key in values)
                     ? String(effectiveValues[key])
                     : spec.title || key
                 }
-                onChange={(e) => onChange(key, e.target.value)}
+                onChange={(e) => onChange(key, spec.type === "integer" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value)}
                 disabled={disabled}
                 className="bg-bg-input border-border text-text-primary text-xs font-mono"
               />

@@ -11,7 +11,6 @@ from agents.blueprints.base import command
         "habits, what the character never says, and how their speech shifts under stress, intimacy, "
         "or authority. Includes sample dialogue lines demonstrating the voice in varied contexts."
     ),
-    model="claude-opus-4-6",
 )
 def design_character_voice(self, agent, **kwargs):
     pass  # Dispatched via execute_task

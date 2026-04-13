@@ -10,8 +10,6 @@ if TYPE_CHECKING:
 from django.utils import timezone
 
 from agents.blueprints.base import (
-    EXCELLENCE_THRESHOLD,
-    MAX_REVIEW_ROUNDS,
     LeaderBlueprint,
 )
 from agents.blueprints.engineering.leader.commands import (
@@ -193,33 +191,6 @@ Each task you create should include:
 
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 
-    # ── Implementation → Review ping-pong ──────────────────────────────
-
-    def get_review_pairs(self):
-        return [
-            {
-                "creator": "backend_engineer",
-                "creator_fix_command": "implement",
-                "reviewer": "review_engineer",
-                "reviewer_command": "review-pr",
-                "dimensions": ["correctness", "test_coverage", "security", "code_quality"],
-            },
-            {
-                "creator": "frontend_engineer",
-                "creator_fix_command": "implement",
-                "reviewer": "review_engineer",
-                "reviewer_command": "review-pr",
-                "dimensions": [
-                    "correctness",
-                    "test_coverage",
-                    "security",
-                    "design_quality",
-                    "accessibility",
-                    "code_quality",
-                ],
-            },
-        ]
-
     def generate_task_proposal(self, agent: Agent) -> dict:
         from agents.models import AgentTask
 
@@ -228,11 +199,6 @@ Each task you create should include:
         )
         if not workforce:
             return None
-
-        # ── Check for review cycle triggers (universal from base class) ──
-        review_result = self._check_review_trigger(agent)
-        if review_result:
-            return review_result
 
         # ── Standard flow: ask Claude for next task ──────────────────
         workforce_desc = ""
@@ -285,150 +251,6 @@ Each task you create should include:
             return self._propose_sprint_task(agent, workforce_desc, active_text, locks_text, context_text)
         else:
             return self._propose_improvement(agent, workforce_desc, context_text)
-
-    def _propose_review_chain(self, agent: Agent, impl_task, workforce_types: set) -> dict | None:
-        """After implementation completes, trigger the full review chain.
-
-        Flow: test + security + design_qa + a11y run in parallel →
-              review_engineer consolidates and scores → leader evaluates score.
-        """
-        is_frontend = impl_task.agent.agent_type == "frontend_engineer"
-
-        # Track review round and active chain key
-        internal_state = agent.internal_state or {}
-        review_rounds = internal_state.get("review_rounds", {})
-        task_key = str(impl_task.id)
-        round_num = review_rounds.get(task_key, 0) + 1
-        review_rounds[task_key] = round_num
-        internal_state["review_rounds"] = review_rounds
-        internal_state["active_review_key"] = task_key
-        agent.internal_state = internal_state
-        agent.save(update_fields=["internal_state"])
-
-        if round_num > MAX_REVIEW_ROUNDS:
-            return {
-                "exec_summary": f"Escalation: {round_num} review rounds on {impl_task.exec_summary}",
-                "tasks": [
-                    {
-                        "target_agent_type": "ticket_manager",
-                        "command_name": "create-issues",
-                        "exec_summary": f"Human review needed: {impl_task.exec_summary} — exceeded {MAX_REVIEW_ROUNDS} rounds",
-                        "step_plan": f"Create an issue flagging that this task has gone through {round_num} review rounds without reaching quality threshold ({EXCELLENCE_THRESHOLD}/10). A human engineer needs to step in.",
-                        "depends_on_previous": False,
-                    }
-                ],
-            }
-
-        impl_report_snippet = impl_task.report or ""
-
-        # Build parallel review tasks — all feed into review_engineer
-        tasks = []
-
-        # Test engineer always runs
-        if "test_engineer" in workforce_types:
-            tasks.append(
-                {
-                    "target_agent_type": "test_engineer",
-                    "command_name": "check-coverage",
-                    "exec_summary": f"Test coverage check for: {impl_task.exec_summary}",
-                    "step_plan": (
-                        f"Review round {round_num}.\n\n"
-                        f"Implementation report:\n{impl_report_snippet}\n\n"
-                        "Check test coverage. Identify untested branches, edge cases, error paths. "
-                        "Score your findings 1-10 (10 = excellent coverage, 1 = critical gaps)."
-                    ),
-                    "depends_on_previous": False,
-                }
-            )
-
-        # Security auditor always runs
-        if "security_auditor" in workforce_types:
-            tasks.append(
-                {
-                    "target_agent_type": "security_auditor",
-                    "command_name": "security-review",
-                    "exec_summary": f"Security review for: {impl_task.exec_summary}",
-                    "step_plan": (
-                        f"Review round {round_num}.\n\n"
-                        f"Implementation report:\n{impl_report_snippet}\n\n"
-                        "Assess security implications. Check injection, auth, data exposure, XSS, supply chain. "
-                        "Score your findings 1-10 (10 = no issues, 1 = critical vulnerabilities)."
-                    ),
-                    "depends_on_previous": False,
-                }
-            )
-
-        # Design QA + accessibility always run for frontend
-        if is_frontend:
-            if "design_qa" in workforce_types:
-                tasks.append(
-                    {
-                        "target_agent_type": "design_qa",
-                        "command_name": "review_design",
-                        "exec_summary": f"Design QA for: {impl_task.exec_summary}",
-                        "step_plan": (
-                            f"Review round {round_num}.\n\n"
-                            f"Implementation report:\n{impl_report_snippet}\n\n"
-                            "Review against design specs and Impeccable Style guidelines. "
-                            "Score using Nielsen's heuristics. Test with all 5 personas. "
-                            "Score your findings 1-10 (10 = production-ready design, 1 = needs full redesign)."
-                        ),
-                        "depends_on_previous": False,
-                    }
-                )
-            if "accessibility_engineer" in workforce_types:
-                tasks.append(
-                    {
-                        "target_agent_type": "accessibility_engineer",
-                        "command_name": "a11y-audit",
-                        "exec_summary": f"Accessibility audit for: {impl_task.exec_summary}",
-                        "step_plan": (
-                            f"Review round {round_num}.\n\n"
-                            f"Implementation report:\n{impl_report_snippet}\n\n"
-                            "Audit for WCAG 2.1 AA compliance — automated + manual checks. "
-                            "Score your findings 1-10 (10 = fully accessible, 1 = blocker-level issues)."
-                        ),
-                        "depends_on_previous": False,
-                    }
-                )
-
-        # Review engineer consolidates — depends on all above
-        if "review_engineer" in workforce_types:
-            tasks.append(
-                {
-                    "target_agent_type": "review_engineer",
-                    "command_name": "review-pr",
-                    "exec_summary": f"Consolidated review (round {round_num}): {impl_task.exec_summary}",
-                    "step_plan": (
-                        f"Review round {round_num}. Quality threshold: {EXCELLENCE_THRESHOLD}/10.\n\n"
-                        f"Implementation report:\n{impl_report_snippet}\n\n"
-                        "## Your job\n"
-                        "1. Review the implementation yourself for correctness, patterns, and tests.\n"
-                        "2. Read the reports from test_engineer, security_auditor, design_qa, and "
-                        "accessibility_engineer (in recently completed department tasks).\n"
-                        "3. Consolidate ALL findings into a single review report.\n\n"
-                        "## Scoring (REQUIRED)\n"
-                        "Score each dimension 1.0-10.0 (use decimals — 8.5, 9.0, 9.5 etc.):\n"
-                        "- **Correctness**: Does it work? Edge cases handled?\n"
-                        "- **Test coverage**: Are critical paths tested?\n"
-                        "- **Security**: Any vulnerabilities?\n"
-                        "- **Design quality**: Does it look intentional and polished? (frontend only)\n"
-                        "- **Accessibility**: WCAG compliant? (frontend only)\n"
-                        "- **Code quality**: Clean, maintainable, follows patterns?\n\n"
-                        "Compute the **overall score** as the MINIMUM of all dimension scores.\n"
-                        "An implementation is only as strong as its weakest dimension.\n"
-                        "The bar is EXCELLENCE — 9.5/10 is the threshold. We don't ship 'good enough'.\n\n"
-                        "## Verdict\n"
-                        "After your review, call the submit_verdict tool with your verdict and score."
-                    ),
-                    "depends_on_previous": True,
-                }
-            )
-
-        return {
-            "exec_summary": f"Review chain (round {round_num}) for: {impl_task.exec_summary}",
-            "tasks": tasks,
-        }
 
     def _propose_sprint_task(
         self, agent: Agent, workforce_desc: str, active_text: str, locks_text: str, context_text: str

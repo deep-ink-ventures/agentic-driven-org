@@ -461,7 +461,7 @@ class TestSprintTaskRelationship:
         assert resp.status_code == 200
         assert resp.data["task_count"] == 0
 
-    def test_task_sprint_null_on_sprint_delete(self, project, department, sprint, user):
+    def test_task_cascade_deleted_with_sprint(self, project, department, sprint, user):
         agent = Agent.objects.create(
             name="Dev",
             agent_type="backend_engineer",
@@ -469,9 +469,9 @@ class TestSprintTaskRelationship:
             status=Agent.Status.ACTIVE,
         )
         task = AgentTask.objects.create(agent=agent, sprint=sprint, exec_summary="Some task")
+        task_id = task.id
         sprint.delete()
-        task.refresh_from_db()
-        assert task.sprint is None
+        assert not AgentTask.objects.filter(id=task_id).exists()
 
 
 # ── Sprint Consolidation Signal ───────────────────────────────────────────────

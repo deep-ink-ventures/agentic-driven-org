@@ -124,6 +124,11 @@ class WritersRoomLeaderBlueprint(LeaderBlueprint):
     tags = ["leadership", "writers-room", "orchestration", "screenplay", "novel", "creative-writing"]
     config_schema = {}
 
+    def get_volume_threshold(self, agent) -> int:
+        from agents.blueprints.writers_room.workforce.base import _get_writers_room_volume_threshold
+
+        return _get_writers_room_volume_threshold(agent)
+
     @property
     def system_prompt(self) -> str:
         return """You are the Showrunner of a professional writers room. You orchestrate a creative team, a lead writer, and a feedback team in a disciplined loop.
@@ -174,6 +179,14 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
     # ── Register commands ────────────────────────────────────────────────
     plan_room = plan_room
     check_progress = check_progress
+
+    def get_context(self, agent):
+        ctx = super().get_context(agent)
+        # Leader doesn't need sibling reports or own task history in task context —
+        # its orchestration runs through generate_task_proposal which builds its own prompt
+        ctx["sibling_agents"] = ""
+        ctx["own_recent_tasks"] = ""
+        return ctx
 
     # ── Task execution (uses base class delegation with stage context) ──
 
@@ -499,37 +512,194 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         result = content[:start_idx] + new_content + content[end_idx:]
         return result, True
 
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """Strip markdown code fences (```json ... ```) from LLM output."""
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            # Remove opening fence (```json, ```JSON, ``` etc.)
+            first_newline = stripped.index("\n") if "\n" in stripped else len(stripped)
+            stripped = stripped[first_newline + 1 :]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        return stripped.strip()
+
     def _apply_revision_or_replace(self, agent, doc_type: str, new_content: str, stage: str) -> tuple[str, bool]:
         """Try to parse new_content as revision JSON and apply to existing doc.
 
         Returns (final_content, was_revision_applied).
         If new_content is not valid revision JSON, returns it as-is for full replacement.
+        CRITICAL: never return raw revision JSON as deliverable content.
         """
-        try:
-            data = json.loads(new_content)
-            if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
-                effective = self._get_effective_stage(agent, stage)
-                stage_display = effective.replace("_", " ").title()
-                existing_doc = Document.objects.filter(
-                    department=agent.department,
-                    doc_type=doc_type,
-                    is_archived=False,
-                    title__startswith=f"{stage_display} v",
-                ).first()
-                if existing_doc and existing_doc.content:
-                    revised, failed = self._apply_revisions(existing_doc.content, data["revisions"])
-                    if failed:
-                        logger.warning(
-                            "Writers Room: %d revision(s) failed for %s: %s",
-                            len(failed),
-                            doc_type,
-                            failed,
-                        )
-                    return revised, True
-        except (ValueError, TypeError, KeyError):
-            pass
+        # Strip markdown code fences — LLMs routinely wrap JSON in ```json ... ```
+        cleaned = self._strip_code_fences(new_content)
+
+        data = self._try_parse_revision_json(cleaned)
+        if data is not None:
+            effective = self._get_effective_stage(agent, stage)
+            stage_display = effective.replace("_", " ").title()
+            existing_doc = Document.objects.filter(
+                department=agent.department,
+                doc_type=doc_type,
+                is_archived=False,
+                title__startswith=f"{stage_display} v",
+            ).first()
+            if existing_doc and existing_doc.content:
+                revised, failed = self._apply_revisions(existing_doc.content, data["revisions"])
+                if failed:
+                    logger.warning(
+                        "Writers Room: %d revision(s) failed for %s: %s",
+                        len(failed),
+                        doc_type,
+                        failed,
+                    )
+                return revised, True
+            # Revision JSON but no existing doc — return existing content, never raw JSON.
+            logger.error(
+                "Writers Room: revision JSON received for %s but no existing %s document found. "
+                "Cannot apply revisions without a base document.",
+                stage,
+                doc_type,
+            )
+            if existing_doc:
+                return existing_doc.content, False
+            return "", False
+
+        # Not revision JSON — but guard against malformed revision JSON being
+        # stored as deliverable content. FAIL LOUDLY so the task gets retried.
+        if self._looks_like_revision_json(cleaned):
+            raise ValueError(
+                f"Writers Room: lead writer produced revision JSON for {doc_type} that could not be "
+                f"parsed even after repair. This must not be silently bypassed — the task will be "
+                f"marked as failed and retried. First 200 chars: {cleaned[:200]}"
+            )
 
         return new_content, False
+
+    @staticmethod
+    def _looks_like_revision_json(text: str) -> bool:
+        """Heuristic: does this text look like revision JSON that failed to parse?"""
+        stripped = text.strip()
+        return stripped.startswith("{") and '"revisions"' in stripped[:200]
+
+    @staticmethod
+    def _try_parse_revision_json(text: str) -> dict | None:
+        """Try to parse revision JSON, repairing common LLM errors.
+
+        LLMs writing JSON with embedded natural-language text (especially German
+        dialogue with „..." quotes) routinely produce unescaped ASCII double quotes
+        inside string values.  We attempt a direct parse first, then repair and
+        retry so json.loads handles all unescaping (\n, \t, unicode escapes, etc.).
+        """
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
+                return data
+        except (ValueError, TypeError):
+            pass
+
+        if not (text.strip().startswith("{") and '"revisions"' in text[:200]):
+            return None
+
+        # Repair strategy: escape unescaped double quotes inside JSON string values.
+        #
+        # JSON string values are delimited by " on each side. Inside, only \" is
+        # valid. LLMs frequently emit raw " from natural-language content (dialogue
+        # quotes, German „…" pairs where the closing mark is ASCII U+0022).
+        #
+        # Approach: walk character by character tracking whether we're inside a
+        # JSON string. When inside a string, any " that isn't preceded by \ and
+        # isn't followed by a JSON structural character (, : ] } whitespace) is
+        # an unescaped content quote — escape it.
+        try:
+            repaired = WritersRoomLeaderBlueprint._repair_json_quotes(text)
+            data = json.loads(repaired)
+            if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
+                logger.info(
+                    "Writers Room: repaired malformed revision JSON — %d revisions",
+                    len(data["revisions"]),
+                )
+                return data
+        except (ValueError, TypeError):
+            pass
+        except Exception:
+            logger.exception("Writers Room: failed to repair revision JSON")
+
+        return None
+
+    @staticmethod
+    def _repair_json_quotes(text: str) -> str:
+        """Escape unescaped double quotes inside JSON string values.
+
+        Walks the text tracking in-string state. A " inside a string is
+        "structural" (ends the string) if the character after the closing "
+        is one of: , : ] } or whitespace-then-structural. Otherwise it's
+        a content quote that needs escaping.
+
+        This preserves all JSON escape sequences (\\n, \\t, \\", \\\\, etc.)
+        so json.loads can unescape them properly.
+        """
+        chars = list(text)
+        result = []
+        i = 0
+        in_string = False
+
+        while i < len(chars):
+            c = chars[i]
+
+            if not in_string:
+                result.append(c)
+                if c == '"':
+                    in_string = True
+                i += 1
+                continue
+
+            # Inside a JSON string
+            if c == "\\":
+                # Escaped character — pass through both chars
+                result.append(c)
+                if i + 1 < len(chars):
+                    i += 1
+                    result.append(chars[i])
+                i += 1
+                continue
+
+            if c == '"':
+                # Is this the real end of the string, or a content quote?
+                # Look ahead past whitespace for a JSON structural char.
+                j = i + 1
+                while j < len(chars) and chars[j] in (" ", "\t", "\r", "\n"):
+                    j += 1
+
+                is_structural = False
+                if j >= len(chars) or chars[j] in ("]", "}", ":"):
+                    is_structural = True
+                elif chars[j] == ",":
+                    # Comma after quote — structural only if followed by
+                    # whitespace + quote (next JSON key/value) or whitespace + }]
+                    # NOT structural if followed by a regular word like
+                    # „SpreeTerrassen", Container-Büro
+                    k = j + 1
+                    while k < len(chars) and chars[k] in (" ", "\t", "\r", "\n"):
+                        k += 1
+                    if k < len(chars) and chars[k] in ('"', "]", "}", "{", "["):
+                        is_structural = True
+                    # else: comma followed by a regular word = content
+
+                if is_structural:
+                    result.append(c)
+                    in_string = False
+                else:
+                    # Content quote — escape it
+                    result.append("\\")
+                    result.append('"')
+                i += 1
+                continue
+
+            result.append(c)
+            i += 1
+
+        return "".join(result)
 
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 
@@ -641,11 +811,6 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 }
             )
 
-        # Check for review cycle triggers first (universal from base class)
-        review_result = self._check_review_trigger(agent)
-        if review_result:
-            return _tag_sprint(review_result)
-
         effective_stage = self._get_effective_stage(agent, current_stage, sprint=sprint)
         config = _get_merged_config(agent)
 
@@ -653,6 +818,17 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         if status == "not_started":
             # Step 1: Assign creative agents to write
+            return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config, sprint=sprint))
+
+        if status == "voice_profiling":
+            # Voice profiling done → now dispatch the real creative agents
+            logger.info(
+                "Writers Room: stage '%s' voice profiling complete — dispatching creative agents",
+                current_stage,
+            )
+            stage_status[current_stage]["status"] = "not_started"
+            dept_state["stage_status"] = stage_status
+            sprint.set_department_state(dept_id, dept_state)
             return _tag_sprint(self._propose_creative_tasks(agent, effective_stage, config, sprint=sprint))
 
         if status == "creative_writing":
@@ -726,7 +902,41 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
             return _tag_sprint(self._propose_review_task(agent, effective_stage, config, sprint=sprint))
 
         if status == "review":
-            # creative_reviewer completed and was accepted
+            # creative_reviewer completed — check verdict before advancing
+            review_task = (
+                AgentTask.objects.filter(
+                    agent__department=agent.department,
+                    agent__agent_type="creative_reviewer",
+                    status=AgentTask.Status.DONE,
+                )
+                .order_by("-completed_at")
+                .first()
+            )
+            if review_task and review_task.review_score is not None:
+                stage_key = f"wr_{current_stage}"
+                accepted, polish_count, round_num = self._apply_quality_gate(
+                    agent,
+                    sprint,
+                    review_task.review_score,
+                    stage_key,
+                )
+                if not accepted:
+                    logger.info(
+                        "Writers Room: stage '%s' review score %.1f — looping back (round %d)",
+                        current_stage,
+                        review_task.review_score,
+                        round_num,
+                    )
+                    # Increment round tracking
+                    review_rounds = dept_state.get("review_rounds", {})
+                    review_rounds[stage_key] = round_num + 1
+                    dept_state["review_rounds"] = review_rounds
+                    dept_state["active_review_key"] = stage_key
+                    sprint.set_department_state(dept_id, dept_state)
+                    return _tag_sprint(
+                        self._propose_fix_task(agent, review_task, review_task.review_score, round_num, polish_count)
+                    )
+
             self._create_critique_doc(agent, current_stage, sprint)
             self._update_story_bible(agent, sprint, current_stage)
             current_info["status"] = "passed"
@@ -824,7 +1034,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                             "depends_on_previous": False,
                         },
                     ],
-                    "_on_dispatch": {"set_status": "creative_writing", "stage": dispatch_stage},
+                    "_on_dispatch": {"set_status": "voice_profiling", "stage": dispatch_stage},
                 }
 
         # Filter to only active agents in this department
@@ -1146,20 +1356,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         _dept_state = sprint.get_department_state(str(agent.department_id)) if sprint else {}
         dispatch_stage = _dept_state.get("current_stage", stage)
 
-        # Revision preamble for iteration > 0
-        revision_preamble = ""
         current_iterations = _dept_state.get("stage_status", {}).get(dispatch_stage, {}).get("iterations", 0)
-        if current_iterations > 0:
-            revision_preamble = (
-                "## REVISION ROUND\n"
-                f"This is revision round {current_iterations + 1}. "
-                "Your previous output is in the Research & Notes document under your section header. "
-                "The Critique document lists what needs fixing.\n\n"
-                "REVISE ONLY what the Critique flagged. Preserve everything it praised or did not mention. "
-                "Do NOT rewrite from scratch. If the Critique says your character work is strong but "
-                "the market positioning is weak, keep the character work EXACTLY as it was and fix "
-                "only the market positioning.\n\n"
-            )
+        is_revision = current_iterations > 0
 
         for agent_type in creative_agents:
             spec = TASK_SPECS.get(stage, {}).get(agent_type)
@@ -1168,25 +1366,46 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     f"No TASK_SPECS entry for stage '{stage}', agent '{agent_type}'. "
                     f"Every CREATIVE_MATRIX entry must have a corresponding TASK_SPECS entry."
                 )
-            pitch_preamble = (
-                "STEP 0 — PITCH EXTRACTION (mandatory before any creative work):\n"
-                "Read the CREATOR'S ORIGINAL PITCH in <project_goal> above. List the specific "
-                "elements the creator provided: their characters, their conflicts, their world, "
-                "their arcs, their side plots, their tone direction. These are YOUR raw material.\n"
-                "Referenced shows (e.g. 'like Succession', 'Industry-style') are QUALITY "
-                "benchmarks — they tell you the league, NOT the plot. Do NOT borrow characters, "
-                "family structures, premises, or dramatic engines from referenced shows.\n"
-                "If the creator said 'three brothers', you write three brothers — not a patriarch "
-                "with sons and daughters. If they described a specific conflict, that IS the "
-                "central conflict — do not substitute a more conventional one.\n\n"
-            )
-            task_data = {
-                "target_agent_type": agent_type,
-                "command_name": spec.get("command_name", ""),
-                "exec_summary": spec["exec_summary"],
-                "step_plan": (
+
+            if is_revision:
+                # REVISION ROUND: agents focus ONLY on critique-driven improvements
+                step_plan = (
                     f"Locale: {locale}\n{format_context}\n"
-                    f"{revision_preamble}"
+                    f"## REVISION ROUND {current_iterations + 1}\n\n"
+                    "You have three inputs:\n"
+                    "1. **Your initial research** (your previous output in department documents)\n"
+                    "2. **The critique** for your department (what needs to change)\n"
+                    "3. **The current deliverable** (what exists now)\n\n"
+                    "Your job: produce TARGETED IMPROVEMENT SUGGESTIONS based on the critique.\n\n"
+                    "FORMAT — output ONLY this:\n"
+                    "For each issue the critique flags in your domain:\n"
+                    "  1. Quote the critique point\n"
+                    "  2. Quote the relevant passage from the deliverable\n"
+                    "  3. Write your specific fix/improvement (the actual replacement text)\n\n"
+                    "DO NOT:\n"
+                    "- Reproduce your full initial research\n"
+                    "- Rewrite sections the critique praised or didn't mention\n"
+                    "- Add new analysis beyond what the critique asks for\n"
+                    "- Repeat market positioning, comp analysis, or zeitgeist material\n\n"
+                    "ONLY address what the critique flagged. Short, precise, actionable.\n\n"
+                    f"Your output must be in {locale}."
+                )
+            else:
+                # FIRST ROUND: full creative work
+                pitch_preamble = (
+                    "STEP 0 — PITCH EXTRACTION (mandatory before any creative work):\n"
+                    "Read the CREATOR'S ORIGINAL PITCH in <project_goal> above. List the specific "
+                    "elements the creator provided: their characters, their conflicts, their world, "
+                    "their arcs, their side plots, their tone direction. These are YOUR raw material.\n"
+                    "Referenced shows (e.g. 'like Succession', 'Industry-style') are QUALITY "
+                    "benchmarks — they tell you the league, NOT the plot. Do NOT borrow characters, "
+                    "family structures, premises, or dramatic engines from referenced shows.\n"
+                    "If the creator said 'three brothers', you write three brothers — not a patriarch "
+                    "with sons and daughters. If they described a specific conflict, that IS the "
+                    "central conflict — do not substitute a more conventional one.\n\n"
+                )
+                step_plan = (
+                    f"Locale: {locale}\n{format_context}\n"
                     f"{pitch_preamble}"
                     f"{spec['step_plan']}\n\n"
                     f"FIDELITY CHECK (before submitting): Re-read the creator's pitch. "
@@ -1195,7 +1414,13 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     f"did NOT mention, ask yourself: did I copy this from a reference show? "
                     f"If yes, delete it and build from the creator's actual material instead.\n\n"
                     f"Your output must be in {locale}. This is non-negotiable."
-                ),
+                )
+
+            task_data = {
+                "target_agent_type": agent_type,
+                "command_name": spec.get("command_name", ""),
+                "exec_summary": spec["exec_summary"],
+                "step_plan": step_plan,
                 "depends_on_previous": previous_depends,
             }
 
@@ -1301,9 +1526,16 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 "- For replace_between, quote unique start and end anchor passages\n"
                 "- ONLY change what the Critique flagged. Everything else stays BYTE-IDENTICAL.\n"
                 "- If the Critique praised a section, do NOT touch it.\n\n"
-                "If the critique praises material not yet present in the deliverable, check the "
-                "stage research document — it contains the raw creative work. You may incorporate "
-                "it if it serves the story, but the creative decision is yours.\n\n"
+                "## USING CREATIVE AGENTS' REVISED WORK\n"
+                "The Research & Notes document contains fresh output from the creative agents "
+                "(story_architect, character_designer, dialog_writer, story_researcher) who revised "
+                "their work based on the same Critique you are reading. USE their revised material:\n"
+                "- If a character was flagged as weak, check what character_designer produced — "
+                "incorporate their improvements.\n"
+                "- If structure was flagged, check story_architect's revised framework.\n"
+                "- If dialogue was generic, check dialog_writer's new scene work.\n"
+                "The creative agents did the hard thinking. Your job is to weave their improvements "
+                "into the deliverable via precise revisions.\n\n"
                 "Read the Critique carefully. Address EVERY flagged issue. Preserve EVERYTHING praised.\n\n"
                 f"Your output must be in {locale}."
             )
@@ -1412,10 +1644,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         for agent_type, agent_name, report in creative_tasks:
             if report:
                 research_parts.append(f"## {agent_name} ({agent_type})\n\n{report}")
-        research_content = "\n\n---\n\n".join(research_parts)
+        research_content = "\n\n═══════════════════════════════════════\n\n".join(research_parts)
 
-        # Deliverable: apply revisions if iteration > 0
-        if raw_deliverable and iteration > 0:
+        # Deliverable: always try to detect and apply revision JSON,
+        # regardless of iteration counter. The lead_writer may produce
+        # revision JSON even on iteration 0 if the counter was reset.
+        if raw_deliverable:
             deliverable_content, was_revision = self._apply_revision_or_replace(
                 agent, "stage_deliverable", raw_deliverable, stage
             )
@@ -1426,7 +1660,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     version,
                 )
         else:
-            deliverable_content = raw_deliverable
+            deliverable_content = ""
 
         contents = {}
         if deliverable_content:
@@ -1487,6 +1721,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         effective_stage = self._get_effective_stage(agent, stage, sprint=sprint)
         feedback_types = [at for at, _ in FEEDBACK_MATRIX.get(effective_stage, [])]
         feedback_types.append("creative_reviewer")
+        feedback_types.append("authenticity_analyst")  # gate report feeds into critique
 
         feedback_tasks = list(
             AgentTask.objects.filter(
@@ -1501,7 +1736,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         for agent_type, agent_name, report in feedback_tasks:
             if report:
                 critique_parts.append(f"## {agent_name} ({agent_type})\n\n{report}")
-        critique_content = "\n\n---\n\n".join(critique_parts)
+        critique_content = "\n\n═══════════════════════════════════════\n\n".join(critique_parts)
 
         if critique_content:
             self._create_stage_documents(

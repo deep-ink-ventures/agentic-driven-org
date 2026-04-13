@@ -110,13 +110,12 @@ IMPORTANT: Every target area must be grounded in specific signals from the resea
 
 ## Phase 2: Consolidation (finalize-outreach)
 
-After personalizer clones produce outreach for each target area, consolidate everything into:
+After personalizer clones produce outreach for each target area, write ONLY an executive summary.
+
 1. **Exec Summary** — max 1 page: what this is about, why it is the right approach, whom we target with what. No chat, no filler.
-2. **CSV** — output between ```csv markers with exact columns: channel, identifier, subject, content
-   - channel: outreach agent identifier (e.g. email)
-   - identifier: email address, Reddit username, Twitter handle, phone, etc.
-   - subject: subject line or headline
-   - content: the outreach message"""
+
+IMPORTANT: Do NOT include CSV data, individual email content, or prospect-level detail in your output.
+The CSV is assembled programmatically from personalizer outputs — never generate it yourself."""
 
     draft_strategy = draft_strategy
     finalize_outreach = finalize_outreach
@@ -154,9 +153,8 @@ After personalizer clones produce outreach for each target area, consolidate eve
 
 ## Consolidation Standards (finalize-outreach)
 - Exec summary must fit 1 page — ruthlessly cut filler
-- CSV must be valid with exact headers: channel, identifier, subject, content
-- Every row in the CSV must trace back to a personalizer output
-- No duplicate identifiers in the CSV
+- Do NOT produce CSV data — the CSV is assembled by code from personalizer outputs
+- Do NOT reproduce individual email content — just summarize segments and counts
 
 ## Anti-Patterns to Avoid
 - Produce EXACTLY {max_areas} target areas — no more, no fewer. Focus beats breadth.

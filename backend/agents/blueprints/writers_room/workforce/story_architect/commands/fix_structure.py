@@ -12,7 +12,6 @@ from agents.blueprints.base import command
         "complete standalone structural document with a change manifest explaining what was "
         "revised and the structural reasoning behind each decision."
     ),
-    model="claude-opus-4-6",
 )
 def fix_structure(self, agent, **kwargs):
     pass  # Dispatched via execute_task

@@ -66,7 +66,9 @@ export function SprintSidebar({ sprints, onUpdate, projectId, onNavigateToDept }
             className={`w-full text-left px-3 py-2 rounded-lg transition-colors mb-1 cursor-pointer ${
               sprint.status === "running"
                 ? "border border-flag-strength/15 bg-flag-strength/4"
-                : "border border-border bg-bg-surface"
+                : sprint.status === "paused" && sprint.completion_summary
+                  ? "border border-amber-500/30 bg-amber-500/4"
+                  : "border border-border bg-bg-surface"
             }`}
           >
             <div className="flex items-center justify-between">
@@ -106,6 +108,11 @@ export function SprintSidebar({ sprints, onUpdate, projectId, onNavigateToDept }
             <span className="block text-[9px] mt-0.5 text-text-secondary/60 truncate">
               {sprint.departments.map((d) => d.display_name).join(" · ")}
             </span>
+            {sprint.status === "paused" && sprint.completion_summary && (
+              <span className="block text-[10px] mt-1 text-amber-400 leading-tight" title={sprint.completion_summary}>
+                ⚠ {sprint.completion_summary.startsWith("Paused:") ? sprint.completion_summary.slice(8).split(".")[0] : sprint.completion_summary.slice(0, 60)}
+              </span>
+            )}
           </div>
         );
       })}

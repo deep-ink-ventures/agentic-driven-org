@@ -129,11 +129,12 @@ When executing tasks, respond with a JSON object:
             "cooldown status per subreddit, and alignment score with campaign goals.\n\n"
             "Respond with your actions JSON and report."
         )
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
 
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent),
         )
         task.token_usage = usage

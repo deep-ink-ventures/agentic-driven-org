@@ -17,7 +17,7 @@ import {
   Clock,
   CalendarDays,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/ui/markdown";
 import { Button } from "@/components/ui/button";
 
 export function AgentDetailView({
@@ -236,7 +236,7 @@ export function AgentDetailView({
             >
               {instructions ? (
                 <div className="max-w-none text-sm text-text-primary [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3 [&_h1]:mb-3 [&_h2]:mb-3 [&_h3]:mb-3 [&_h4]:mb-3 [&_li]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&>*:last-child]:mb-0">
-                  <ReactMarkdown>{instructions}</ReactMarkdown>
+                  <Markdown>{instructions}</Markdown>
                 </div>
               ) : (
                 <p className="text-text-secondary text-sm">
@@ -250,11 +250,13 @@ export function AgentDetailView({
 
       {/* Config tab */}
       {tab === "config" && blueprint && (
-        <AgentConfigEditor
-          agent={agent}
-          blueprint={blueprint}
-          onSaved={onAgentUpdated}
-        />
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <AgentConfigEditor
+            agent={agent}
+            blueprint={blueprint}
+            onSaved={onAgentUpdated}
+          />
+        </div>
       )}
 
       {/* Tasks tab */}

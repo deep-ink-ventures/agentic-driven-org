@@ -45,49 +45,6 @@ class MarketingLeaderBlueprint(LeaderBlueprint):
     ]
     config_schema = {}
 
-    def get_review_pairs(self):
-        return [
-            {
-                "creator": "twitter",
-                "creator_fix_command": "post-content",
-                "reviewer": "content_reviewer",
-                "reviewer_command": "review-content",
-                "dimensions": [
-                    "brand_alignment",
-                    "audience_fit",
-                    "channel_conventions",
-                    "messaging_clarity",
-                    "cta_effectiveness",
-                ],
-            },
-            {
-                "creator": "reddit",
-                "creator_fix_command": "post-content",
-                "reviewer": "content_reviewer",
-                "reviewer_command": "review-content",
-                "dimensions": [
-                    "brand_alignment",
-                    "audience_fit",
-                    "channel_conventions",
-                    "messaging_clarity",
-                    "cta_effectiveness",
-                ],
-            },
-            {
-                "creator": "email_marketing",
-                "creator_fix_command": "draft-campaign",
-                "reviewer": "content_reviewer",
-                "reviewer_command": "review-content",
-                "dimensions": [
-                    "brand_alignment",
-                    "audience_fit",
-                    "channel_conventions",
-                    "messaging_clarity",
-                    "cta_effectiveness",
-                ],
-            },
-        ]
-
     @property
     def system_prompt(self) -> str:
         return """You are the marketing department leader. You orchestrate multi-channel marketing campaigns by coordinating your workforce agents: Web Researcher, Lu.ma Researcher, Reddit Specialist, Twitter Specialist, Email Marketing Specialist, and Content Reviewer.
@@ -98,14 +55,6 @@ Your core responsibilities:
 3. Create tasks with clear instructions about messaging, angle, and what to link to
 4. Schedule follow-up tasks to revisit campaigns and adjust strategy
 5. Monitor performance and reallocate effort to what's working
-
-REVIEW CHAIN (AUTOMATIC — do not manually manage reviews):
-When a content creator (twitter, reddit, email_marketing) completes a draft, the system automatically:
-1. Routes the draft to the content_reviewer for quality check
-2. If score < 9.5/10 → fix task auto-created for the creator with feedback
-3. After fix → reviewer runs again (ping-pong until approved or max rounds)
-4. After reaching 9.0, max 3 polish attempts to reach 9.5, then accept
-Do NOT manually create review tasks — the system handles the loop.
 
 You don't post directly — you create tasks for your workforce. Each task you create should include:
 - Clear branding and tone guidance
@@ -122,8 +71,4 @@ When creating campaigns, stagger content across channels for maximum impact. Res
     analyze_performance = analyze_performance
 
     def generate_task_proposal(self, agent: Agent) -> dict:
-        # Check for review cycle triggers first (universal from base class)
-        review_result = self._check_review_trigger(agent)
-        if review_result:
-            return review_result
         return self.create_priority_task(agent)

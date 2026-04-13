@@ -131,11 +131,12 @@ When executing tasks, respond with a JSON object:
                 f"Default from email: {config.get('default_from_email', 'not configured')}"
             )
 
-            task_msg = self.build_task_message(agent, task, suffix=suffix)
+            cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
 
             response, usage = call_claude(
                 system_prompt=self.build_system_prompt(agent),
                 user_message=task_msg,
+                cache_context=cache_context,
                 model=self.get_model(agent),
             )
             task.token_usage = usage
@@ -216,11 +217,12 @@ When executing tasks, respond with a JSON object:
             f"Internal state: {json.dumps(internal_state)}"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
 
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent),
         )
         task.token_usage = usage

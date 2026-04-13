@@ -61,6 +61,7 @@ export function useProjectWebSocket(
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log(`[WS] message:`, data);
           onMessageRef.current(data);
         } catch {
           // ignore non-JSON messages

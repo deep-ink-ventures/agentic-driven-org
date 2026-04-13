@@ -68,6 +68,27 @@ Flag every sentence that fails this test. Quote it.
 
 If more than 30% of sentences are empty: critical failure.
 
+## CHECK 3b — CHARACTER KNOWLEDGE BOUNDARY
+
+For every scene where a character acts on information, reacts to a fact, or draws \
+a conclusion, verify: HOW does this character know this?
+
+Rules:
+- A character can only know what they witnessed, were told, or discovered on-screen.
+- If a character notices something is missing, they must have a reason to know it \
+was there. "Heffler sees the empty drawer" is fine. "Heffler knows a letter was \
+in the drawer last night" requires that Heffler was present or someone told him.
+- If the audience saw something in a prologue but the character wasn't in that \
+scene, the character does NOT have that information.
+- A detective deducing from evidence is fine — but the evidence must be observable \
+in the scene (dust pattern, witness statement, forensic report).
+
+For each knowledge boundary violation: quote the sentence, explain what the \
+character knows and how they could NOT know it, and flag it as a logic error.
+
+This is a critical check. Readers and editors catch these instantly — they break \
+the illusion of a competent plot.
+
 ## CHECK 4 — ARC COHERENCE
 
 For each character arc in the material:
@@ -160,7 +181,11 @@ WRITERS_ROOM_TASK_SUFFIX = (
 
 
 class AuthenticityAnalystBlueprint(AuthenticityAnalystMixin, WritersRoomFeedbackBlueprint):
+    default_model = "claude-haiku-4-5"
     cmd_analyze = analyze
+
+    def get_max_tokens(self, agent, task) -> int:
+        return 16384  # Gate does 3 full passes — needs room to finish
 
     @property
     def system_prompt(self):

@@ -334,10 +334,11 @@ When executing tasks, respond with a JSON object:
             "}"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "review_design"),
             max_tokens=16384,
         )
@@ -389,10 +390,11 @@ When executing tasks, respond with a JSON object:
             "}"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "check_accessibility"),
             max_tokens=16384,
         )
@@ -446,10 +448,11 @@ When executing tasks, respond with a JSON object:
             "}"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "check_responsive"),
             max_tokens=16384,
         )
@@ -501,10 +504,11 @@ When executing tasks, respond with a JSON object:
             "}"
         )
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "check_consistency"),
             max_tokens=16384,
         )

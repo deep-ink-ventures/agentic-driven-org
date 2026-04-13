@@ -10,6 +10,12 @@ class Source(models.Model):
         URL = "url", "URL"
         TEXT = "text", "Text"
 
+    class Priority(models.TextChoices):
+        ESSENTIAL = "essential", "Essential"  # full content → all agents
+        IMPORTANT = "important", "Important"  # full content → lead writer + reviewer only
+        REGULAR = "regular", "Regular"  # summary → all agents
+        MINOR = "minor", "Minor"  # summary → lead writer + reviewer only
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(
         "projects.Project",
@@ -42,7 +48,7 @@ class Source(models.Model):
     )
     sprint = models.ForeignKey(
         "projects.Sprint",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="sources",
@@ -58,6 +64,13 @@ class Source(models.Model):
     summary = models.TextField(
         blank=True,
         help_text="Claude-generated summary of the full source content. Used in prompts instead of truncated text.",
+    )
+    priority = models.CharField(
+        max_length=10,
+        choices=Priority.choices,
+        default=Priority.REGULAR,
+        db_index=True,
+        help_text="Controls which agents see this source and in what form.",
     )
     file_format = models.CharField(max_length=20, blank=True)
     content_type = models.CharField(max_length=100, blank=True)

@@ -156,7 +156,7 @@ CELERY_TASK_SEND_SENT_EVENT = True
 AGENT_MAX_CONCURRENT_PER_DEPT = 5  # max queued+processing tasks per department
 AGENT_MAX_CLONES_PER_SPRINT = 10  # hard wall in create_clones — raises ValueError
 AGENT_MAX_TASKS_PER_PROPOSAL = 20  # max tasks from a single leader proposal
-AGENT_MAX_TASKS_PER_SPRINT = 50  # absolute ceiling per sprint
+AGENT_MAX_TASKS_PER_SPRINT = 200  # ceiling per sprint — writers room needs ~10 tasks/round × up to 10 rounds
 
 CELERY_BEAT_SCHEDULE = {
     "recover-stuck-proposals": {
@@ -188,6 +188,10 @@ CELERY_BEAT_SCHEDULE = {
     "monitor-pending-webhooks": {
         "task": "integrations.tasks.monitor_pending_webhooks",
         "schedule": 300,
+    },
+    "resume-idle-sprints": {
+        "task": "agents.tasks.resume_idle_sprints",
+        "schedule": 300,  # every 5 minutes
     },
     "consolidate-monthly-documents": {
         "task": "projects.tasks_consolidation.consolidate_monthly_documents",

@@ -257,30 +257,6 @@ class TestLeaderConstants:
 # ── Leader Review Pairs ───────────────────────────────────────────────────────
 
 
-class TestSalesReviewPairs:
-    def test_has_one_review_pair(self):
-        bp = SalesLeaderBlueprint()
-        assert len(bp.get_review_pairs()) == 1
-
-    def test_creator_is_strategist(self):
-        bp = SalesLeaderBlueprint()
-        pair = bp.get_review_pairs()[0]
-        assert pair["creator"] == "strategist"
-        assert pair["creator_fix_command"] == "revise-strategy"
-
-    def test_reviewer_is_sales_qa(self):
-        bp = SalesLeaderBlueprint()
-        pair = bp.get_review_pairs()[0]
-        assert pair["reviewer"] == "sales_qa"
-        assert pair["reviewer_command"] == "review-pipeline"
-
-    def test_dimensions_match_sales_qa_blueprint(self):
-        bp = SalesLeaderBlueprint()
-        pair_dims = bp.get_review_pairs()[0]["dimensions"]
-        qa_bp = get_blueprint("sales_qa", "sales")
-        assert pair_dims == qa_bp.review_dimensions
-
-
 # ── Leader State Machine ──────────────────────────────────────────────────────
 
 

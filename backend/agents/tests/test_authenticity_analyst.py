@@ -129,7 +129,7 @@ class TestWritersRoomAuthenticityAnalyst:
             ctx = bp.get_context(MagicMock())
 
         assert "long dialogue" not in ctx["sibling_agents"]
-        assert "Stage Deliverable" in ctx["sibling_agents"] or "Sibling task reports" in ctx["sibling_agents"]
+        assert ctx["sibling_agents"] == ""
 
     def test_has_analyze_command(self):
         from agents.blueprints.writers_room.workforce.authenticity_analyst.agent import (

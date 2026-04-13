@@ -14,7 +14,7 @@ from django.db.models import Sum
 from django.db.models.functions import Length
 from django.utils import timezone
 
-from agents.ai.claude_client import call_claude, parse_json_response
+from agents.ai.claude_client import APILimitReached, call_claude, parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -100,17 +100,21 @@ def consolidate_sprint_documents(sprint_id):
             .order_by("created_at")
         )
 
-        summary = _consolidate_documents(
-            documents=docs,
-            department=department,
-            document_type="sprint_summary",
-            title_prefix=f"Sprint Summary: {sprint.text[:50]}",
-            instruction=(
-                f"Consolidate all progress documents from this sprint into one comprehensive summary.\n"
-                f"Sprint instruction: {sprint.text}\n"
-                f"Sprint status: {sprint.status}"
-            ),
-        )
+        try:
+            summary = _consolidate_documents(
+                documents=docs,
+                department=department,
+                document_type="sprint_summary",
+                title_prefix=f"Sprint Summary: {sprint.text[:50]}",
+                instruction=(
+                    f"Consolidate all progress documents from this sprint into one comprehensive summary.\n"
+                    f"Sprint instruction: {sprint.text}\n"
+                    f"Sprint status: {sprint.status}"
+                ),
+            )
+        except APILimitReached:
+            logger.warning("Consolidation paused for sprint %s — API limit reached", sprint_id)
+            return
 
         # Link the summary to the sprint
         if summary:
@@ -159,6 +163,29 @@ def consolidate_monthly_documents():
         )
 
 
+def _get_department_volume_threshold(department) -> int:
+    """Get the volume threshold for a department, respecting blueprint overrides.
+
+    Falls back to the base default if the department has no leader blueprint
+    or if the leader blueprint doesn't override the threshold.
+    """
+    from agents.blueprints.base import BaseBlueprint
+
+    try:
+        from agents.blueprints import get_department
+
+        dept_config = get_department(department.department_type)
+        leader_bp = dept_config["leader"]
+        # Need an agent to call get_volume_threshold — use the leader if available
+        leader_agent = department.agents.filter(is_leader=True).first()
+        if leader_agent:
+            return leader_bp.get_volume_threshold(leader_agent)
+    except (ValueError, KeyError):
+        pass
+
+    return BaseBlueprint.volume_threshold_chars
+
+
 @shared_task
 def consolidate_department_documents(department_id):
     """Emergency consolidation when department context exceeds volume threshold."""
@@ -169,14 +196,15 @@ def consolidate_department_documents(department_id):
     active_docs = Document.objects.filter(department=department, is_archived=False, is_locked=False)
     total_chars = active_docs.aggregate(total=Sum(Length("content")))["total"] or 0
 
-    if total_chars < VOLUME_THRESHOLD_CHARS:
+    threshold = _get_department_volume_threshold(department)
+    if total_chars < threshold:
         return
 
     logger.warning(
         "VOLUME_THRESHOLD department=%s chars=%d threshold=%d — triggering consolidation",
         department.name,
         total_chars,
-        VOLUME_THRESHOLD_CHARS,
+        threshold,
     )
 
     docs = list(active_docs.order_by("created_at"))

@@ -42,15 +42,15 @@ class TestStoryArchitectIdeationCommands:
         cmds = {c["name"] for c in bp.get_commands()}
         assert "develop_concept" in cmds
 
-    def test_generate_concepts_metadata(self):
+    def test_generate_concepts_no_command_model_override(self):
         bp = get_blueprint("story_architect", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["generate_concepts"]["model"] == "claude-opus-4-6"
+        assert cmds["generate_concepts"].get("model") is None
 
-    def test_develop_concept_metadata(self):
+    def test_develop_concept_no_command_model_override(self):
         bp = get_blueprint("story_architect", "writers_room")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["develop_concept"]["model"] == "claude-opus-4-6"
+        assert cmds["develop_concept"].get("model") is None
 
     def test_existing_commands_still_registered(self):
         bp = get_blueprint("story_architect", "writers_room")

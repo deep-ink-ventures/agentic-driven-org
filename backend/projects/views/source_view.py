@@ -51,7 +51,8 @@ class ProjectSourceListView(ListCreateAPIView):
                 source.word_count = len(text.split())
                 source.save(update_fields=["extracted_text", "word_count"])
 
-        # Generate summary asynchronously
-        from projects.tasks import summarize_source
+        # Generate summary and classify priority asynchronously
+        from projects.tasks import classify_source_priority, summarize_source
 
         summarize_source.delay(str(source.id))
+        classify_source_priority.delay(str(source.id))

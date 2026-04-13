@@ -192,10 +192,11 @@ Return JSON:
     "report": "Risk assessment summary and rationale"
 }"""
 
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
         response, usage = call_claude(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             model=self.get_model(agent, "security-review"),
             max_tokens=8192,
         )

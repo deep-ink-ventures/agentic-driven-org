@@ -13,7 +13,6 @@ DESCRIPTION = (
 @command(
     name="analyze",
     description=DESCRIPTION,
-    model="claude-opus-4-6",
 )
 def analyze(self, agent, **kwargs):
     pass  # Dispatched via execute_task

@@ -57,7 +57,7 @@ class AgentTask(models.Model):
     )
     sprint = models.ForeignKey(
         "projects.Sprint",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="tasks",
@@ -76,6 +76,7 @@ class AgentTask(models.Model):
     )
     report = models.TextField(blank=True, help_text="What was actually done")
     error_message = models.TextField(blank=True)
+    retry_count = models.PositiveSmallIntegerField(default=0, help_text="Number of retries attempted")
     token_usage = models.JSONField(
         null=True,
         blank=True,

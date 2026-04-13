@@ -30,10 +30,10 @@ class TestEstimateCost:
         cost = estimate_cost("claude-sonnet-4-6", 1000, 0)
         assert cost == pytest.approx(0.003)
 
-    def test_unknown_model_uses_sonnet_default(self):
+    def test_unknown_model_uses_opus_default(self):
         cost_unknown = estimate_cost("nonexistent-model", 1_000_000, 1_000_000)
-        cost_sonnet = estimate_cost("claude-sonnet-4-6", 1_000_000, 1_000_000)
-        assert cost_unknown == cost_sonnet
+        cost_opus = estimate_cost("claude-opus-4-6", 1_000_000, 1_000_000)
+        assert cost_unknown == cost_opus
 
     def test_model_pricing_dict_has_expected_keys(self):
         for _model, prices in MODEL_PRICING.items():

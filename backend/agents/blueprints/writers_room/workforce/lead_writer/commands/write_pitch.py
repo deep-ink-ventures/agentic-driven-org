@@ -11,7 +11,6 @@ from agents.blueprints.base import command
         "is worth telling. For series: conveys the story engine. For standalone: "
         "implies the complete arc."
     ),
-    model="claude-opus-4-6",
     max_tokens=8192,
 )
 def write_pitch(self, agent, **kwargs):

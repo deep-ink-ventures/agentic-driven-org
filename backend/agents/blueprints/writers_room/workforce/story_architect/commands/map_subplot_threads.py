@@ -13,7 +13,6 @@ from agents.blueprints.base import command
         "redundancies. Produces a subplot weave diagram showing how threads braid together "
         "across the full narrative timeline."
     ),
-    model="claude-opus-4-6",
 )
 def map_subplot_threads(self, agent, **kwargs):
     pass  # Dispatched via execute_task

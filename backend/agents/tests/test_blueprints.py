@@ -640,24 +640,6 @@ class TestReviewDimensions:
         bp = get_blueprint("twitter", "marketing")
         assert bp.review_dimensions == []
 
-    def test_propose_review_chain_reads_from_blueprint(self, department, leader_agent, twitter_agent, sprint):
-        """_propose_review_chain reads dimensions from the reviewer blueprint."""
-        bp = get_blueprint("leader", "marketing")
-        task = AgentTask.objects.create(
-            agent=twitter_agent,
-            sprint=sprint,
-            status=AgentTask.Status.DONE,
-            exec_summary="Tweet draft",
-            report="Here is my tweet draft.",
-        )
-        workforce_types = {"twitter", "content_reviewer"}
-        result = bp._propose_review_chain(leader_agent, task, workforce_types)
-        assert result is not None
-        step_plan = result["tasks"][0]["step_plan"]
-        # Dimensions from ContentReviewerBlueprint.review_dimensions
-        assert "brand_alignment" in step_plan
-        assert "cta_effectiveness" in step_plan
-
 
 # ── Quality gate helper ────────────────────────────────────────────────────
 

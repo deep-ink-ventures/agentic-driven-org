@@ -225,11 +225,12 @@ After all sends, summarize results in your final response."""
             return json.dumps({"error": f"Unknown tool: {name}"})
 
         suffix = self.get_task_suffix(agent, task)
-        task_msg = self.build_task_message(agent, task, suffix=suffix)
+        cache_context, task_msg = self.build_task_message(agent, task, suffix=suffix)
 
         response, usage = call_claude_tool_loop(
             system_prompt=self.build_system_prompt(agent),
             user_message=task_msg,
+            cache_context=cache_context,
             tools=[SEND_EMAIL_TOOL, BRIEFING_TOOL],
             handle_tool_call=handle_tool,
             model=self.get_model(agent, task.command_name),
