@@ -117,9 +117,9 @@ class TestSalesRegistry:
 
 
 class TestSalesBlueprintProperties:
-    def test_researcher_uses_haiku(self):
+    def test_researcher_uses_sonnet(self):
         bp = get_blueprint("researcher", "sales")
-        assert bp.default_model == "claude-haiku-4-5"
+        assert bp.default_model == "claude-sonnet-4-6"
 
     def test_draft_strategy_uses_opus(self):
         """draft-strategy is the critical command — must use opus."""
@@ -952,9 +952,9 @@ class TestPersonalizerExpanded:
         bp = get_blueprint("pitch_personalizer", "sales")
         assert bp.uses_web_search is True
 
-    def test_uses_haiku_model(self):
+    def test_uses_sonnet_model(self):
         bp = get_blueprint("pitch_personalizer", "sales")
-        assert bp.default_model == "claude-haiku-4-5"
+        assert bp.default_model == "claude-sonnet-4-6"
 
 
 # ── Target Area Parsing ─────────────────────────────────────────────────────

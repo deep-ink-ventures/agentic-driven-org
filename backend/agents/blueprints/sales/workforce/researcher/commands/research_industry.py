@@ -10,7 +10,7 @@ from agents.blueprints.base import command
         "Produce a structured briefing document with company profiles, market signals, "
         "and qualification analysis."
     ),
-    model="claude-haiku-4-5",
+    model="claude-sonnet-4-6",
 )
 def research_industry(self, agent) -> dict:
     return {

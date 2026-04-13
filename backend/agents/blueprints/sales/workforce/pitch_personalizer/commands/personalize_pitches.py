@@ -9,7 +9,7 @@ from agents.blueprints.base import command
         "For one target area: find real prospects via web search, research each person, "
         "adapt the storyline, and assign outreach channels."
     ),
-    model="claude-haiku-4-5",
+    model="claude-sonnet-4-6",
 )
 def personalize_pitches(self, agent) -> dict:
     return {
