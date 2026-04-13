@@ -592,8 +592,12 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
 
         try:
             data = json.loads(text)
-            if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
-                return data
+            if isinstance(data, dict) and "revisions" in data:
+                # Unwrap double-encoded revisions (Claude tool use edge case)
+                if isinstance(data["revisions"], str):
+                    data["revisions"] = json.loads(data["revisions"])
+                if isinstance(data["revisions"], list):
+                    return data
         except (ValueError, TypeError):
             pass
 

@@ -787,6 +787,11 @@ class LeadWriterBlueprint(WritersRoomCreativeBlueprint):
             task.token_usage = usage
             task.save(update_fields=["token_usage"])
 
+            # Unwrap double-encoded revisions — Claude sometimes returns the
+            # array as a JSON string inside the tool output
+            if isinstance(data.get("revisions"), str):
+                data["revisions"] = json.loads(data["revisions"])
+
             # Return as JSON string — _apply_revision_or_replace will parse it
             return json.dumps(data, ensure_ascii=False)
 
