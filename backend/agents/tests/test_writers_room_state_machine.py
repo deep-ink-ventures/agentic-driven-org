@@ -579,6 +579,32 @@ class TestMaxReviewRoundsEscalation(TestCase):
         self.assertEqual(sprint.status, "done")
         self.assertIn(f"{MAX_REVIEW_ROUNDS} rounds", sprint.completion_summary)
 
+    def test_in_progress_round_not_capped(self):
+        """Max rounds reached but status is creative_writing — let the round finish."""
+        from agents.blueprints.base import MAX_REVIEW_ROUNDS
+
+        dept_id = _uuid()
+        agent = _make_agent(dept_id)
+        sprint = _make_sprint(
+            dept_id,
+            {
+                "current_stage": "pitch",
+                "stage_status": {"pitch": {"status": "creative_writing", "iterations": MAX_REVIEW_ROUNDS}},
+                "entry_detected": True,
+                "terminal_stage": "treatment",
+                "format_type": "standalone",
+            },
+        )
+
+        bp = WritersRoomLeaderBlueprint()
+        with _patch_agent_task() as MockTask:
+            _setup_task_mock(MockTask)
+            result = _run_proposal(bp, agent, sprint, MockTask)
+
+        # Should NOT complete sprint — should advance to lead writer
+        self.assertIsNotNone(result)
+        self.assertEqual(result["_on_dispatch"]["set_status"], "lead_writing")
+
 
 # ── Active tasks blocking ──────────────────────────────────────────────────
 

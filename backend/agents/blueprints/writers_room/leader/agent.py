@@ -783,8 +783,9 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         status = current_info.get("status", "not_started")
         iteration = current_info.get("iterations", 0)
 
-        # Safety cap — uses universal MAX_REVIEW_ROUNDS
-        if iteration >= MAX_REVIEW_ROUNDS:
+        # Safety cap — only fire at the START of a new round (not_started),
+        # so the current round completes through lead writer + review.
+        if iteration >= MAX_REVIEW_ROUNDS and status == "not_started":
             logger.warning(
                 "Writers Room: stage '%s' hit max iterations (%d) — completing sprint",
                 current_stage,
