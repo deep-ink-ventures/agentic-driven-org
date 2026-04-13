@@ -147,6 +147,7 @@ def execute_agent_task(self, task_id: str):
     ).update(
         status=AgentTask.Status.PROCESSING,
         started_at=timezone.now(),
+        error_message="",
     )
 
     if updated == 0:
