@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 EXCELLENCE_THRESHOLD = 9.0  # Score needed to pass review (average of dimensions)
 NEAR_EXCELLENCE_THRESHOLD = 8.5  # Score at which we start counting "polish" attempts
 MAX_POLISH_ATTEMPTS = 2  # After reaching 8.5, max attempts to reach 9.0 before accepting
-MAX_REVIEW_ROUNDS = 3  # Hard cap before completing sprint with best deliverable
+MAX_REVIEW_ROUNDS = 5  # Hard cap before completing sprint with best deliverable
 
 VERDICT_TOOL = {
     "name": "submit_verdict",
