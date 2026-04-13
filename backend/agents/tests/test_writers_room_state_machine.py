@@ -550,9 +550,10 @@ class TestReviewOutcomes(TestCase):
 
 @override_settings(ANTHROPIC_API_KEY="test-key")
 class TestMaxReviewRoundsEscalation(TestCase):
-    """Safety cap completes the sprint."""
+    """Safety cap completes the sprint AFTER the creative reviewer scores."""
 
-    def test_completes_sprint_at_max_rounds(self):
+    def test_completes_after_review_at_max_rounds(self):
+        """Cap fires in the review handler, so deliverable + critique exist."""
         from agents.blueprints.base import MAX_REVIEW_ROUNDS
 
         dept_id = _uuid()
@@ -561,7 +562,7 @@ class TestMaxReviewRoundsEscalation(TestCase):
             dept_id,
             {
                 "current_stage": "pitch",
-                "stage_status": {"pitch": {"status": "not_started", "iterations": MAX_REVIEW_ROUNDS}},
+                "stage_status": {"pitch": {"status": "review", "iterations": MAX_REVIEW_ROUNDS}},
                 "entry_detected": True,
                 "terminal_stage": "treatment",
                 "format_type": "standalone",
@@ -570,17 +571,26 @@ class TestMaxReviewRoundsEscalation(TestCase):
         sprint.save = MagicMock()
 
         bp = WritersRoomLeaderBlueprint()
+        review_task = MagicMock()
+        review_task.review_score = 7.5  # below threshold
+        review_task.review_verdict = "CHANGES_REQUESTED"
+        review_task.report = "needs work"
+
         with _patch_agent_task() as MockTask:
             _setup_task_mock(MockTask)
-            with patch("projects.views.sprint_view._broadcast_sprint"):
+            MockTask.objects.filter.return_value.order_by.return_value.first.return_value = review_task
+            with (
+                patch.object(bp, "_create_critique_doc"),
+                patch("projects.views.sprint_view._broadcast_sprint"),
+            ):
                 result = _run_proposal(bp, agent, sprint, MockTask)
 
         self.assertIsNone(result)
         self.assertEqual(sprint.status, "done")
-        self.assertIn(f"{MAX_REVIEW_ROUNDS} rounds", sprint.completion_summary)
+        self.assertIn("7.5", sprint.completion_summary)
 
-    def test_in_progress_round_not_capped(self):
-        """Max rounds reached but status is creative_writing — let the round finish."""
+    def test_in_progress_round_completes_through_review(self):
+        """Max rounds reached but status is creative_writing — round finishes."""
         from agents.blueprints.base import MAX_REVIEW_ROUNDS
 
         dept_id = _uuid()
@@ -601,9 +611,36 @@ class TestMaxReviewRoundsEscalation(TestCase):
             _setup_task_mock(MockTask)
             result = _run_proposal(bp, agent, sprint, MockTask)
 
-        # Should NOT complete sprint — should advance to lead writer
+        # Should advance to lead writer, not cap
         self.assertIsNotNone(result)
         self.assertEqual(result["_on_dispatch"]["set_status"], "lead_writing")
+
+    def test_not_started_at_max_rounds_still_runs(self):
+        """not_started at max rounds dispatches creative agents — cap only fires after review."""
+        from agents.blueprints.base import MAX_REVIEW_ROUNDS
+
+        dept_id = _uuid()
+        all_creative = list(CREATIVE_MATRIX["pitch"])
+        agent = _make_agent(dept_id, active_agent_types=all_creative)
+        sprint = _make_sprint(
+            dept_id,
+            {
+                "current_stage": "pitch",
+                "stage_status": {"pitch": {"status": "not_started", "iterations": MAX_REVIEW_ROUNDS}},
+                "entry_detected": True,
+                "terminal_stage": "treatment",
+                "format_type": "standalone",
+            },
+        )
+
+        bp = WritersRoomLeaderBlueprint()
+        with _patch_agent_task() as MockTask:
+            _setup_task_mock(MockTask)
+            result = _run_proposal(bp, agent, sprint, MockTask, doc_exists=True)
+
+        # Should dispatch creative agents, not cap
+        self.assertIsNotNone(result)
+        self.assertEqual(result["_on_dispatch"]["set_status"], "creative_writing")
 
 
 # ── Active tasks blocking ──────────────────────────────────────────────────

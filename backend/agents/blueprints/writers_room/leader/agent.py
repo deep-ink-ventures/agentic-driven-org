@@ -783,27 +783,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         status = current_info.get("status", "not_started")
         iteration = current_info.get("iterations", 0)
 
-        # Safety cap — only fire at the START of a new round (not_started),
-        # so the current round completes through lead writer + review.
-        if iteration >= MAX_REVIEW_ROUNDS and status == "not_started":
-            logger.warning(
-                "Writers Room: stage '%s' hit max iterations (%d) — completing sprint",
-                current_stage,
-                MAX_REVIEW_ROUNDS,
-            )
-            from django.utils import timezone as tz
-
-            from projects.views.sprint_view import _broadcast_sprint
-
-            sprint.status = Sprint.Status.DONE
-            sprint.completion_summary = (
-                f"Stage '{current_stage}' completed after {MAX_REVIEW_ROUNDS} rounds. "
-                f"Best deliverable preserved in documents."
-            )
-            sprint.completed_at = tz.now()
-            sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
-            _broadcast_sprint(sprint, "sprint.updated")
-            return None
+        # NOTE: max review rounds cap is checked AFTER the creative reviewer scores,
+        # not here. This ensures every round completes with deliverable + critique.
 
         effective_stage = self._get_effective_stage(agent, current_stage, sprint=sprint)
         config = _get_merged_config(agent)
@@ -915,6 +896,30 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     stage_key,
                 )
                 if not accepted:
+                    # Max rounds cap — fire AFTER review so deliverable + critique exist
+                    if iteration >= MAX_REVIEW_ROUNDS:
+                        logger.warning(
+                            "Writers Room: stage '%s' hit max rounds (%d), score %.1f — completing sprint",
+                            current_stage,
+                            MAX_REVIEW_ROUNDS,
+                            review_task.review_score,
+                        )
+                        self._create_critique_doc(agent, current_stage, sprint)
+                        from django.utils import timezone as tz
+
+                        from projects.views.sprint_view import _broadcast_sprint
+
+                        sprint.status = Sprint.Status.DONE
+                        sprint.completion_summary = (
+                            f"Stage '{current_stage}' completed after {iteration} rounds "
+                            f"(score {review_task.review_score:.1f}). "
+                            f"Deliverable and critique preserved in documents."
+                        )
+                        sprint.completed_at = tz.now()
+                        sprint.save(update_fields=["status", "completion_summary", "completed_at", "updated_at"])
+                        _broadcast_sprint(sprint, "sprint.updated")
+                        return None
+
                     logger.info(
                         "Writers Room: stage '%s' review score %.1f — looping back (round %d)",
                         current_stage,
