@@ -738,7 +738,9 @@ You don't write pitches or do research directly — you create tasks for your wo
                 agent.department.agents.filter(status="active", is_leader=False).values_list("agent_type", flat=True)
             )
             if "authenticity_analyst" in active_types:
-                tasks.append(
+                # Authenticity runs BEFORE QA — insert at position 0 so QA depends on it
+                tasks.insert(
+                    0,
                     {
                         "target_agent_type": "authenticity_analyst",
                         "command_name": "analyze",
@@ -751,8 +753,10 @@ You don't write pitches or do research directly — you create tasks for your wo
                             f"as genuinely human-written, not template-generated."
                         ),
                         "depends_on_previous": False,
-                    }
+                    },
                 )
+                # QA review depends on authenticity check completing first
+                tasks[1]["depends_on_previous"] = True
 
         return {
             "exec_summary": f"Sales pipeline step: {step.replace('_', ' ')}",
