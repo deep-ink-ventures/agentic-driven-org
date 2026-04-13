@@ -121,10 +121,11 @@ class TestSalesBlueprintProperties:
         bp = get_blueprint("researcher", "sales")
         assert bp.default_model == "claude-haiku-4-5"
 
-    def test_strategist_and_qa_use_opus(self):
-        for slug in ["strategist", "sales_qa"]:
-            bp = get_blueprint(slug, "sales")
-            assert bp.default_model == "claude-opus-4-6", f"{slug} should use opus"
+    def test_draft_strategy_uses_opus(self):
+        """draft-strategy is the critical command — must use opus."""
+        bp = get_blueprint("strategist", "sales")
+        cmds = {c["name"]: c for c in bp.get_commands()}
+        assert cmds["draft-strategy"]["model"] == "claude-opus-4-6"
 
     def test_sales_qa_is_essential(self):
         bp = get_blueprint("sales_qa", "sales")

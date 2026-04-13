@@ -227,6 +227,34 @@ You don't write pitches or do research directly — you create tasks for your wo
             # Propose this step's task
             return self._propose_step_task(agent, sprint, current_step)
 
+        # QA review quality gate: only advance if score meets threshold
+        if current_step == "qa_review":
+            review_task = (
+                AgentTask.objects.filter(
+                    sprint=sprint,
+                    agent__agent_type="sales_qa",
+                    agent__department=department,
+                    command_name="review-pipeline",
+                    status=AgentTask.Status.DONE,
+                )
+                .order_by("-completed_at")
+                .first()
+            )
+            if review_task and review_task.review_score is not None:
+                accepted, polish_count, round_num = self._apply_quality_gate(
+                    agent,
+                    sprint,
+                    review_task.review_score,
+                    "sales_qa",
+                )
+                if not accepted:
+                    logger.info(
+                        "Sales QA: score %.1f — looping back to strategy revision (round %d)",
+                        review_task.review_score,
+                        round_num,
+                    )
+                    return self._loop_back_from_qa(agent, sprint, review_task, round_num)
+
         # Step is done — persist document if applicable, then advance
         self._persist_step_document(agent, sprint, current_step)
         return self._advance_to_next_step(agent, sprint, current_step)
@@ -381,6 +409,35 @@ You don't write pitches or do research directly — you create tasks for your wo
             )
             areas = areas[:max_areas]
         return areas
+
+    def _loop_back_from_qa(self, agent, sprint, review_task, round_num) -> dict:
+        """QA score too low — loop back to strategy revision."""
+        dept_id = str(agent.department_id)
+        dept_state = sprint.get_department_state(dept_id)
+        dept_state["pipeline_step"] = "strategy"
+        sprint.set_department_state(dept_id, dept_state)
+
+        locale = agent.get_config_value("locale") or "en"
+        return {
+            "_sprint_id": str(sprint.id),
+            "exec_summary": f"QA round {round_num}: score {review_task.review_score:.1f} — revising strategy",
+            "tasks": [
+                {
+                    "target_agent_type": "strategist",
+                    "command_name": "revise-strategy",
+                    "exec_summary": f"Revise strategy based on QA feedback (round {round_num})",
+                    "step_plan": (
+                        f"Locale: {locale}\n\n"
+                        f"QA Review Score: {review_task.review_score:.1f}/10\n"
+                        f"QA Verdict: {review_task.review_verdict}\n\n"
+                        f"Review the QA feedback and revise the strategy to address all flagged issues.\n"
+                        f"The QA report and current strategy are in the department documents."
+                    ),
+                    "depends_on_previous": False,
+                },
+            ],
+            "_on_dispatch": {"set_status": "strategy", "stage": "strategy"},
+        }
 
     def _advance_to_next_step(self, agent: Agent, sprint, current_step: str) -> dict | None:
         """Advance from current_step to the next pipeline step."""
