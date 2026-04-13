@@ -565,15 +565,8 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 return existing_doc.content, False
             return "", False
 
-        # Not revision JSON — but guard against malformed revision JSON being
-        # stored as deliverable content. FAIL LOUDLY so the task gets retried.
-        if self._looks_like_revision_json(cleaned):
-            raise ValueError(
-                f"Writers Room: lead writer produced revision JSON for {doc_type} that could not be "
-                f"parsed even after repair. This must not be silently bypassed — the task will be "
-                f"marked as failed and retried. First 200 chars: {cleaned[:200]}"
-            )
-
+        # _try_parse_revision_json raises ValueError if it looks like revision
+        # JSON but can't be parsed. If we reach here, it's genuinely not JSON.
         return new_content, False
 
     @staticmethod
@@ -590,7 +583,13 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         dialogue with „..." quotes) routinely produce unescaped ASCII double quotes
         inside string values.  We attempt a direct parse first, then repair and
         retry so json.loads handles all unescaping (\n, \t, unicode escapes, etc.).
+
+        CRITICAL: If the text looks like revision JSON but cannot be parsed even
+        after repair, this RAISES ValueError. Silent degradation is forbidden —
+        the task must fail and be retried or escalated.
         """
+        is_revision_json = text.strip().startswith("{") and '"revisions"' in text[:200]
+
         try:
             data = json.loads(text)
             if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
@@ -598,19 +597,10 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         except (ValueError, TypeError):
             pass
 
-        if not (text.strip().startswith("{") and '"revisions"' in text[:200]):
+        if not is_revision_json:
             return None
 
         # Repair strategy: escape unescaped double quotes inside JSON string values.
-        #
-        # JSON string values are delimited by " on each side. Inside, only \" is
-        # valid. LLMs frequently emit raw " from natural-language content (dialogue
-        # quotes, German „…" pairs where the closing mark is ASCII U+0022).
-        #
-        # Approach: walk character by character tracking whether we're inside a
-        # JSON string. When inside a string, any " that isn't preceded by \ and
-        # isn't followed by a JSON structural character (, : ] } whitespace) is
-        # an unescaped content quote — escape it.
         try:
             repaired = WritersRoomLeaderBlueprint._repair_json_quotes(text)
             data = json.loads(repaired)
@@ -623,9 +613,14 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         except (ValueError, TypeError):
             pass
         except Exception:
-            logger.exception("Writers Room: failed to repair revision JSON")
+            logger.exception("Writers Room: JSON repair crashed")
 
-        return None
+        # Text IS revision JSON but cannot be parsed. FAIL HARD.
+        raise ValueError(
+            f"Writers Room: revision JSON could not be parsed even after repair. "
+            f"This means the lead writer's revisions are LOST — the deliverable "
+            f"will not improve. Failing task for retry. First 300 chars: {text[:300]}"
+        )
 
     @staticmethod
     def _repair_json_quotes(text: str) -> str:
