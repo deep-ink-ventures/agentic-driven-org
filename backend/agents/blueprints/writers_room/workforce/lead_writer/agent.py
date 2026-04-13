@@ -807,7 +807,7 @@ class LeadWriterBlueprint(WritersRoomCreativeBlueprint):
     def _get_max_tokens(self, command_name: str | None) -> int:
         """Return max_tokens based on expected output length per stage."""
         return {
-            "write_pitch": 8192,
+            "write_pitch": 16384,
             "write_expose": 16384,
             "write_treatment": 32768,
             "write_concept": 32768,
