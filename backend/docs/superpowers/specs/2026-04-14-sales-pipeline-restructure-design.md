@@ -34,7 +34,7 @@ STEP_CONTEXT_SOURCES = {
     "ideation":       [],
     "discovery":      ["ideation"],
     "prospect_gate":  ["discovery"],
-    "copywriting":    ["ideation", "prospect_gate"],
+    "copywriting":    ["ideation", "discovery", "prospect_gate"],
     "copy_gate":      ["copywriting"],
     "qa_review":      ["ideation", "prospect_gate", "copywriting", "copy_gate"],
     "dispatch":       ["copywriting"],
