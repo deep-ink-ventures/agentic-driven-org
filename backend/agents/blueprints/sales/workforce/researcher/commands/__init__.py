@@ -1,5 +1,5 @@
 """Researcher commands registry."""
 
-from .research_industry import research_industry
+from .discover_prospects import discover_prospects
 
-ALL_COMMANDS = [research_industry]
+ALL_COMMANDS = [discover_prospects]
