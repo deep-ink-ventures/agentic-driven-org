@@ -420,285 +420,102 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         )
         logger.info("Story Bible: updated for stage '%s' (sprint %s)", stage, sprint.id)
 
-    # ── Revision application ───────────────────────────────────────────
-
-    def _apply_revisions(self, document_content: str, revisions: list[dict]) -> tuple[str, list[dict]]:
-        """Apply structured edits to a document.
-
-        Returns (revised_content, failed_edits).
-        Failed edits are skipped — the quality loop handles retry.
-        """
-        result = document_content
-        failed = []
-
-        for rev in revisions:
-            rev_type = rev.get("type", "replace")
-
-            if rev_type == "replace":
-                old = rev.get("old_text", "")
-                new = rev.get("new_text", "")
-                if not old:
-                    continue
-                count = result.count(old)
-                if count == 1:
-                    result = result.replace(old, new, 1)
-                elif count == 0:
-                    failed.append({"text": old[:80], "reason": "not_found"})
-                else:
-                    failed.append({"text": old[:80], "reason": f"ambiguous ({count} matches)"})
-
-            elif rev_type == "replace_section":
-                header = rev.get("section", "")
-                new_content = rev.get("new_content", "")
-                result, ok = self._replace_section(result, header, new_content)
-                if not ok:
-                    failed.append({"text": header, "reason": "section_not_found"})
-
-            elif rev_type == "replace_between":
-                start = rev.get("start", "")
-                end = rev.get("end", "")
-                new_content = rev.get("new_content", "")
-                result, ok = self._replace_between(result, start, end, new_content)
-                if not ok:
-                    failed.append({"text": f"{start[:40]}...{end[:40]}", "reason": "anchors_not_found"})
-
-        return result, failed
+    # ── Section-based revision application ────────────────────────────
 
     @staticmethod
-    def _replace_section(content: str, header: str, new_content: str) -> tuple[str, bool]:
-        """Replace content under a markdown header until the next same-level header."""
-        if header not in content:
-            return content, False
+    def _apply_section_updates(existing: str, revised_output: str) -> str:
+        """Replace sections in existing doc with revised sections matched by header.
 
-        level = len(header) - len(header.lstrip("#"))
-        if level == 0:
-            return content, False
+        A 'section' = a markdown header and everything below it until the next
+        header of equal or higher level.
 
-        start_idx = content.index(header)
-        after_header = start_idx + len(header)
+        Rules:
+        - If revised_output has no markdown headers -> full replacement
+        - For each header in revised_output found in existing -> replace that section
+        - For each header in revised_output NOT in existing -> append at end
+        - Sections not in revised_output stay untouched
+        """
+        import re
 
-        # Find next header of same or higher level
-        end_offset = len(content)
-        remaining = content[after_header:]
-        search_pos = 0
-        for line in remaining.split("\n"):
-            line_start = after_header + search_pos
-            stripped = line.lstrip()
-            if stripped.startswith("#") and search_pos > 0:
-                line_level = len(stripped) - len(stripped.lstrip("#"))
-                if line_level <= level and line_level > 0:
-                    end_offset = line_start
+        if not revised_output or not revised_output.strip():
+            logger.error("Writers Room: empty revised_output — keeping existing document")
+            return existing
+
+        header_re = re.compile(r"^(#{1,6}\s+.+)$", re.MULTILINE)
+
+        revised_headers = header_re.findall(revised_output)
+        if not revised_headers:
+            # No headers in revised output -> full replacement (pitch stage)
+            return revised_output
+
+        def _parse_sections(text: str) -> list[tuple[str, int, str]]:
+            """Parse text into (header, level, full_block) tuples.
+
+            full_block includes the header line and all content until the next
+            header of equal or higher level.
+            """
+            matches = list(header_re.finditer(text))
+            if not matches:
+                return []
+
+            sections = []
+            for idx, match in enumerate(matches):
+                header = match.group(1)
+                level = len(header) - len(header.lstrip("#"))
+                start = match.start()
+
+                # Find end: next header of equal or higher level
+                end = len(text)
+                for later in matches[idx + 1 :]:
+                    later_header = later.group(1)
+                    later_level = len(later_header) - len(later_header.lstrip("#"))
+                    if later_level <= level:
+                        end = later.start()
+                        break
+
+                block = text[start:end]
+                sections.append((header, level, block))
+
+            return sections
+
+        revised_sections = _parse_sections(revised_output)
+        result = existing
+
+        for header, _level, block in revised_sections:
+            # Try to find this header in the existing document
+            existing_matches = list(header_re.finditer(result))
+            found = False
+
+            for em_idx, em in enumerate(existing_matches):
+                if em.group(1) == header:
+                    # Found matching header — replace the section
+                    ex_start = em.start()
+                    ex_level = len(header) - len(header.lstrip("#"))
+
+                    # Find end of existing section
+                    ex_end = len(result)
+                    for later in existing_matches[em_idx + 1 :]:
+                        later_header = later.group(1)
+                        later_level = len(later_header) - len(later_header.lstrip("#"))
+                        if later_level <= ex_level:
+                            ex_end = later.start()
+                            break
+
+                    result = result[:ex_start] + block + result[ex_end:]
+                    found = True
                     break
-            search_pos += len(line) + 1
 
-        result = content[:start_idx] + header + "\n\n" + new_content + "\n\n" + content[end_offset:]
-        return result, True
-
-    @staticmethod
-    def _replace_between(content: str, start: str, end: str, new_content: str) -> tuple[str, bool]:
-        """Replace everything between two anchor texts (inclusive)."""
-        if not start or not end:
-            return content, False
-        if content.count(start) != 1 or content.count(end) != 1:
-            return content, False
-
-        start_idx = content.index(start)
-        end_idx = content.index(end, start_idx)
-        end_idx += len(end)
-
-        if start_idx >= end_idx:
-            return content, False
-
-        result = content[:start_idx] + new_content + content[end_idx:]
-        return result, True
-
-    @staticmethod
-    def _strip_code_fences(text: str) -> str:
-        """Strip markdown code fences (```json ... ```) from LLM output."""
-        stripped = text.strip()
-        if stripped.startswith("```"):
-            # Remove opening fence (```json, ```JSON, ``` etc.)
-            first_newline = stripped.index("\n") if "\n" in stripped else len(stripped)
-            stripped = stripped[first_newline + 1 :]
-        if stripped.endswith("```"):
-            stripped = stripped[:-3]
-        return stripped.strip()
-
-    def _apply_revision_or_replace(self, agent, doc_type: str, new_content: str, stage: str) -> tuple[str, bool]:
-        """Try to parse new_content as revision JSON and apply to existing doc.
-
-        Returns (final_content, was_revision_applied).
-        If new_content is not valid revision JSON, returns it as-is for full replacement.
-        CRITICAL: never return raw revision JSON as deliverable content.
-        """
-        # Strip markdown code fences — LLMs routinely wrap JSON in ```json ... ```
-        cleaned = self._strip_code_fences(new_content)
-
-        data = self._try_parse_revision_json(cleaned)
-        if data is not None:
-            effective = self._get_effective_stage(agent, stage)
-            stage_display = effective.replace("_", " ").title()
-            existing_doc = Document.objects.filter(
-                department=agent.department,
-                doc_type=doc_type,
-                is_archived=False,
-                title__startswith=f"{stage_display} v",
-            ).first()
-            if existing_doc and existing_doc.content:
-                revised, failed = self._apply_revisions(existing_doc.content, data["revisions"])
-                if failed:
-                    logger.warning(
-                        "Writers Room: %d revision(s) failed for %s: %s",
-                        len(failed),
-                        doc_type,
-                        failed,
-                    )
-                return revised, True
-            # Revision JSON but no existing doc — return existing content, never raw JSON.
-            logger.error(
-                "Writers Room: revision JSON received for %s but no existing %s document found. "
-                "Cannot apply revisions without a base document.",
-                stage,
-                doc_type,
-            )
-            if existing_doc:
-                return existing_doc.content, False
-            return "", False
-
-        # _try_parse_revision_json raises ValueError if it looks like revision
-        # JSON but can't be parsed. If we reach here, it's genuinely not JSON.
-        return new_content, False
-
-    @staticmethod
-    def _looks_like_revision_json(text: str) -> bool:
-        """Heuristic: does this text look like revision JSON that failed to parse?"""
-        stripped = text.strip()
-        return stripped.startswith("{") and '"revisions"' in stripped[:200]
-
-    @staticmethod
-    def _try_parse_revision_json(text: str) -> dict | None:
-        """Try to parse revision JSON, repairing common LLM errors.
-
-        LLMs writing JSON with embedded natural-language text (especially German
-        dialogue with „..." quotes) routinely produce unescaped ASCII double quotes
-        inside string values.  We attempt a direct parse first, then repair and
-        retry so json.loads handles all unescaping (\n, \t, unicode escapes, etc.).
-
-        CRITICAL: If the text looks like revision JSON but cannot be parsed even
-        after repair, this RAISES ValueError. Silent degradation is forbidden —
-        the task must fail and be retried or escalated.
-        """
-        is_revision_json = text.strip().startswith("{") and '"revisions"' in text[:200]
-
-        try:
-            data = json.loads(text)
-            if isinstance(data, dict) and "revisions" in data:
-                # Unwrap double-encoded revisions (Claude tool use edge case)
-                if isinstance(data["revisions"], str):
-                    data["revisions"] = json.loads(data["revisions"])
-                if isinstance(data["revisions"], list):
-                    return data
-        except (ValueError, TypeError):
-            pass
-
-        if not is_revision_json:
-            return None
-
-        # Repair strategy: escape unescaped double quotes inside JSON string values.
-        try:
-            repaired = WritersRoomLeaderBlueprint._repair_json_quotes(text)
-            data = json.loads(repaired)
-            if isinstance(data, dict) and "revisions" in data and isinstance(data["revisions"], list):
-                logger.info(
-                    "Writers Room: repaired malformed revision JSON — %d revisions",
-                    len(data["revisions"]),
+            if not found:
+                # Header not in existing doc — append at end (never drop content)
+                logger.warning(
+                    "Writers Room: section '%s' not found in existing doc — appending",
+                    header,
                 )
-                return data
-        except (ValueError, TypeError):
-            pass
-        except Exception:
-            logger.exception("Writers Room: JSON repair crashed")
+                if not result.endswith("\n"):
+                    result += "\n"
+                result += "\n" + block
 
-        # Text IS revision JSON but cannot be parsed. FAIL HARD.
-        raise ValueError(
-            f"Writers Room: revision JSON could not be parsed even after repair. "
-            f"This means the lead writer's revisions are LOST — the deliverable "
-            f"will not improve. Failing task for retry. First 300 chars: {text[:300]}"
-        )
-
-    @staticmethod
-    def _repair_json_quotes(text: str) -> str:
-        """Escape unescaped double quotes inside JSON string values.
-
-        Walks the text tracking in-string state. A " inside a string is
-        "structural" (ends the string) if the character after the closing "
-        is one of: , : ] } or whitespace-then-structural. Otherwise it's
-        a content quote that needs escaping.
-
-        This preserves all JSON escape sequences (\\n, \\t, \\", \\\\, etc.)
-        so json.loads can unescape them properly.
-        """
-        chars = list(text)
-        result = []
-        i = 0
-        in_string = False
-
-        while i < len(chars):
-            c = chars[i]
-
-            if not in_string:
-                result.append(c)
-                if c == '"':
-                    in_string = True
-                i += 1
-                continue
-
-            # Inside a JSON string
-            if c == "\\":
-                # Escaped character — pass through both chars
-                result.append(c)
-                if i + 1 < len(chars):
-                    i += 1
-                    result.append(chars[i])
-                i += 1
-                continue
-
-            if c == '"':
-                # Is this the real end of the string, or a content quote?
-                # Look ahead past whitespace for a JSON structural char.
-                j = i + 1
-                while j < len(chars) and chars[j] in (" ", "\t", "\r", "\n"):
-                    j += 1
-
-                is_structural = False
-                if j >= len(chars) or chars[j] in ("]", "}", ":"):
-                    is_structural = True
-                elif chars[j] == ",":
-                    # Comma after quote — structural only if followed by
-                    # whitespace + quote (next JSON key/value) or whitespace + }]
-                    # NOT structural if followed by a regular word like
-                    # „SpreeTerrassen", Container-Büro
-                    k = j + 1
-                    while k < len(chars) and chars[k] in (" ", "\t", "\r", "\n"):
-                        k += 1
-                    if k < len(chars) and chars[k] in ('"', "]", "}", "{", "["):
-                        is_structural = True
-                    # else: comma followed by a regular word = content
-
-                if is_structural:
-                    result.append(c)
-                    in_string = False
-                else:
-                    # Content quote — escape it
-                    result.append("\\")
-                    result.append('"')
-                i += 1
-                continue
-
-            result.append(c)
-            i += 1
-
-        return "".join(result)
+        return result
 
     # ── Task proposal (called by beat/continuous mode) ───────────────────
 
@@ -1484,51 +1301,16 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
         iteration = dept_state.get("stage_status", {}).get(stage, {}).get("iterations", 0)
 
         if iteration > 0:
-            # Determine available operations based on stage
-            if stage == "pitch":
-                ops_note = "Available operations: replace (surgical text edits)."
-            elif stage == "first_draft":
-                ops_note = (
-                    "Available operations: replace (surgical text edits), "
-                    "replace_between (replace passage between two unique anchor texts, inclusive)."
-                )
-            else:
-                ops_note = (
-                    "Available operations: replace (surgical text edits), "
-                    "replace_section (replace everything under a markdown header until next same-level header)."
-                )
-
             step_plan = (
                 f"Locale: {locale}\nFormat: {format_type}\nStage: {stage_display}\n"
                 f"Round: {iteration + 1} (REVISION)\n\n"
                 "## REVISION MODE\n"
                 "The current Stage Deliverable and the Critique are in the department documents. "
-                "Your job is to REVISE the existing deliverable, NOT rewrite it.\n\n"
-                "Output your changes as revision JSON.\n\n"
-                "OUTPUT FORMAT — CRITICAL:\n"
-                "Output ONLY the JSON revision object. No preamble, no explanation, no prose. "
-                "Your response must start with `{` and end with `}`. Nothing before or after.\n\n"
-                "```json\n"
-                "{\n"
-                '  "revisions": [\n'
-                '    {"type": "replace", "old_text": "exact text from document", '
-                '"new_text": "revised text"},\n'
-                '    {"type": "replace_section", "section": "## Section Header", '
-                '"new_content": "new section content"},\n'
-                '    {"type": "replace_between", "start": "unique start anchor", '
-                '"end": "unique end anchor", "new_content": "new content"}\n'
-                "  ],\n"
-                '  "preserved": "Brief note on what was deliberately kept and why"\n'
-                "}\n"
-                "```\n\n"
-                f"{ops_note}\n\n"
-                "RULES:\n"
-                "- Quote old_text EXACTLY from the existing document — character for character\n"
-                "- Quote enough context for uniqueness (if old_text matches multiple times, the edit fails)\n"
-                "- For replace_section, use the exact markdown header from the document\n"
-                "- For replace_between, quote unique start and end anchor passages\n"
-                "- ONLY change what the Critique flagged. Everything else stays BYTE-IDENTICAL.\n"
-                "- If the Critique praised a section, do NOT touch it.\n\n"
+                "Your job is to REVISE the existing deliverable.\n\n"
+                "OUTPUT ONLY the sections you changed, under their EXACT original markdown headers. "
+                "Sections you don't output stay unchanged. Write complete section content — "
+                "not diffs, not instructions, not JSON.\n\n"
+                "If the deliverable has no section headers, output the full revised document.\n\n"
                 "## USING CREATIVE AGENTS' REVISED WORK\n"
                 "The Research & Notes document contains fresh output from the creative agents "
                 "(story_architect, character_designer, dialog_writer, story_researcher) who revised "
@@ -1538,7 +1320,7 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 "- If structure was flagged, check story_architect's revised framework.\n"
                 "- If dialogue was generic, check dialog_writer's new scene work.\n"
                 "The creative agents did the hard thinking. Your job is to weave their improvements "
-                "into the deliverable via precise revisions.\n\n"
+                "into the deliverable.\n\n"
                 "Read the Critique carefully. Address EVERY flagged issue. Preserve EVERYTHING praised.\n\n"
                 f"Your output must be in {locale}."
             )
@@ -1649,19 +1431,16 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                 research_parts.append(f"## {agent_name} ({agent_type})\n\n{report}")
         research_content = "\n\n═══════════════════════════════════════\n\n".join(research_parts)
 
-        # Deliverable: always try to detect and apply revision JSON,
-        # regardless of iteration counter. The lead_writer may produce
-        # revision JSON even on iteration 0 if the counter was reset.
         if raw_deliverable:
-            deliverable_content, was_revision = self._apply_revision_or_replace(
-                agent, "stage_deliverable", raw_deliverable, stage
-            )
-            if was_revision:
-                logger.info(
-                    "Writers Room: applied revision to stage deliverable for '%s' v%d",
-                    stage,
-                    version,
-                )
+            existing_doc = Document.objects.filter(
+                department=agent.department,
+                doc_type="stage_deliverable",
+                is_archived=False,
+            ).first()
+            if existing_doc and existing_doc.content:
+                deliverable_content = self._apply_section_updates(existing_doc.content, raw_deliverable)
+            else:
+                deliverable_content = raw_deliverable
         else:
             deliverable_content = ""
 

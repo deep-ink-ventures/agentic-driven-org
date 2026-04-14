@@ -143,52 +143,20 @@ class Command(BaseCommand):
 
             for i, task in enumerate(tasks):
                 report = task.report or ""
-                report_preview = report[:80].replace("\n", " ")
                 if not report.strip():
                     self.stdout.write(self.style.WARNING(f"  [{i}] Empty report — skipping"))
                     continue
 
-                # Check if this is revision JSON or raw text
-                cleaned = bp._strip_code_fences(report)
-                parsed = bp._try_parse_revision_json(cleaned)
-
-                if parsed is not None:
-                    # Revision JSON
-                    rev_count = len(parsed["revisions"])
-                    if deliverable is None:
-                        self.stdout.write(
-                            self.style.ERROR(
-                                f"  [{i}] Revision JSON ({rev_count} edits) but no base deliverable to apply to!"
-                            )
-                        )
-                        continue
-
-                    revised, failed = bp._apply_revisions(deliverable, parsed["revisions"])
-                    applied = rev_count - len(failed)
-                    deliverable = revised
-
-                    if failed:
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"  [{i}] Applied {applied}/{rev_count} revisions "
-                                f"({len(failed)} failed: {[f['reason'] for f in failed]})"
-                            )
-                        )
-                    else:
-                        self.stdout.write(
-                            self.style.SUCCESS(f"  [{i}] Applied {applied}/{rev_count} revisions successfully")
-                        )
-                else:
-                    # Raw text (iteration 0 or full replacement)
-                    if bp._looks_like_revision_json(cleaned):
-                        self.stdout.write(
-                            self.style.ERROR(f"  [{i}] Looks like malformed revision JSON that couldn't be parsed!")
-                        )
-                        self.stdout.write(f"       Preview: {report_preview}")
-                        continue
-
+                if deliverable is None:
+                    # First task — base deliverable (full text)
                     deliverable = report
                     self.stdout.write(f"  [{i}] Base deliverable ({len(report)} chars)")
+                else:
+                    # Subsequent tasks — apply section-based updates
+                    deliverable = bp._apply_section_updates(deliverable, report)
+                    self.stdout.write(
+                        self.style.SUCCESS(f"  [{i}] Applied section updates ({len(report)} chars revised output)")
+                    )
 
             if deliverable is None:
                 self.stdout.write(self.style.WARNING(f"  No deliverable could be reconstructed for {stage}"))

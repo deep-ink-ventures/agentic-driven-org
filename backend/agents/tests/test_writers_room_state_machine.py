@@ -1219,23 +1219,10 @@ class TestLeadWriterRevisionMode(TestCase):
         plan = self._get_step_plan("pitch", 1)
         self.assertIn("REVISION MODE", plan)
         self.assertIn("Round: 2", plan)
-        self.assertIn("revision JSON", plan)
-
-    def test_pitch_revision_ops_note_only_replace(self):
-        plan = self._get_step_plan("pitch", 1)
-        # The ops_note line for pitch should only mention replace
-        self.assertIn("Available operations: replace (surgical text edits).", plan)
-        # Should NOT include replace_section or replace_between in the ops_note
-        self.assertNotIn("Available operations: replace (surgical text edits), replace_section", plan)
-        self.assertNotIn("Available operations: replace (surgical text edits), replace_between", plan)
-
-    def test_expose_revision_ops_note_has_replace_section(self):
-        plan = self._get_step_plan("expose", 1)
-        self.assertIn("replace_section", plan)
-
-    def test_first_draft_revision_ops_note_has_replace_between(self):
-        plan = self._get_step_plan("first_draft", 1)
-        self.assertIn("replace_between", plan)
+        # Section-based revision: no JSON instructions
+        self.assertNotIn("revision JSON", plan)
+        self.assertNotIn("old_text", plan)
+        self.assertIn("sections you changed", plan)
 
     def test_revision_locale_passed(self):
         plan = self._get_step_plan("pitch", 2)

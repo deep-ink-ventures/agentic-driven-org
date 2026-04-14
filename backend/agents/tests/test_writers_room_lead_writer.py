@@ -376,108 +376,69 @@ class TestDocumentLocking:
         assert field.default is False
 
 
-class TestApplyRevisions:
+class TestApplySectionUpdates:
     @pytest.fixture
     def blueprint(self):
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         return WritersRoomLeaderBlueprint()
 
-    def test_replace_single_match(self, blueprint):
-        content = "The cat sat on the mat. The dog ran in the park."
-        revisions = [{"type": "replace", "old_text": "sat on the mat", "new_text": "slept on the rug"}]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert "slept on the rug" in result
-        assert "sat on the mat" not in result
-        assert len(failed) == 0
+    def test_no_headers_full_replacement(self, blueprint):
+        existing = "Old document content without headers."
+        revised = "Completely new document content."
+        result = blueprint._apply_section_updates(existing, revised)
+        assert result == revised
 
-    def test_replace_not_found(self, blueprint):
-        content = "The cat sat on the mat."
-        revisions = [{"type": "replace", "old_text": "the dog barked", "new_text": "the dog whispered"}]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert result == content
-        assert len(failed) == 1
-        assert failed[0]["reason"] == "not_found"
-
-    def test_replace_ambiguous(self, blueprint):
-        content = "The cat sat. The cat sat. The dog ran."
-        revisions = [{"type": "replace", "old_text": "The cat sat.", "new_text": "The cat slept."}]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert result == content
-        assert len(failed) == 1
-        assert "ambiguous" in failed[0]["reason"]
-
-    def test_replace_section_basic(self, blueprint):
-        content = "# Title\n\nIntro.\n\n## Section A\n\nOld content A.\n\n## Section B\n\nContent B."
-        revisions = [{"type": "replace_section", "section": "## Section A", "new_content": "New content A."}]
-        result, failed = blueprint._apply_revisions(content, revisions)
+    def test_replace_matching_section(self, blueprint):
+        existing = "# Title\n\nIntro.\n\n## Section A\n\nOld content A.\n\n## Section B\n\nContent B."
+        revised = "## Section A\n\nNew content A.\n"
+        result = blueprint._apply_section_updates(existing, revised)
         assert "New content A." in result
         assert "Old content A." not in result
         assert "Content B." in result
-        assert len(failed) == 0
 
-    def test_replace_section_not_found(self, blueprint):
-        content = "## Section A\n\nContent."
-        revisions = [{"type": "replace_section", "section": "## Section Z", "new_content": "New."}]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert result == content
-        assert len(failed) == 1
-        assert failed[0]["reason"] == "section_not_found"
+    def test_unmatched_section_appended(self, blueprint):
+        existing = "## Section A\n\nContent A."
+        revised = "## Section Z\n\nNew content Z.\n"
+        result = blueprint._apply_section_updates(existing, revised)
+        assert "Content A." in result
+        assert "New content Z." in result
 
-    def test_replace_section_last_section(self, blueprint):
-        content = "## Section A\n\nContent A.\n\n## Section B\n\nOld content B."
-        revisions = [{"type": "replace_section", "section": "## Section B", "new_content": "New content B."}]
-        result, failed = blueprint._apply_revisions(content, revisions)
+    def test_replace_last_section(self, blueprint):
+        existing = "## Section A\n\nContent A.\n\n## Section B\n\nOld content B."
+        revised = "## Section B\n\nNew content B.\n"
+        result = blueprint._apply_section_updates(existing, revised)
         assert "New content B." in result
         assert "Old content B." not in result
         assert "Content A." in result
 
-    def test_replace_between_basic(self, blueprint):
-        content = "Opening.\n\nStart marker text.\n\nMiddle content to replace.\n\nEnd marker text.\n\nClosing."
-        revisions = [
-            {
-                "type": "replace_between",
-                "start": "Start marker text.",
-                "end": "End marker text.",
-                "new_content": "Completely new middle.",
-            }
-        ]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert "Completely new middle." in result
-        assert "Middle content to replace." not in result
-        assert "Opening." in result
-        assert "Closing." in result
-        assert len(failed) == 0
-
-    def test_replace_between_anchors_not_found(self, blueprint):
-        content = "Some content."
-        revisions = [
-            {"type": "replace_between", "start": "nonexistent start", "end": "nonexistent end", "new_content": "new"}
-        ]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert result == content
-        assert len(failed) == 1
-        assert failed[0]["reason"] == "anchors_not_found"
-
-    def test_multiple_revisions_applied_sequentially(self, blueprint):
-        content = "Alice went home. Bob went to work. Carol stayed."
-        revisions = [
-            {"type": "replace", "old_text": "Alice went home.", "new_text": "Alice ran home."},
-            {"type": "replace", "old_text": "Bob went to work.", "new_text": "Bob drove to work."},
-        ]
-        result, failed = blueprint._apply_revisions(content, revisions)
-        assert "Alice ran home." in result
-        assert "Bob drove to work." in result
-        assert "Carol stayed." in result
-        assert len(failed) == 0
-
-    def test_replace_section_respects_header_level(self, blueprint):
-        content = "## Main\n\nIntro.\n\n### Sub A\n\nSub content A.\n\n### Sub B\n\nSub content B.\n\n## Other\n\nOther content."
-        revisions = [{"type": "replace_section", "section": "## Main", "new_content": "New main content."}]
-        result, failed = blueprint._apply_revisions(content, revisions)
+    def test_respects_header_level(self, blueprint):
+        existing = "## Main\n\nIntro.\n\n### Sub A\n\nSub content A.\n\n### Sub B\n\nSub content B.\n\n## Other\n\nOther content."
+        revised = "## Main\n\nNew main content.\n"
+        result = blueprint._apply_section_updates(existing, revised)
         assert "New main content." in result
         assert "Sub content A." not in result
         assert "Other content." in result
+
+    def test_multiple_sections_replaced(self, blueprint):
+        existing = "## Premise\n\nOld premise.\n\n## Characters\n\nOld chars.\n\n## Tone\n\nOld tone."
+        revised = "## Premise\n\nNew premise.\n\n## Tone\n\nNew tone.\n"
+        result = blueprint._apply_section_updates(existing, revised)
+        assert "New premise." in result
+        assert "Old premise." not in result
+        assert "Old chars." in result  # untouched
+        assert "New tone." in result
+        assert "Old tone." not in result
+
+    def test_empty_revised_output_keeps_existing(self, blueprint):
+        existing = "## Section A\n\nContent."
+        result = blueprint._apply_section_updates(existing, "")
+        assert result == existing
+
+    def test_whitespace_only_revised_output_keeps_existing(self, blueprint):
+        existing = "## Section A\n\nContent."
+        result = blueprint._apply_section_updates(existing, "   \n  ")
+        assert result == existing
 
 
 class TestStructureRequirements:
@@ -576,111 +537,34 @@ class TestRevisionAwareDocCreation:
         assert archived.is_locked is False
 
     @pytest.mark.django_db
-    def test_revision_json_applied_to_existing_doc(self, leader_blueprint, mock_leader_agent):
-        import json
+    def test_section_update_applied_to_existing_doc(self, leader_blueprint, mock_leader_agent):
+        leader_blueprint._create_stage_documents(
+            agent=mock_leader_agent,
+            stage="expose",
+            version=1,
+            doc_types=["stage_deliverable"],
+            contents={"stage_deliverable": "## Premise\n\nOld premise.\n\n## Characters\n\nOld chars."},
+        )
+        existing_doc = Document.objects.filter(
+            department=mock_leader_agent.department,
+            doc_type="stage_deliverable",
+            is_archived=False,
+        ).first()
+        revised = leader_blueprint._apply_section_updates(existing_doc.content, "## Premise\n\nNew premise.\n")
+        assert "New premise." in revised
+        assert "Old chars." in revised
 
+    @pytest.mark.django_db
+    def test_prose_full_replacement_when_no_headers(self, leader_blueprint, mock_leader_agent):
         leader_blueprint._create_stage_documents(
             agent=mock_leader_agent,
             stage="pitch",
             version=1,
             doc_types=["stage_deliverable"],
-            contents={"stage_deliverable": "The old pitch content. This part stays."},
+            contents={"stage_deliverable": "Old pitch content."},
         )
-        revision_json = json.dumps(
-            {
-                "revisions": [
-                    {"type": "replace", "old_text": "The old pitch content.", "new_text": "The new pitch content."}
-                ],
-                "preserved": "Kept: This part stays.",
-            }
-        )
-        revised, applied = leader_blueprint._apply_revision_or_replace(
-            agent=mock_leader_agent,
-            doc_type="stage_deliverable",
-            new_content=revision_json,
-            stage="pitch",
-        )
-        assert "The new pitch content." in revised
-        assert "This part stays." in revised
-        assert applied is True
-
-    @pytest.mark.django_db
-    def test_prose_fallback_when_not_json(self, leader_blueprint, mock_leader_agent):
-        leader_blueprint._create_stage_documents(
-            agent=mock_leader_agent,
-            stage="pitch",
-            version=1,
-            doc_types=["stage_deliverable"],
-            contents={"stage_deliverable": "Old content."},
-        )
-        revised, applied = leader_blueprint._apply_revision_or_replace(
-            agent=mock_leader_agent,
-            doc_type="stage_deliverable",
-            new_content="Completely new prose content.",
-            stage="pitch",
-        )
-        assert revised == "Completely new prose content."
-        assert applied is False
-
-    @pytest.mark.django_db
-    def test_code_fenced_revision_json_is_applied(self, leader_blueprint, mock_leader_agent):
-        """LLMs often wrap JSON in ```json ... ``` — revisions must still apply."""
-        import json
-
-        leader_blueprint._create_stage_documents(
-            agent=mock_leader_agent,
-            stage="pitch",
-            version=1,
-            doc_types=["stage_deliverable"],
-            contents={"stage_deliverable": "Original pitch. Keep this."},
-        )
-        revision_json = json.dumps(
-            {
-                "revisions": [{"type": "replace", "old_text": "Original pitch.", "new_text": "Revised pitch."}],
-                "preserved": "Keep this.",
-            }
-        )
-        code_fenced = f"```json\n{revision_json}\n```"
-        revised, applied = leader_blueprint._apply_revision_or_replace(
-            agent=mock_leader_agent,
-            doc_type="stage_deliverable",
-            new_content=code_fenced,
-            stage="pitch",
-        )
-        assert applied is True
-        assert "Revised pitch." in revised
-        assert "Keep this." in revised
-        # Must NOT contain raw JSON or code fences
-        assert '"revisions"' not in revised
-        assert "```" not in revised
-
-    @pytest.mark.django_db
-    def test_revision_json_without_existing_doc_does_not_store_diff(self, leader_blueprint, mock_leader_agent):
-        """If revision JSON is received but no existing doc exists, never store the diff."""
-        import json
-
-        # No existing deliverable created — simulate missing doc
-        revision_json = json.dumps(
-            {
-                "revisions": [{"type": "replace", "old_text": "something", "new_text": "else"}],
-            }
-        )
-        revised, applied = leader_blueprint._apply_revision_or_replace(
-            agent=mock_leader_agent,
-            doc_type="stage_deliverable",
-            new_content=revision_json,
-            stage="pitch",
-        )
-        assert applied is False
-        # Must NOT contain raw revision JSON
-        assert '"revisions"' not in revised
-        assert "old_text" not in revised
-
-    def test_strip_code_fences(self, leader_blueprint):
-        assert leader_blueprint._strip_code_fences('```json\n{"a": 1}\n```') == '{"a": 1}'
-        assert leader_blueprint._strip_code_fences('```\n{"a": 1}\n```') == '{"a": 1}'
-        assert leader_blueprint._strip_code_fences('{"a": 1}') == '{"a": 1}'
-        assert leader_blueprint._strip_code_fences('  ```json\n{"a": 1}\n```  ') == '{"a": 1}'
+        revised = leader_blueprint._apply_section_updates("Old pitch content.", "Completely new pitch content.")
+        assert revised == "Completely new pitch content."
 
 
 def _make_mock_sprint(dept_state=None):
@@ -721,7 +605,7 @@ class TestRevisionInstructions:
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION MODE" not in step_plan
 
-    def test_lead_writer_iteration_1_has_revision_instructions(self, leader_blueprint):
+    def test_lead_writer_iteration_1_has_section_revision_instructions(self, leader_blueprint):
         mock_agent = MagicMock()
         mock_agent.department_id = "mock-dept-id"
         sprint = _make_mock_sprint(
@@ -734,10 +618,12 @@ class TestRevisionInstructions:
         result = leader_blueprint._propose_lead_writer_task(mock_agent, "pitch", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
         assert "REVISION MODE" in step_plan
-        assert "replace" in step_plan.lower()
-        assert "old_text" in step_plan
+        assert "sections you changed" in step_plan
+        # No JSON instructions
+        assert "old_text" not in step_plan
+        assert "revision JSON" not in step_plan
 
-    def test_lead_writer_expose_has_replace_section(self, leader_blueprint):
+    def test_lead_writer_revision_no_json_instructions(self, leader_blueprint):
         mock_agent = MagicMock()
         mock_agent.department_id = "mock-dept-id"
         sprint = _make_mock_sprint(
@@ -749,21 +635,10 @@ class TestRevisionInstructions:
         )
         result = leader_blueprint._propose_lead_writer_task(mock_agent, "expose", {"locale": "en"}, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
-        assert "replace_section" in step_plan
-
-    def test_lead_writer_first_draft_has_replace_between(self, leader_blueprint):
-        mock_agent = MagicMock()
-        mock_agent.department_id = "mock-dept-id"
-        sprint = _make_mock_sprint(
-            {
-                "format_type": "standalone",
-                "current_stage": "first_draft",
-                "stage_status": {"first_draft": {"status": "lead_writing_pending", "iterations": 1}},
-            }
-        )
-        result = leader_blueprint._propose_lead_writer_task(mock_agent, "first_draft", {"locale": "en"}, sprint=sprint)
-        step_plan = result["tasks"][0]["step_plan"]
-        assert "replace_between" in step_plan
+        assert "replace_section" not in step_plan
+        assert "replace_between" not in step_plan
+        assert "revision JSON" not in step_plan
+        assert "Output ONLY the JSON" not in step_plan
 
     def test_creative_agents_iteration_0_no_revision_preamble(self, leader_blueprint):
         mock_agent = MagicMock()
@@ -855,8 +730,8 @@ class TestSprintOutput:
 
 
 class TestLeadWriterRevisionPrompt:
-    def test_revision_step_plan_requires_json_only(self):
-        """Revision step_plan must instruct the model to output only JSON."""
+    def test_revision_step_plan_uses_section_mode(self):
+        """Revision step_plan must instruct section-based output, not JSON."""
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
@@ -874,11 +749,13 @@ class TestLeadWriterRevisionPrompt:
         result = bp._propose_lead_writer_task(agent, "expose", config, sprint=sprint)
         step_plan = result["tasks"][0]["step_plan"]
 
-        assert "Output ONLY the JSON" in step_plan
-        assert "No preamble" in step_plan
+        assert "REVISION MODE" in step_plan
+        assert "sections you changed" in step_plan
+        assert "revision JSON" not in step_plan
+        assert "Output ONLY the JSON" not in step_plan
 
     def test_revision_step_plan_includes_research_hint(self):
-        """Revision step_plan must hint at incorporating praised research material."""
+        """Revision step_plan must hint at incorporating creative agents' work."""
         from agents.blueprints.writers_room.leader.agent import WritersRoomLeaderBlueprint
 
         bp = WritersRoomLeaderBlueprint()
