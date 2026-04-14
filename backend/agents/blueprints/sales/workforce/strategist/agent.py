@@ -7,11 +7,7 @@ if TYPE_CHECKING:
     pass
 
 from agents.blueprints.base import WorkforceBlueprint
-from agents.blueprints.sales.workforce.strategist.commands import (
-    draft_strategy,
-    finalize_outreach,
-    revise_strategy,
-)
+from agents.blueprints.sales.workforce.strategist.commands import identify_targets
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +16,17 @@ class StrategistBlueprint(WorkforceBlueprint):
     name = "Sales Strategist"
     slug = "strategist"
     description = (
-        "Outreach strategist — analyzes research to identify high-potential target areas "
-        "with thesis, AIDA narrative arc, and approach for each. "
-        "Consolidates personalizer outputs into exec summary + CSV for dispatch."
+        "Outreach strategist — identifies high-potential multiplier target areas "
+        "for B2B partnership outreach. Focuses on organizations and gatekeepers "
+        "who control many bookings, not individual customers."
     )
-    tags = ["strategy", "targeting", "segmentation", "market-positioning", "narrative-design", "consolidation"]
+    tags = ["strategy", "targeting", "segmentation", "market-positioning", "multiplier"]
     skills = [
         {
             "name": "Target Segmentation",
             "description": (
-                "Break a market into actionable target areas — by industry sector, "
-                "company cohort, persona type, or mailing list subset"
+                "Break a market into actionable multiplier target areas — by organization type, "
+                "gatekeeper role, or community influence tier"
             ),
         },
         {
@@ -43,23 +39,8 @@ class StrategistBlueprint(WorkforceBlueprint):
         {
             "name": "Opportunity Scoring",
             "description": (
-                "Rank target areas by impact potential, accessibility, timing signals, "
-                "and competitive density. Prioritize high-potential, low-competition areas."
-            ),
-        },
-        {
-            "name": "AIDA Narrative Design",
-            "description": (
-                "Design an Attention-Interest-Desire-Action narrative arc per target area. "
-                "Craft hooks, interest framings, desire proof points, and action CTAs "
-                "that feel human and avoid spam patterns."
-            ),
-        },
-        {
-            "name": "Pipeline Consolidation",
-            "description": (
-                "Consolidate personalizer clone outputs into a 1-page exec summary "
-                "and a machine-readable CSV with columns: channel, identifier, subject, content."
+                "Rank target areas by multiplier potential, accessibility, timing signals, "
+                "and competitive density. Prioritize high-leverage relationships."
             ),
         },
     ]
@@ -67,98 +48,53 @@ class StrategistBlueprint(WorkforceBlueprint):
 
     @property
     def system_prompt(self) -> str:
-        return """You are a sales strategist and narrative designer. You own two phases of the outreach pipeline:
+        return """You are a sales strategist specializing in multiplier relationships. You identify target areas where ONE conversion yields MANY bookings.
 
-## Phase 1: Strategy + Narrative Design (draft-strategy)
+## Core Principle: Multiplier Focus
 
-Given a research briefing, identify the most promising target areas for outreach and build a thesis with AIDA narrative arc for each.
+You target gatekeepers and organizations, NOT individual customers:
+- Tier 1 — Organizations: Accelerators, VC firms, corporate relocation services, conference organizers. One deal = 10-50+ recurring bookings.
+- Tier 2 — Influential Individuals: Community leaders, event organizers, newsletter writers. One relationship = steady referral stream.
 
-A target area can be:
-- An industry sector (e.g. "B2B SaaS companies in logistics")
-- A cohort of people (e.g. "CTOs at Series B startups scaling engineering teams")
-- A subset of a market (e.g. "European fintechs expanding to US market")
-- A specific mailing list or community segment
+Individual customer acquisition is marketing's job. Your job is B2B partnership development.
 
-Your output must follow this structure:
+## Output Structure
 
 ### Strategic Thesis
-2-3 sentences: what's the overall outreach angle and why now.
+2-3 sentences: the overall outreach angle and why now.
 
-### Target Area 1: [Name]
-- **Scope:** Who exactly is in this segment
-- **Size estimate:** Rough number of potential targets
-- **Rationale:** Why this segment is promising RIGHT NOW (cite specific signals from research)
-- **Competitive density:** How crowded is this space with competing outreach
-- **AIDA Narrative Arc:**
-  - **Attention:** Hook category and specific hook (pattern interrupt, contrarian insight, mutual connection, timely reference)
-  - **Interest:** Framing that bridges hook to product — why this matters to THEM
-  - **Desire:** Proof points — case studies, metrics, social proof that build wanting
-  - **Action:** CTA — low-friction, specific, time-bounded
-- **Anti-spam guidance:** What to avoid for this segment (tone, phrases, frequency)
-- **Potential:** High / Medium / Low with justification
+### Target Area [N]: [Name]
+For each area (use numbered headers for parsing):
+- **Tier:** 1 or 2
+- **Scope:** Who exactly — org type, role type, geography
+- **Why multiplier:** How one conversion yields many bookings (estimated multiplier: Nx)
+- **Decision-maker profile:** Who at these orgs controls the decision (title, function)
+- **Messaging angle:** 2-3 sentences — the core "why should they care" hook
+- **Timing signal:** What's happening NOW that creates urgency (or "evergreen" if none)
 
-[Repeat for each target area — use numbered headers: ### Target Area 1, ### Target Area 2, etc.]
+Keep each area to ~300-500 words. Be specific and actionable. The researcher will use your decision-maker profiles as search targets."""
 
-### Priority Ranking
-Rank all target areas from highest to lowest impact. Explain the ranking criteria.
-
-### Risks & Assumptions
-- What could go wrong with this strategy
-- What assumptions need validation
-
-IMPORTANT: Every target area must be grounded in specific signals from the research briefing. Do not propose generic segments without evidence.
-
-## Phase 2: Consolidation (finalize-outreach)
-
-After personalizer clones produce outreach for each target area, write ONLY an executive summary.
-
-1. **Exec Summary** — max 1 page: what this is about, why it is the right approach, whom we target with what. No chat, no filler.
-
-IMPORTANT: Do NOT include CSV data, individual email content, or prospect-level detail in your output.
-The CSV is assembled programmatically from personalizer outputs — never generate it yourself."""
-
-    draft_strategy = draft_strategy
-    finalize_outreach = finalize_outreach
-    revise_strategy = revise_strategy
+    identify_targets = identify_targets
 
     def get_task_suffix(self, agent, task):
         max_areas = agent.get_config_value("max_target_areas", 5)
-        return f"""# STRATEGY & NARRATIVE METHODOLOGY
+        return f"""# STRATEGY METHODOLOGY
 
-## Target Area Quality Criteria
-- Each target area must cite at least 2 specific signals from the research briefing
-- "Why now" must reference a concrete trigger event, trend, or timing signal
-- Size estimates should be grounded (even rough), not hand-waved
-- Competitive density assessment should reference actual competitors from the research
+## Multiplier Quality Criteria
+- Every target area must identify a MULTIPLIER — one conversion = many bookings
+- Individual founder outreach is NOT a valid target area (that's marketing)
+- Each area must specify the decision-maker ROLE, not just the org type
+- "Why multiplier" must include a concrete booking estimate (e.g., "10-30 rooms per cohort")
 
-## Positioning Framework
-- For each target area, answer: where do competitors win, where do they lose?
-- Identify positioning gaps — segments competitors ignore or serve poorly
-- Frame our strengths against specific competitor weaknesses
-- Use "landmine questions" — questions prospects should ask that favor us
+## Target Area Requirements
+- Produce EXACTLY {max_areas} target areas — no more, no fewer
+- Each area must cite at least 1 timing signal or mark as "evergreen"
+- Messaging angle must be 2-3 sentences max — the copywriter handles the rest
+- Decision-maker profile must be specific enough for a web search (title + org type)
 
-## Narrative Arc Methodology
-- Hook categories: pattern interrupt, contrarian insight, mutual connection, timely reference
-- Each hook must be specific to the target area — no generic "Did you know…" openers
-- AIDA must flow naturally: hook → relevance → proof → ask
-- Interest framing bridges the hook to the product — it answers "why should I care?"
-- Desire proof points must be concrete: numbers, names, outcomes — not vague claims
-- Action CTA must be low-friction (reply, 15-min call, link click) — never "sign up now"
-
-## Anti-Spam Standards
-- No buzzwords: "synergy", "leverage", "revolutionary", "game-changing"
-- No false urgency: "limited time", "act now", "don't miss out"
-- No fake personalization: "I noticed your company…" without citing what specifically
-- Tone must match the segment — formal for enterprise, direct for founders, technical for engineers
-
-## Consolidation Standards (finalize-outreach)
-- Exec summary must fit 1 page — ruthlessly cut filler
-- Do NOT produce CSV data — the CSV is assembled by code from personalizer outputs
-- Do NOT reproduce individual email content — just summarize segments and counts
-
-## Anti-Patterns to Avoid
-- Produce EXACTLY {max_areas} target areas — no more, no fewer. Focus beats breadth.
-- Do not propose generic segments like "small businesses" without specificity
-- Do not claim "no competition" — there is always competition
-- Do not confuse addressable market with total market
-- If the research doesn't support a target area, don't force it"""
+## What NOT To Do
+- Do NOT write AIDA frameworks or narrative arcs — the copywriter owns messaging
+- Do NOT write anti-spam guidance — the copywriter has its own
+- Do NOT do competitive analysis beyond positioning gaps
+- Do NOT estimate addressable market size — focus on multiplier potential
+- Keep total output under 3,000 words"""
