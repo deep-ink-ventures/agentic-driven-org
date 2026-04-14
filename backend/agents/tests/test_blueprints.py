@@ -518,7 +518,7 @@ class TestWorkforceDefaultExecuteTask:
             bp.execute_task(twitter_agent, task)
 
             user_message = mock_call.call_args.kwargs.get("user_message", "")
-            assert "STRATEGY & NARRATIVE METHODOLOGY" in user_message
+            assert "STRATEGY METHODOLOGY" in user_message
 
     def test_get_max_tokens_passed_to_claude(self, twitter_agent):
         """Agents with get_max_tokens have it passed to call_claude."""
@@ -604,11 +604,10 @@ class TestReviewDimensions:
 
         cases = {
             ("sales_qa", "sales"): [
-                "research_accuracy",
-                "strategy_quality",
-                "storyline_effectiveness",
-                "profile_accuracy",
-                "pitch_personalization",
+                "multiplier_strategy",
+                "prospect_verification",
+                "pitch_quality",
+                "pipeline_coherence",
             ],
             ("partnership_reviewer", "community"): ["mutual_value", "specificity", "tone", "structure", "next_steps"],
             ("content_reviewer", "marketing"): [
