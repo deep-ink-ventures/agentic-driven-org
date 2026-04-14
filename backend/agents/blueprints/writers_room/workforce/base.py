@@ -100,16 +100,26 @@ class WritersRoomCreativeBlueprint(WorkforceBlueprint):
     def get_context(self, agent):
         ctx = super().get_context(agent)
 
-        # Strip sibling reports and own task history
-        ctx["sibling_agents"] = ""
-        ctx["own_recent_tasks"] = ""
-
         department = agent.department
-        skip_filter = getattr(self, "_skip_critique_filter", False)
-        relevant_analysts = CRITIQUE_RELEVANCE.get(agent.agent_type, [])
 
         # Determine if this is a revision round by checking for a critique doc
         has_critique = department.documents.filter(is_archived=False, doc_type="stage_critique").exists()
+
+        # FIRST ROUND: keep sibling reports so sequential creative agents
+        # can see each other's output and work on the SAME story.
+        # The lead writer (_include_research=True) always needs sibling
+        # reports to synthesize creative agents' work.
+        # REVISION ROUND: strip sibling reports — agents get targeted
+        # critique and the deliverable instead.
+        is_lead_writer = getattr(self, "_include_research", False)
+        if has_critique and not is_lead_writer:
+            ctx["sibling_agents"] = ""
+
+        # Always strip own task history — creative agents don't need it
+        ctx["own_recent_tasks"] = ""
+
+        skip_filter = getattr(self, "_skip_critique_filter", False)
+        relevant_analysts = CRITIQUE_RELEVANCE.get(agent.agent_type, [])
 
         if has_critique and not getattr(self, "_include_research", False):
             # REVISION ROUND context for creative agents:

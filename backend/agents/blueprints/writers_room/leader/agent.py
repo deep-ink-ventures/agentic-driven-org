@@ -1224,10 +1224,60 @@ LOCALE: All agents output in the configured locale. This is non-negotiable."""
                     "with sons and daughters. If they described a specific conflict, that IS the "
                     "central conflict — do not substitute a more conventional one.\n\n"
                 )
+
+                # Coordination directive: each agent after story_researcher
+                # must build on preceding agents' work, not invent independently.
+                # The directive is role-specific so each agent knows its place.
+                if agent_type == "story_architect":
+                    coordination = (
+                        "## COORDINATION — YOU ARE IN A SEQUENTIAL PIPELINE\n"
+                        "The story_researcher has already completed research for THIS "
+                        "story. Their full report is in the 'Other Agents in Department' "
+                        "section above (under <sibling_activity>).\n\n"
+                        "**READ THEIR OUTPUT BEFORE YOU START.**\n\n"
+                        "RULES:\n"
+                        "- The story_researcher has recommended a THEME and TOPIC. "
+                        "Build your concept AROUND that theme — do NOT invent a "
+                        "different topic\n"
+                        "- Use their market research, comps, and positioning as "
+                        "your factual foundation\n"
+                        "- If the researcher identified exclusions or constraints, "
+                        "respect them absolutely\n"
+                        "- You define the premise, characters, world, and structure "
+                        "— but the TOPIC comes from the researcher\n\n"
+                    )
+                elif agent_type != "story_researcher":
+                    coordination = (
+                        "## COORDINATION — YOU ARE IN A SEQUENTIAL PIPELINE\n"
+                        "Agents before you have already produced work for THIS story. "
+                        "Their full reports are in the 'Other Agents in Department' "
+                        "section above (under <sibling_activity>).\n\n"
+                        "**READ THEIR OUTPUTS BEFORE YOU START.** Then contribute "
+                        "YOUR specialized expertise to the story they established.\n\n"
+                        "RULES:\n"
+                        "- The story_architect's concept IS the story — use their "
+                        "premise, world, characters, and structure as your foundation\n"
+                        "- Use the story_researcher's findings as factual grounding\n"
+                        "- Do NOT invent a different story, different characters, "
+                        "or a different premise than what preceding agents established\n"
+                        "- If preceding agents named specific characters, those are "
+                        "YOUR characters — develop them, don't replace them\n"
+                        "- Add depth and texture from your specialty — don't "
+                        "contradict the foundation\n\n"
+                    )
+                else:
+                    coordination = ""
+
                 step_plan = (
                     f"Locale: {locale}\n{format_context}\n"
                     f"{pitch_preamble}"
+                    f"{coordination}"
                     f"{spec['step_plan']}\n\n"
+                    f"SPRINT COMPLIANCE CHECK (before submitting): Re-read the "
+                    f"<sprint_instruction> above. Does your output violate ANY "
+                    f"exclusion or constraint the user specified? If the user said "
+                    f"'not X', your output must NOT contain X — not as setting, not "
+                    f"as subplot, not as metaphor. Exclusions are absolute.\n\n"
                     f"FIDELITY CHECK (before submitting): Re-read the creator's pitch. "
                     f"Does your output preserve EVERY specific element they provided? "
                     f"If you introduced characters, conflicts, or structures the creator "
