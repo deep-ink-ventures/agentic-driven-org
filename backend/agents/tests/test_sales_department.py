@@ -1,4 +1,4 @@
-"""Tests for the sales department — blueprint registry, leader state machine, QA cascade, SendGrid outreach."""
+"""Tests for the sales department — blueprint registry, leader state machine, fan-out, SendGrid outreach."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -8,9 +8,8 @@ import pytest
 from agents.blueprints import DEPARTMENTS, get_blueprint
 from agents.blueprints.base import WorkforceBlueprint
 from agents.blueprints.sales.leader.agent import (
-    AGENT_FIX_COMMANDS,
-    CHAIN_ORDER,
-    DIMENSION_TO_AGENT,
+    DEFAULT_PROSPECTS_PER_AREA,
+    FAN_OUT_STEPS,
     PIPELINE_STEPS,
     STEP_CONTEXT_SOURCES,
     STEP_TO_AGENT,
@@ -67,6 +66,7 @@ def workforce(department):
         "strategist",
         "pitch_personalizer",
         "sales_qa",
+        "authenticity_analyst",
         "email_outreach",
     ]:
         agents[slug] = Agent.objects.create(
@@ -121,24 +121,23 @@ class TestSalesBlueprintProperties:
         bp = get_blueprint("researcher", "sales")
         assert bp.default_model == "claude-sonnet-4-6"
 
-    def test_draft_strategy_uses_opus(self):
-        """draft-strategy is the critical command — must use opus."""
+    def test_identify_targets_uses_sonnet(self):
+        """identify-targets uses sonnet for speed — it is a targeting step, not creative writing."""
         bp = get_blueprint("strategist", "sales")
         cmds = {c["name"]: c for c in bp.get_commands()}
-        assert cmds["draft-strategy"]["model"] == "claude-opus-4-6"
+        assert cmds["identify-targets"]["model"] == "claude-sonnet-4-6"
 
     def test_sales_qa_is_essential(self):
         bp = get_blueprint("sales_qa", "sales")
         assert bp.essential is True
 
-    def test_sales_qa_has_5_review_dimensions(self):
+    def test_sales_qa_has_4_review_dimensions(self):
         bp = get_blueprint("sales_qa", "sales")
         assert bp.review_dimensions == [
-            "research_accuracy",
-            "strategy_quality",
-            "storyline_effectiveness",
-            "profile_accuracy",
-            "pitch_personalization",
+            "multiplier_strategy",
+            "prospect_verification",
+            "pitch_quality",
+            "pipeline_coherence",
         ]
 
     def test_non_reviewer_agents_have_no_dimensions(self):
@@ -148,9 +147,9 @@ class TestSalesBlueprintProperties:
 
     def test_each_agent_has_commands(self):
         expected = {
-            "researcher": ["research-industry"],
-            "strategist": ["draft-strategy", "finalize-outreach", "revise-strategy"],
-            "pitch_personalizer": ["personalize-pitches", "revise-pitches"],
+            "researcher": ["discover-prospects"],
+            "strategist": ["identify-targets"],
+            "pitch_personalizer": ["write-pitches"],
             "sales_qa": ["review-pipeline"],
             "email_outreach": ["send-outreach"],
         }
@@ -217,13 +216,37 @@ class TestSalesAuthenticityAnalyst:
         cmd_names = [c["name"] for c in bp.get_commands()]
         assert "analyze" in cmd_names
 
+    def test_has_verify_prospects_command(self):
+        bp = get_blueprint("authenticity_analyst", "sales")
+        cmd_names = [c["name"] for c in bp.get_commands()]
+        assert "verify-prospects" in cmd_names
+
+    def test_has_verify_pitches_command(self):
+        bp = get_blueprint("authenticity_analyst", "sales")
+        cmd_names = [c["name"] for c in bp.get_commands()]
+        assert "verify-pitches" in cmd_names
+
 
 # ── Leader Constants Consistency ──────────────────────────────────────────────
 
 
 class TestLeaderConstants:
     def test_pipeline_steps(self):
-        assert PIPELINE_STEPS == ["research", "strategy", "personalization", "finalize", "qa_review", "dispatch"]
+        assert PIPELINE_STEPS == [
+            "ideation",
+            "discovery",
+            "prospect_gate",
+            "copywriting",
+            "copy_gate",
+            "qa_review",
+            "dispatch",
+        ]
+
+    def test_pipeline_has_7_steps(self):
+        assert len(PIPELINE_STEPS) == 7
+
+    def test_pipeline_starts_with_ideation(self):
+        assert PIPELINE_STEPS[0] == "ideation"
 
     def test_all_steps_have_agent_mapping(self):
         for step in PIPELINE_STEPS:
@@ -237,25 +260,41 @@ class TestLeaderConstants:
         for step in PIPELINE_STEPS:
             assert step in STEP_CONTEXT_SOURCES
 
-    def test_all_dimensions_map_to_chain_agents(self):
-        for dim, agent_type in DIMENSION_TO_AGENT.items():
-            assert agent_type in CHAIN_ORDER, f"{dim} maps to {agent_type} not in CHAIN_ORDER"
-            assert agent_type in AGENT_FIX_COMMANDS, f"{agent_type} not in AGENT_FIX_COMMANDS"
+    def test_fan_out_steps(self):
+        assert set(FAN_OUT_STEPS.keys()) == {"discovery", "copywriting"}
 
-    def test_chain_order_is_researcher_then_strategist(self):
-        assert CHAIN_ORDER == ["researcher", "strategist"]
+    def test_fan_out_discovery_config(self):
+        assert FAN_OUT_STEPS["discovery"]["agent_type"] == "researcher"
+        assert FAN_OUT_STEPS["discovery"]["command"] == "discover-prospects"
+        assert FAN_OUT_STEPS["discovery"]["source_step"] == "ideation"
 
-    def test_personalization_step_maps_to_personalizer(self):
-        assert STEP_TO_AGENT["personalization"] == "pitch_personalizer"
+    def test_fan_out_copywriting_config(self):
+        assert FAN_OUT_STEPS["copywriting"]["agent_type"] == "pitch_personalizer"
+        assert FAN_OUT_STEPS["copywriting"]["command"] == "write-pitches"
 
-    def test_finalize_step_maps_to_strategist(self):
-        assert STEP_TO_AGENT["finalize"] == "strategist"
+    def test_default_prospects_per_area(self):
+        assert DEFAULT_PROSPECTS_PER_AREA == 10
 
-    def test_finalize_command(self):
-        assert STEP_TO_COMMAND["finalize"] == "finalize-outreach"
+    def test_discovery_step_maps_to_researcher(self):
+        assert STEP_TO_AGENT["discovery"] == "researcher"
 
+    def test_copywriting_step_maps_to_personalizer(self):
+        assert STEP_TO_AGENT["copywriting"] == "pitch_personalizer"
 
-# ── Leader Review Pairs ───────────────────────────────────────────────────────
+    def test_prospect_gate_maps_to_authenticity_analyst(self):
+        assert STEP_TO_AGENT["prospect_gate"] == "authenticity_analyst"
+
+    def test_copy_gate_maps_to_authenticity_analyst(self):
+        assert STEP_TO_AGENT["copy_gate"] == "authenticity_analyst"
+
+    def test_ideation_maps_to_strategist(self):
+        assert STEP_TO_AGENT["ideation"] == "strategist"
+
+    def test_ideation_command(self):
+        assert STEP_TO_COMMAND["ideation"] == "identify-targets"
+
+    def test_discovery_command(self):
+        assert STEP_TO_COMMAND["discovery"] == "discover-prospects"
 
 
 # ── Leader State Machine ──────────────────────────────────────────────────────
@@ -263,37 +302,37 @@ class TestLeaderConstants:
 
 @pytest.mark.django_db
 class TestLeaderStateMachine:
-    def test_starts_at_research(self, leader, sprint, workforce):
+    def test_starts_at_ideation(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-        result = bp.generate_task_proposal(leader)
-        assert result is not None
-        assert result["tasks"][0]["target_agent_type"] == "researcher"
-
-    def test_advances_to_strategy(self, leader, sprint, workforce):
-        bp = SalesLeaderBlueprint()
-        AgentTask.objects.create(
-            agent=workforce["researcher"],
-            sprint=sprint,
-            command_name="research-industry",
-            status=AgentTask.Status.DONE,
-            report="Industry briefing here.",
-        )
-        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "research"})
         result = bp.generate_task_proposal(leader)
         assert result is not None
         assert result["tasks"][0]["target_agent_type"] == "strategist"
+        assert result["tasks"][0]["command_name"] == "identify-targets"
 
-    def test_strategy_context_includes_research(self, leader, sprint, workforce):
+    def test_advances_to_discovery_after_ideation(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
         AgentTask.objects.create(
-            agent=workforce["researcher"],
+            agent=workforce["strategist"],
             sprint=sprint,
-            command_name="research-industry",
+            command_name="identify-targets",
             status=AgentTask.Status.DONE,
-            report="Fintech is booming.",
+            report=(
+                "### Target Area 1: Fintech CTOs\nDetails\n\n"
+                "### Target Area 2: SaaS Founders\nMore details\n\n"
+                "### Priority Ranking\n1. Fintech\n"
+            ),
         )
-        result = bp._propose_step_task(leader, sprint, "strategy")
-        assert "Fintech is booming" in result["tasks"][0]["step_plan"]
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "ideation"})
+        result = bp.generate_task_proposal(leader)
+        # After ideation completes, next step is discovery (a fan-out step)
+        # which creates clones — so the result should contain clone tasks
+        assert result is not None
+
+    def test_ideation_context_is_empty(self, leader, sprint, workforce):
+        """Ideation is the first step — no prior context to inject."""
+        bp = SalesLeaderBlueprint()
+        result = bp._propose_step_task(leader, sprint, "ideation")
+        assert "No prior step output" in result["tasks"][0]["step_plan"]
 
     def test_returns_none_without_sprints(self, leader, workforce):
         bp = SalesLeaderBlueprint()
@@ -302,55 +341,26 @@ class TestLeaderStateMachine:
     def test_waits_for_active_task(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
         AgentTask.objects.create(
-            agent=workforce["researcher"],
+            agent=workforce["strategist"],
             sprint=sprint,
-            command_name="research-industry",
+            command_name="identify-targets",
             status=AgentTask.Status.PROCESSING,
         )
-        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "research"})
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "ideation"})
         assert bp.generate_task_proposal(leader) is None
 
-    def test_strategy_gets_outreach_channels(self, leader, sprint, workforce):
-        """Strategy step includes available outreach agents."""
-        bp = SalesLeaderBlueprint()
-        result = bp._propose_step_task(leader, sprint, "strategy")
-        step_plan = result["tasks"][0]["step_plan"]
-        assert "email_outreach" in step_plan
 
-    def test_qa_review_also_dispatches_authenticity_analyst(self, leader, sprint, workforce, department):
-        """QA review step dispatches both sales_qa and authenticity_analyst."""
-        Agent.objects.create(
-            name="Authenticity Analyst",
-            agent_type="authenticity_analyst",
-            department=department,
-            status="active",
-        )
-        bp = SalesLeaderBlueprint()
-        result = bp._propose_step_task(leader, sprint, "qa_review")
-        agent_types = [t["target_agent_type"] for t in result["tasks"]]
-        assert "sales_qa" in agent_types
-        assert "authenticity_analyst" in agent_types
-
-    def test_qa_review_without_authenticity_analyst(self, leader, sprint, workforce):
-        """QA review works without authenticity analyst agent."""
-        bp = SalesLeaderBlueprint()
-        result = bp._propose_step_task(leader, sprint, "qa_review")
-        agent_types = [t["target_agent_type"] for t in result["tasks"]]
-        assert "sales_qa" in agent_types
-        assert "authenticity_analyst" not in agent_types
-
-
-# ── Fan-Out Personalization ──────────────────────────────────────────────────
+# ── Fan-Out ──────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.django_db
-class TestFanOutPersonalization:
-    def test_creates_clones_after_strategy(self, leader, sprint, workforce):
+class TestFanOut:
+    def test_discovery_creates_researcher_clones(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
         AgentTask.objects.create(
             agent=workforce["strategist"],
             sprint=sprint,
-            command_name="draft-strategy",
+            command_name="identify-targets",
             status=AgentTask.Status.DONE,
             report=(
                 "### Target Area 1: Fintech CTOs\nDetails here\n\n"
@@ -359,24 +369,25 @@ class TestFanOutPersonalization:
                 "### Priority Ranking\n1. Fintech\n"
             ),
         )
-        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "strategy"})
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "discovery"})
 
         result = bp.generate_task_proposal(leader)
         assert result is not None
         assert len(result["tasks"]) == 3
-        assert all(t["target_agent_type"] == "pitch_personalizer" for t in result["tasks"])
+        assert all(t["target_agent_type"] == "researcher" for t in result["tasks"])
+        assert all(t["command_name"] == "discover-prospects" for t in result["tasks"])
 
-        assert ClonedAgent.objects.filter(sprint=sprint).count() == 3
+        assert ClonedAgent.objects.filter(sprint=sprint, parent=workforce["researcher"]).count() == 3
 
-    def test_waits_for_all_clones(self, leader, sprint, workforce):
+    def test_waits_for_all_discovery_clones(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-        parent = workforce["pitch_personalizer"]
+        parent = workforce["researcher"]
         clone0 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
         clone1 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=1)
         AgentTask.objects.create(
             agent=parent,
             sprint=sprint,
-            command_name="personalize-pitches",
+            command_name="discover-prospects",
             status=AgentTask.Status.DONE,
             report="Done",
             cloned_agent=clone0,
@@ -384,92 +395,63 @@ class TestFanOutPersonalization:
         AgentTask.objects.create(
             agent=parent,
             sprint=sprint,
-            command_name="personalize-pitches",
+            command_name="discover-prospects",
             status=AgentTask.Status.PROCESSING,
             cloned_agent=clone1,
         )
-        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "personalization"})
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "discovery"})
         assert bp.generate_task_proposal(leader) is None
 
-    def test_advances_to_finalize_when_all_done(self, leader, sprint, workforce):
+    def test_advances_to_prospect_gate_when_discovery_done(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-        parent = workforce["pitch_personalizer"]
+        parent = workforce["researcher"]
         clone0 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=0)
         clone1 = ClonedAgent.objects.create(parent=parent, sprint=sprint, clone_index=1)
         AgentTask.objects.create(
             agent=parent,
             sprint=sprint,
-            command_name="personalize-pitches",
+            command_name="discover-prospects",
             status=AgentTask.Status.DONE,
-            report="Clone 0 output",
+            report="Clone 0 prospects",
             cloned_agent=clone0,
         )
         AgentTask.objects.create(
             agent=parent,
             sprint=sprint,
-            command_name="personalize-pitches",
+            command_name="discover-prospects",
             status=AgentTask.Status.DONE,
-            report="Clone 1 output",
+            report="Clone 1 prospects",
             cloned_agent=clone1,
         )
-        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "personalization"})
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "discovery"})
 
         result = bp.generate_task_proposal(leader)
         assert result is not None
-        assert result["tasks"][0]["target_agent_type"] == "strategist"
-        assert result["tasks"][0]["command_name"] == "finalize-outreach"
-        assert "Clone 0 output" in result["tasks"][0]["step_plan"]
-        assert "Clone 1 output" in result["tasks"][0]["step_plan"]
+        assert result["tasks"][0]["target_agent_type"] == "authenticity_analyst"
+        assert result["tasks"][0]["command_name"] == "verify-prospects"
 
-
-# ── QA Cascade Fix Routing ────────────────────────────────────────────────────
-
-
-@pytest.mark.django_db
-class TestQACascadeRouting:
-    def test_find_earliest_researcher(self, leader):
+    def test_copywriting_creates_personalizer_clones(self, leader, sprint, workforce):
         bp = SalesLeaderBlueprint()
-        report = "research_accuracy: 7.5/10\nstrategy_quality: 9.5/10"
-        assert bp._find_earliest_failing_agent(report, 7.5) == "researcher"
-
-    def test_find_earliest_strategist(self, leader):
-        bp = SalesLeaderBlueprint()
-        report = "research_accuracy: 9.5/10\nstrategy_quality: 7.0/10\nprofile_accuracy: 8.0/10"
-        assert bp._find_earliest_failing_agent(report, 7.0) == "strategist"
-
-    def test_all_pass_returns_none(self, leader):
-        bp = SalesLeaderBlueprint()
-        report = "research_accuracy: 9.5/10\nstrategy_quality: 9.5/10"
-        assert bp._find_earliest_failing_agent(report, 9.5) is None
-
-    def test_fix_routes_to_researcher(self, leader, sprint, workforce):
-        bp = SalesLeaderBlueprint()
-        review_task = AgentTask.objects.create(
-            agent=workforce["sales_qa"],
+        AgentTask.objects.create(
+            agent=workforce["strategist"],
             sprint=sprint,
-            command_name="review-pipeline",
+            command_name="identify-targets",
             status=AgentTask.Status.DONE,
-            report="research_accuracy: 7.0/10\nstrategy_quality: 9.5/10",
-            review_verdict="CHANGES_REQUESTED",
-            review_score=7.0,
+            report=(
+                "### Target Area 1: Fintech CTOs\nDetails\n\n"
+                "### Target Area 2: SaaS Founders\nMore details\n\n"
+                "### Priority Ranking\n1. Fintech\n"
+            ),
         )
-        result = bp._propose_fix_task(leader, review_task, 7.0, 1, 0)
-        assert result["tasks"][0]["target_agent_type"] == "researcher"
+        sprint.set_department_state(str(leader.department_id), {"pipeline_step": "copywriting"})
 
-    def test_fallback_to_strategist(self, leader, sprint, workforce):
-        bp = SalesLeaderBlueprint()
-        review_task = AgentTask.objects.create(
-            agent=workforce["sales_qa"],
-            sprint=sprint,
-            command_name="review-pipeline",
-            status=AgentTask.Status.DONE,
-            report="Needs improvement.",
-            review_verdict="CHANGES_REQUESTED",
-            review_score=8.0,
-        )
-        result = bp._propose_fix_task(leader, review_task, 8.0, 1, 0)
-        assert result["tasks"][0]["target_agent_type"] == "strategist"
-        assert result["tasks"][0]["command_name"] == "revise-strategy"
+        result = bp.generate_task_proposal(leader)
+        assert result is not None
+        assert len(result["tasks"]) == 2
+        assert all(t["target_agent_type"] == "pitch_personalizer" for t in result["tasks"])
+        assert all(t["command_name"] == "write-pitches" for t in result["tasks"])
+
+        assert ClonedAgent.objects.filter(sprint=sprint, parent=workforce["pitch_personalizer"]).count() == 2
 
 
 # ── Document Persistence ──────────────────────────────────────────────────────
@@ -477,36 +459,19 @@ class TestQACascadeRouting:
 
 @pytest.mark.django_db
 class TestDocumentPersistence:
-    def test_research_creates_document(self, leader, sprint, workforce):
-        from projects.models import Document
-
-        AgentTask.objects.create(
-            agent=workforce["researcher"],
-            sprint=sprint,
-            command_name="research-industry",
-            status=AgentTask.Status.DONE,
-            report="Fintech industry briefing content.",
-        )
-
-        bp = SalesLeaderBlueprint()
-        bp._persist_step_document(leader, sprint, "research")
-
-        doc = Document.objects.get(department=leader.department, doc_type=Document.DocType.RESEARCH, sprint=sprint)
-        assert "Fintech industry briefing" in doc.content
-
-    def test_strategy_creates_document(self, leader, sprint, workforce):
+    def test_ideation_creates_document(self, leader, sprint, workforce):
         from projects.models import Document
 
         AgentTask.objects.create(
             agent=workforce["strategist"],
             sprint=sprint,
-            command_name="draft-strategy",
+            command_name="identify-targets",
             status=AgentTask.Status.DONE,
-            report="Target areas: fintech CTOs, Series B.",
+            report="Multiplier target areas: fintech CTOs, Series B.",
         )
 
         bp = SalesLeaderBlueprint()
-        bp._persist_step_document(leader, sprint, "strategy")
+        bp._persist_step_document(leader, sprint, "ideation")
 
         doc = Document.objects.get(department=leader.department, doc_type=Document.DocType.STRATEGY, sprint=sprint)
         assert "fintech CTOs" in doc.content
@@ -516,34 +481,35 @@ class TestDocumentPersistence:
 
         bp = SalesLeaderBlueprint()
         count_before = Document.objects.count()
-        bp._persist_step_document(leader, sprint, "personalization")
+        bp._persist_step_document(leader, sprint, "discovery")
+        bp._persist_step_document(leader, sprint, "copywriting")
         assert Document.objects.count() == count_before
 
     def test_updates_existing_document(self, leader, sprint, workforce):
         from projects.models import Document
 
         Document.objects.create(
-            title="Old briefing",
+            title="Old strategy",
             content="Old content",
             department=leader.department,
-            doc_type=Document.DocType.RESEARCH,
+            doc_type=Document.DocType.STRATEGY,
             sprint=sprint,
         )
 
         AgentTask.objects.create(
-            agent=workforce["researcher"],
+            agent=workforce["strategist"],
             sprint=sprint,
-            command_name="research-industry",
+            command_name="identify-targets",
             status=AgentTask.Status.DONE,
-            report="Updated briefing content.",
+            report="Updated target areas content.",
         )
 
         bp = SalesLeaderBlueprint()
-        bp._persist_step_document(leader, sprint, "research")
+        bp._persist_step_document(leader, sprint, "ideation")
 
-        docs = Document.objects.filter(department=leader.department, doc_type=Document.DocType.RESEARCH, sprint=sprint)
+        docs = Document.objects.filter(department=leader.department, doc_type=Document.DocType.STRATEGY, sprint=sprint)
         assert docs.count() == 1
-        assert "Updated briefing" in docs.first().content
+        assert "Updated target areas" in docs.first().content
 
 
 # ── SendGrid Service ──────────────────────────────────────────────────────────
@@ -865,7 +831,7 @@ class TestClonedAgent:
         task = AgentTask.objects.create(
             agent=parent,
             sprint=sprint,
-            command_name="personalize-pitches",
+            command_name="write-pitches",
             status=AgentTask.Status.QUEUED,
             cloned_agent=clone,
         )
@@ -876,7 +842,7 @@ class TestClonedAgent:
         task = AgentTask.objects.create(
             agent=workforce["researcher"],
             sprint=sprint,
-            command_name="research-industry",
+            command_name="discover-prospects",
             status=AgentTask.Status.QUEUED,
         )
         assert task.cloned_agent is None
@@ -912,45 +878,38 @@ class TestLeaderCloneHelpers:
         assert all(c.internal_state == {"target_count": 50} for c in clones)
 
 
-# ── Strategist Expanded (absorbs pitch_architect) ───────────────────────────
+# ── Strategist ───────────────────────────────────────────────────────────────
 
 
-class TestStrategistExpanded:
-    def test_system_prompt_includes_narrative_design(self):
+class TestStrategist:
+    def test_system_prompt_includes_multiplier(self):
         bp = get_blueprint("strategist", "sales")
         prompt = bp.system_prompt
-        assert "narrative arc" in prompt.lower() or "aida" in prompt.lower()
+        assert "multiplier" in prompt.lower()
 
     def test_system_prompt_includes_target_areas(self):
         bp = get_blueprint("strategist", "sales")
         prompt = bp.system_prompt
         assert "target area" in prompt.lower()
 
-    def test_has_finalize_outreach_command(self):
+    def test_has_identify_targets_command(self):
         bp = get_blueprint("strategist", "sales")
         cmd_names = [c["name"] for c in bp.get_commands()]
-        assert "finalize-outreach" in cmd_names
-
-    def test_finalize_outreach_mentions_csv(self):
-        bp = get_blueprint("strategist", "sales")
-        for cmd in bp.get_commands():
-            if cmd["name"] == "finalize-outreach":
-                assert "csv" in cmd["description"].lower() or "CSV" in cmd["description"]
-                break
+        assert "identify-targets" in cmd_names
 
 
-# ── Personalizer Expanded (absorbs profile_selector) ─────────────────────────
+# ── Personalizer ─────────────────────────────────────────────────────────────
 
 
-class TestPersonalizerExpanded:
-    def test_system_prompt_includes_profile_finding(self):
+class TestPersonalizer:
+    def test_system_prompt_includes_b2b_partnership(self):
         bp = get_blueprint("pitch_personalizer", "sales")
         prompt = bp.system_prompt
-        assert "find" in prompt.lower() or "search" in prompt.lower() or "discover" in prompt.lower()
+        assert "b2b" in prompt.lower() or "partnership" in prompt.lower()
 
-    def test_uses_web_search(self):
+    def test_does_not_use_web_search(self):
         bp = get_blueprint("pitch_personalizer", "sales")
-        assert bp.uses_web_search is True
+        assert bp.uses_web_search is False
 
     def test_uses_sonnet_model(self):
         bp = get_blueprint("pitch_personalizer", "sales")
@@ -1006,10 +965,10 @@ class TestSprintDepartmentState:
         assert state == {}
 
     def test_set_and_get_department_state(self, sprint, department):
-        sprint.set_department_state(department.id, {"pipeline_step": "research"})
+        sprint.set_department_state(department.id, {"pipeline_step": "ideation"})
         sprint.refresh_from_db()
         state = sprint.get_department_state(department.id)
-        assert state == {"pipeline_step": "research"}
+        assert state == {"pipeline_step": "ideation"}
 
     def test_multiple_departments(self, sprint, department, project):
         from projects.models import Department
@@ -1017,9 +976,9 @@ class TestSprintDepartmentState:
         dept2 = Department.objects.create(department_type="writers_room", project=project)
         sprint.departments.add(dept2)
 
-        sprint.set_department_state(department.id, {"pipeline_step": "research"})
+        sprint.set_department_state(department.id, {"pipeline_step": "ideation"})
         sprint.set_department_state(dept2.id, {"current_stage": "concept"})
         sprint.refresh_from_db()
 
-        assert sprint.get_department_state(department.id)["pipeline_step"] == "research"
+        assert sprint.get_department_state(department.id)["pipeline_step"] == "ideation"
         assert sprint.get_department_state(dept2.id)["current_stage"] == "concept"
